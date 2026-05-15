@@ -7,7 +7,11 @@ type BeforeInstallPromptEvent = Event & {
 
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 
-export const PwaInstallPanel = component$(() => {
+type PwaInstallPanelProps = {
+  compact?: boolean;
+};
+
+export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
   const isInstalled = useSignal(false);
   const installAvailable = useSignal(false);
   const installState = useSignal<'ready' | 'installing' | 'installed' | 'manual'>('manual');
@@ -72,7 +76,10 @@ export const PwaInstallPanel = component$(() => {
   });
 
   return (
-    <section class="mobile-version-panel glass-panel" aria-label="Versao telemovel">
+    <section
+      class={props.compact ? 'mobile-version-panel compact glass-panel' : 'mobile-version-panel glass-panel'}
+      aria-label="Versao telemovel"
+    >
       <div class="mobile-version-copy">
         <span class="eyebrow">Versao Telemovel</span>
         <strong>

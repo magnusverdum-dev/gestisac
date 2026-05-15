@@ -1,5 +1,6 @@
 import { component$, type PropFunction } from '@builder.io/qwik';
 import type { ApiStatus } from '../../lib/api';
+import { PwaInstallPanel } from '../dashboard/PwaInstallPanel';
 
 type LoginPageProps = {
   apiStatus: ApiStatus;
@@ -79,6 +80,8 @@ export const LoginPage = component$((props: LoginPageProps) => {
             {props.isLoading ? 'A entrar...' : 'Entrar'}
           </button>
         </form>
+
+        <PwaInstallPanel compact />
       </section>
     </main>
   );
