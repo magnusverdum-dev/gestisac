@@ -797,6 +797,116 @@ kbd {
   font-size: 12px;
 }
 
+.mobile-version-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 20px;
+  border-color: rgba(75, 163, 255, 0.24);
+  background:
+    radial-gradient(circle at 4% 0%, rgba(75, 163, 255, 0.18), transparent 18rem),
+    linear-gradient(145deg, rgba(8, 23, 52, 0.78), rgba(7, 18, 40, 0.62));
+}
+
+.mobile-version-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.eyebrow {
+  color: var(--gold-soft);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mobile-version-copy strong {
+  color: #fff;
+  font-size: 18px;
+}
+
+.mobile-version-copy p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.mobile-version-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.install-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 12px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 800;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(3, 7, 18, 0.28);
+}
+
+.install-status.ready,
+.install-status.installed {
+  color: #bbf7d0;
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.install-status.installing {
+  color: #fde68a;
+  border-color: rgba(217, 164, 65, 0.3);
+}
+
+.install-button {
+  min-height: 40px;
+  padding: 0 18px;
+  color: #081126;
+  font-weight: 850;
+  border: 1px solid rgba(244, 210, 122, 0.58);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f4d27a, #d9a441);
+  cursor: pointer;
+  box-shadow: 0 0 34px rgba(217, 164, 65, 0.18);
+  transition:
+    transform 180ms var(--ease),
+    box-shadow 180ms var(--ease),
+    opacity 180ms var(--ease);
+}
+
+.install-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 44px rgba(217, 164, 65, 0.28);
+}
+
+.install-button:disabled {
+  cursor: default;
+  opacity: 0.64;
+  transform: none;
+}
+
+.build-signature {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  color: rgba(203, 213, 225, 0.76);
+  font-size: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .module-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2412,6 +2522,19 @@ kbd {
 
   .quick-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mobile-version-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-version-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .build-signature {
+    flex-direction: column;
   }
 
   .quick-action {

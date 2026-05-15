@@ -2,6 +2,7 @@ import { component$, type PropFunction } from '@builder.io/qwik';
 import type { DashboardResponse } from '../../lib/api';
 import { AlertCard } from './AlertCard';
 import { ModuleCard } from './ModuleCard';
+import { PwaInstallPanel } from './PwaInstallPanel';
 
 type DashboardPageProps = {
   dashboard: DashboardResponse;
@@ -61,6 +62,8 @@ export const DashboardPage = component$((props: DashboardPageProps) => {
           </button>
         ))}
       </section>
+
+      <PwaInstallPanel />
 
       <section class="module-grid" aria-label="Modulos principais">
         {data.dashboardModules.map((module) => (
