@@ -518,6 +518,10 @@ export async function uploadDocument(token: string, payload: FormData): Promise<
     throw new Error(message);
   }
 
+  if (isHtmlFallbackResponse(response)) {
+    return demoUploadDocument(payload);
+  }
+
   return response.json();
 }
 
@@ -599,6 +603,10 @@ export async function downloadDocument(
     throw new Error(message);
   }
 
+  if (isHtmlFallbackResponse(response)) {
+    return demoDownloadDocument(id);
+  }
+
   return {
     blob: await response.blob(),
     filename: filenameFromDisposition(response.headers.get('content-disposition'), 'gestisac-documento')
@@ -627,6 +635,10 @@ export async function exportReport(
       .then((body) => body.message || 'Exportacao falhou')
       .catch(() => 'Exportacao falhou');
     throw new Error(message);
+  }
+
+  if (isHtmlFallbackResponse(response)) {
+    return demoExportReport(id);
   }
 
   return {
@@ -690,7 +702,17 @@ async function apiRequest<T>(
     return undefined as T;
   }
 
-  return response.json();
+  if (isHtmlFallbackResponse(response)) {
+    return demoApiRequest<T>(path, options);
+  }
+
+  return response.json().catch((error) => {
+    if (canUseBrowserDemoApi()) {
+      return demoApiRequest<T>(path, options);
+    }
+
+    throw error;
+  });
 }
 
 function resolveApiUrl(path: string): string {
@@ -703,6 +725,12 @@ function resolveApiUrl(path: string): string {
   }
 
   return `${API_BASE_URL}${path}`;
+}
+
+function isHtmlFallbackResponse(response: Response): boolean {
+  return !API_BASE_URL &&
+    typeof window !== 'undefined' &&
+    response.headers.get('content-type')?.toLowerCase().includes('text/html') === true;
 }
 
 const DEMO_STORE_KEY = 'gestisac.publicDemoStore.v1';
