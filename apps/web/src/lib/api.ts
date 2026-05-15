@@ -1227,10 +1227,6 @@ function demoCollectionForPath(
   store: DemoStore,
   pathname: string
 ): { name: string; items: Array<Record<string, unknown>> } | null {
-  const cleaned = pathname.replace(/\/[^/]+$/, (tail) => {
-    return /^[a-z]+-[a-z0-9-]+$/i.test(tail.slice(1)) ? '' : tail;
-  });
-
   const collections: Record<string, Array<Record<string, unknown>>> = {
     condominiums: store.condominiums as unknown as Array<Record<string, unknown>>,
     buildings: store.buildings as unknown as Array<Record<string, unknown>>,
@@ -1251,6 +1247,9 @@ function demoCollectionForPath(
     'accounting/reserve-funds': store.accounting.reserveFunds as unknown as Array<Record<string, unknown>>
   };
 
+  const cleaned = collections[pathname]
+    ? pathname
+    : pathname.replace(/\/[^/]+$/, '');
   const items = collections[cleaned];
   return items ? { name: cleaned, items } : null;
 }
