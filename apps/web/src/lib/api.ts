@@ -744,7 +744,7 @@ type DemoStore = Omit<ResourceState, 'permissions'> & {
 };
 
 function canUseBrowserDemoApi(status = 0): boolean {
-  return !API_BASE_URL && typeof window !== 'undefined' && (status === 0 || status === 404);
+  return !API_BASE_URL && typeof window !== 'undefined' && (status === 0 || status >= 400);
 }
 
 async function demoApiRequest<T>(
