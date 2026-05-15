@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
-    "build": "vite build",
+    "build": "vite build && vite build -c adapters/static/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview --host 127.0.0.1 --port 4173"
   },
