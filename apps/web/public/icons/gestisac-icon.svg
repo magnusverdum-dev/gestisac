@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="GESTISAC">
+  <defs>
+    <linearGradient id="bg" x1="84" y1="40" x2="444" y2="472" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10234d"/>
+      <stop offset="0.48" stop-color="#071228"/>
+      <stop offset="1" stop-color="#030712"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="156" y1="136" x2="354" y2="376" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8d98a"/>
+      <stop offset="0.48" stop-color="#d9a441"/>
+      <stop offset="1" stop-color="#a66f20"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.86 0 1 0 0 0.64 0 0 1 0 0.25 0 0 0 0.9 0"/>
+      <feBlend in="SourceGraphic"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <rect x="42" y="42" width="428" height="428" rx="92" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="2"/>
+  <circle cx="360" cy="132" r="118" fill="#2f7df6" opacity="0.14"/>
+  <circle cx="152" cy="386" r="138" fill="#d9a441" opacity="0.11"/>
+  <g filter="url(#glow)">
+    <rect x="132" y="272" width="58" height="104" rx="14" fill="url(#gold)"/>
+    <rect x="220" y="202" width="58" height="174" rx="14" fill="url(#gold)"/>
+    <rect x="308" y="136" width="58" height="240" rx="14" fill="url(#gold)"/>
+  </g>
+  <path d="M112 400h288" stroke="#f4d27a" stroke-width="22" stroke-linecap="round" opacity="0.92"/>
+</svg>

@@ -1,0 +1,47 @@
+{
+  "name": "GESTISAC Command Center",
+  "short_name": "GESTISAC",
+  "description": "Plataforma premium de gestao de condominios.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#050b18",
+  "theme_color": "#050b18",
+  "categories": ["business", "finance", "productivity"],
+  "lang": "pt-PT",
+  "icons": [
+    {
+      "src": "/icons/gestisac-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/gestisac-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "url": "/dashboard",
+      "description": "Abrir o centro operacional."
+    },
+    {
+      "name": "Documentos",
+      "short_name": "Documentos",
+      "url": "/documentos",
+      "description": "Gerar e consultar documentos."
+    },
+    {
+      "name": "Tickets",
+      "short_name": "Tickets",
+      "url": "/tickets",
+      "description": "Abrir ocorrencias e avarias."
+    }
+  ]
+}

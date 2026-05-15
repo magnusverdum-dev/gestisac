@@ -37,6 +37,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
   color: var(--text);
   background:
@@ -2284,6 +2285,12 @@ kbd {
 }
 
 @media (max-width: 760px) {
+  body {
+    background:
+      radial-gradient(circle at 18% -8%, rgba(47, 125, 246, 0.22), transparent 26rem),
+      linear-gradient(145deg, #020510 0%, #050b18 58%, #02040c 100%);
+  }
+
   .sidebar,
   .main-stage,
   .dashboard,
@@ -2300,19 +2307,73 @@ kbd {
     min-width: 0;
   }
 
+  .app-shell {
+    min-height: 100dvh;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: calc(12px + env(safe-area-inset-top)) 14px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    background:
+      linear-gradient(180deg, rgba(7, 18, 40, 0.96), rgba(3, 7, 18, 0.88)),
+      radial-gradient(circle at 45% 0%, rgba(47, 125, 246, 0.18), transparent 18rem);
+    box-shadow: 0 18px 54px rgba(0, 0, 0, 0.3);
+  }
+
   .brand {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 42px;
+  }
+
+  .brand strong {
+    font-size: 15px;
+  }
+
+  .brand small {
+    font-size: 9px;
   }
 
   .nav-list {
     display: flex;
     overflow-x: auto;
-    padding-bottom: 6px;
+    padding: 0 2px 8px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-list::-webkit-scrollbar {
+    display: none;
   }
 
   .nav-item {
     flex: 0 0 auto;
+    scroll-snap-align: start;
     padding: 0 14px;
+    min-height: 44px;
+    border-radius: 14px;
+  }
+
+  .main-stage {
+    padding: 14px;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 98px;
+    z-index: 25;
+    padding: 10px;
+    border-radius: 20px;
+    background: rgba(7, 18, 40, 0.78);
+    backdrop-filter: blur(18px);
   }
 
   .topbar-actions {
@@ -2339,7 +2400,10 @@ kbd {
 
   .condo-selector {
     min-width: 0;
+    max-width: 100%;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .condo-selector .mini-building {
@@ -2379,7 +2443,7 @@ kbd {
   }
 
   .page-header h1 {
-    font-size: 31px;
+    font-size: clamp(28px, 9vw, 31px);
   }
 
   .report-preview > header {
@@ -2426,7 +2490,19 @@ kbd {
 
 @media (max-width: 480px) {
   .main-stage {
-    padding: 14px;
+    padding: 12px;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .login-screen {
+    padding: 16px;
+    align-items: start;
+    padding-top: calc(20px + env(safe-area-inset-top));
+  }
+
+  .login-panel {
+    padding: 22px;
+    border-radius: 22px;
   }
 
   .welcome-copy p {

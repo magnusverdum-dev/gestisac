@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="GESTISAC">
+  <defs>
+    <linearGradient id="bg" x1="40" y1="32" x2="472" y2="488" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12336d"/>
+      <stop offset="0.45" stop-color="#071228"/>
+      <stop offset="1" stop-color="#020510"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="146" y1="126" x2="366" y2="386" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff1b7"/>
+      <stop offset="0.5" stop-color="#d9a441"/>
+      <stop offset="1" stop-color="#9b681c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="362" cy="126" r="154" fill="#2f7df6" opacity="0.15"/>
+  <circle cx="146" cy="392" r="170" fill="#d9a441" opacity="0.14"/>
+  <rect x="124" y="264" width="64" height="116" rx="16" fill="url(#gold)"/>
+  <rect x="224" y="188" width="64" height="192" rx="16" fill="url(#gold)"/>
+  <rect x="324" y="116" width="64" height="264" rx="16" fill="url(#gold)"/>
+  <path d="M100 408h312" stroke="#f4d27a" stroke-width="24" stroke-linecap="round"/>
+</svg>
