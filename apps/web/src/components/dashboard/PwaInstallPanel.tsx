@@ -5,8 +5,6 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 
-let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
-
 type PwaInstallPanelProps = {
   compact?: boolean;
 };
@@ -14,6 +12,8 @@ type PwaInstallPanelProps = {
 export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
   const isInstalled = useSignal(false);
   const installAvailable = useSignal(false);
+  const showInstructions = useSignal(false);
+  const platform = useSignal<'android' | 'ios' | 'desktop' | 'unknown'>('unknown');
   const installState = useSignal<'ready' | 'installing' | 'installed' | 'manual'>('manual');
 
   const refreshInstallState = $(() => {
@@ -22,7 +22,13 @@ export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
       'standalone' in navigator &&
       (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
-    isInstalled.value = standalone || navigatorStandalone;
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isiOS = /iphone|ipad|ipod/.test(userAgent);
+    const isAndroid = userAgent.includes('android');
+
+    platform.value = isiOS ? 'ios' : isAndroid ? 'android' : 'desktop';
+    isInstalled.value = Boolean(window.__gestisacPwaInstalled) || standalone || navigatorStandalone;
+    installAvailable.value = Boolean(window.__gestisacInstallPrompt);
     installState.value = isInstalled.value
       ? 'installed'
       : installAvailable.value
@@ -33,13 +39,14 @@ export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
   useVisibleTask$(({ cleanup }) => {
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
-      deferredInstallPrompt = event as BeforeInstallPromptEvent;
+      window.__gestisacInstallPrompt = event as BeforeInstallPromptEvent;
       installAvailable.value = true;
       refreshInstallState();
     };
 
     const onInstalled = () => {
-      deferredInstallPrompt = null;
+      window.__gestisacInstallPrompt = undefined;
+      window.__gestisacPwaInstalled = true;
       installAvailable.value = false;
       isInstalled.value = true;
       installState.value = 'installed';
@@ -47,11 +54,15 @@ export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
 
     window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
     window.addEventListener('appinstalled', onInstalled);
+    window.addEventListener('gestisac-pwa-install-ready', refreshInstallState);
+    window.addEventListener('gestisac-pwa-installed', onInstalled);
     refreshInstallState();
 
     cleanup(() => {
       window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
       window.removeEventListener('appinstalled', onInstalled);
+      window.removeEventListener('gestisac-pwa-install-ready', refreshInstallState);
+      window.removeEventListener('gestisac-pwa-installed', onInstalled);
     });
   });
 
@@ -61,18 +72,21 @@ export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
       return;
     }
 
-    if (!deferredInstallPrompt) {
+    const promptEvent = window.__gestisacInstallPrompt;
+    if (!promptEvent) {
       installState.value = 'manual';
+      showInstructions.value = true;
       return;
     }
 
     installState.value = 'installing';
-    await deferredInstallPrompt.prompt();
-    const choice = await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
+    await promptEvent.prompt();
+    const choice = await promptEvent.userChoice;
+    window.__gestisacInstallPrompt = undefined;
     installAvailable.value = false;
     isInstalled.value = choice.outcome === 'accepted';
     installState.value = isInstalled.value ? 'installed' : 'manual';
+    showInstructions.value = choice.outcome !== 'accepted';
   });
 
   return (
@@ -89,8 +103,10 @@ export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
           {installState.value === 'installed'
             ? 'A GESTISAC ja esta disponivel como app neste dispositivo.'
             : installState.value === 'ready'
-              ? 'Instala a experiencia mobile para abrir como uma app.'
-              : 'Instala pelo menu do browser quando o botao direto nao estiver disponivel.'}
+              ? 'Toca em instalar para abrir a GESTISAC como uma app.'
+              : platform.value === 'ios'
+                ? 'No iPhone, usa Partilhar e depois Adicionar ao ecra principal.'
+                : 'Se o botao direto nao aparecer, segue os passos abaixo.'}
         </p>
       </div>
 
@@ -110,9 +126,37 @@ export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
           disabled={isInstalled.value || installState.value === 'installing'}
           onClick$={install$}
         >
-          {isInstalled.value ? 'Instalada' : 'Instalar'}
+          {isInstalled.value
+            ? 'Instalada'
+            : installState.value === 'ready'
+              ? 'Instalar'
+              : 'Como instalar'}
         </button>
       </div>
+
+      {showInstructions.value && !isInstalled.value ? (
+        <div class="install-instructions">
+          {platform.value === 'ios' ? (
+            <>
+              <strong>Instalar no iPhone</strong>
+              <ol>
+                <li>Toca no botao Partilhar do Safari.</li>
+                <li>Escolhe Adicionar ao ecra principal.</li>
+                <li>Confirma com Adicionar.</li>
+              </ol>
+            </>
+          ) : (
+            <>
+              <strong>Instalar no Android</strong>
+              <ol>
+                <li>Abre esta pagina no Chrome.</li>
+                <li>Toca no menu dos tres pontos.</li>
+                <li>Escolhe Instalar app ou Adicionar ao ecra principal.</li>
+              </ol>
+            </>
+          )}
+        </div>
+      ) : null}
 
       <div class="build-signature">
         <span>Versao: Em desenvolvimento</span>

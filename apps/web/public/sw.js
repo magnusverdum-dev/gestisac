@@ -1,10 +1,13 @@
-const CACHE_NAME = 'gestisac-pwa-v2';
+const CACHE_NAME = 'gestisac-pwa-v3';
 const APP_SHELL = [
   '/',
   '/dashboard',
   '/documentos',
   '/offline.html',
   '/manifest.webmanifest',
+  '/icons/gestisac-192.png',
+  '/icons/gestisac-512.png',
+  '/icons/gestisac-maskable-512.png',
   '/icons/gestisac-icon.svg',
   '/icons/gestisac-maskable.svg'
 ];
@@ -32,6 +35,21 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (request.method !== 'GET' || url.origin !== self.location.origin) {
+    return;
+  }
+
+  if (url.pathname === '/manifest.webmanifest' || url.pathname.startsWith('/icons/')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
     return;
   }
 

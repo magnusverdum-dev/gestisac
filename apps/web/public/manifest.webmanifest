@@ -2,6 +2,7 @@
   "name": "GESTISAC Command Center",
   "short_name": "GESTISAC",
   "description": "Plataforma premium de gestao de condominios.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -11,6 +12,24 @@
   "categories": ["business", "finance", "productivity"],
   "lang": "pt-PT",
   "icons": [
+    {
+      "src": "/icons/gestisac-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/gestisac-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/gestisac-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
     {
       "src": "/icons/gestisac-icon.svg",
       "sizes": "any",
