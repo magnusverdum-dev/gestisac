@@ -362,6 +362,7 @@ export type ResourceEndpoint = CreateResource;
 export const SESSION_TOKEN_KEY = 'gestisac.sessionToken';
 export const SESSION_REFRESH_KEY = 'gestisac.refreshToken';
 export const SESSION_EXPIRES_KEY = 'gestisac.expiresAt';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') ?? '';
 
 export async function getApiHealth(): Promise<{ service: string; status: 'online' }> {
   return apiRequest('/api/health');
@@ -496,7 +497,7 @@ export async function createResource(
 }
 
 export async function uploadDocument(token: string, payload: FormData): Promise<DocumentItem> {
-  const response = await fetch('/api/documents/upload', {
+  const response = await fetch(resolveApiUrl('/api/documents/upload'), {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -575,7 +576,7 @@ export async function downloadDocument(
   token: string,
   id: string
 ): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch(`/api/documents/${id}/download`, {
+  const response = await fetch(resolveApiUrl(`/api/documents/${id}/download`), {
     headers: {
       Accept: '*/*',
       Authorization: `Bearer ${token}`
@@ -600,7 +601,7 @@ export async function exportReport(
   token: string,
   id: string
 ): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch(`/api/reports/${id}/export`, {
+  const response = await fetch(resolveApiUrl(`/api/reports/${id}/export`), {
     method: 'POST',
     headers: {
       Accept: 'text/csv',
@@ -646,7 +647,7 @@ async function apiRequest<T>(
     headers.Authorization = `Bearer ${options.token}`;
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(resolveApiUrl(path), {
     method: options.method ?? 'GET',
     headers,
     body: options.body
@@ -665,4 +666,16 @@ async function apiRequest<T>(
   }
 
   return response.json();
+}
+
+function resolveApiUrl(path: string): string {
+  if (!API_BASE_URL) {
+    return path;
+  }
+
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  return `${API_BASE_URL}${path}`;
 }
