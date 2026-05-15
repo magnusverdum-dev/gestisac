@@ -9,6 +9,9 @@ type LoginPageProps = {
 };
 
 export const LoginPage = component$((props: LoginPageProps) => {
+  const demoEmail = 'admin@gestisac.pt';
+  const demoPassword = 'Gestisac2026!';
+
   return (
     <main class="login-screen">
       <div class="ambient ambient-one" />
@@ -31,7 +34,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
             {props.apiStatus === 'online' ? 'API Rust online' : 'A ligar ao backend'}
           </span>
           <h1>Entrar na plataforma</h1>
-          <p>Usa a conta inicial para gerir condominios, tickets, fornecedores e documentos.</p>
+          <p>Ambiente de teste preparado com conta de administrador.</p>
         </div>
 
         <form
@@ -54,6 +57,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
               inputMode="email"
               autoComplete="username"
               placeholder="admin@gestisac.pt"
+              value={demoEmail}
               required
             />
           </label>
@@ -64,6 +68,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
               type="password"
               autoComplete="current-password"
               placeholder="Password da conta"
+              value={demoPassword}
               required
             />
           </label>
