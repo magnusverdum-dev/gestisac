@@ -1,0 +1,127 @@
+{
+  "meta": {
+    "name": "GESTISAC Premium Visual System",
+    "version": "0.1.0",
+    "status": "foundation"
+  },
+  "color": {
+    "navy": {
+      "950": "#030712",
+      "925": "#050B18",
+      "900": "#061126",
+      "850": "#081734",
+      "800": "#0A1A36",
+      "700": "#10264D"
+    },
+    "blue": {
+      "500": "#2F7DF6",
+      "400": "#4BA3FF",
+      "300": "#7CC4FF"
+    },
+    "gold": {
+      "600": "#B98218",
+      "500": "#D9A441",
+      "400": "#E8BD5D",
+      "300": "#F4D27A"
+    },
+    "green": {
+      "500": "#22C55E",
+      "400": "#4ADE80",
+      "300": "#86EFAC"
+    },
+    "purple": {
+      "500": "#7C3AED",
+      "400": "#9B5CFF",
+      "300": "#C4B5FD"
+    },
+    "orange": {
+      "500": "#F59E0B",
+      "400": "#FDBA2D",
+      "300": "#FCD34D"
+    },
+    "rose": {
+      "500": "#F43F5E",
+      "400": "#FB7185"
+    },
+    "text": {
+      "primary": "#F8FAFC",
+      "secondary": "#CBD5E1",
+      "muted": "#94A3B8",
+      "disabled": "#64748B"
+    },
+    "glass": {
+      "border": "rgba(255,255,255,0.12)",
+      "borderStrong": "rgba(255,255,255,0.22)",
+      "highlight": "rgba(255,255,255,0.16)",
+      "surface": "rgba(7,18,40,0.62)",
+      "surfaceStrong": "rgba(7,18,40,0.78)"
+    }
+  },
+  "space": {
+    "1": "4px",
+    "2": "8px",
+    "3": "12px",
+    "4": "16px",
+    "5": "20px",
+    "6": "24px",
+    "8": "32px",
+    "10": "40px",
+    "12": "48px",
+    "16": "64px"
+  },
+  "radius": {
+    "sm": "8px",
+    "md": "12px",
+    "lg": "16px",
+    "xl": "22px",
+    "pill": "999px"
+  },
+  "blur": {
+    "glass1": "10px",
+    "glass2": "16px",
+    "glass3": "22px",
+    "overlay": "28px"
+  },
+  "shadow": {
+    "panel": "0 18px 50px rgba(0,0,0,0.28)",
+    "card": "0 24px 70px rgba(0,0,0,0.34)",
+    "hero": "0 34px 100px rgba(0,0,0,0.42)",
+    "floating": "0 40px 120px rgba(0,0,0,0.52)"
+  },
+  "glow": {
+    "blue": "0 0 44px rgba(47,125,246,0.32)",
+    "gold": "0 0 44px rgba(217,164,65,0.30)",
+    "green": "0 0 44px rgba(34,197,94,0.26)",
+    "purple": "0 0 44px rgba(124,58,237,0.30)",
+    "orange": "0 0 44px rgba(245,158,11,0.28)",
+    "rose": "0 0 38px rgba(244,63,94,0.26)"
+  },
+  "motion": {
+    "duration": {
+      "micro": "140ms",
+      "fast": "180ms",
+      "standard": "240ms",
+      "slow": "320ms"
+    },
+    "easing": {
+      "standard": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+      "enter": "cubic-bezier(0.16, 1, 0.3, 1)",
+      "exit": "cubic-bezier(0.7, 0, 0.84, 0)"
+    }
+  },
+  "breakpoint": {
+    "mobile": "0px",
+    "tablet": "640px",
+    "desktop": "1024px",
+    "wide": "1440px"
+  },
+  "zIndex": {
+    "base": 0,
+    "panel": 10,
+    "sticky": 20,
+    "navigation": 30,
+    "overlay": 40,
+    "modal": 50,
+    "toast": 60
+  }
+}

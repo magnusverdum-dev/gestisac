@@ -1,0 +1,31 @@
+{
+  "name": "gestisac",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/ui",
+    "packages/config",
+    "packages/types"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,api -c cyan,green \"pnpm run dev:web\" \"pnpm run dev:api\"",
+    "dev:web": "pnpm --dir apps/web dev",
+    "build:web": "pnpm --dir apps/web build",
+    "typecheck:web": "pnpm --dir apps/web typecheck",
+    "preview:web": "pnpm --dir apps/web preview",
+    "dev:api": "node scripts/run-cargo.mjs run --manifest-path apps/api/Cargo.toml",
+    "dev:api:mock": "pnpm --dir apps/api dev:mock",
+    "check:api": "node scripts/run-cargo.mjs check --manifest-path apps/api/Cargo.toml",
+    "fmt:api": "node scripts/run-cargo.mjs fmt --manifest-path apps/api/Cargo.toml",
+    "clippy:api": "node scripts/run-cargo.mjs clippy --manifest-path apps/api/Cargo.toml -- -D warnings",
+    "test:api": "node scripts/run-cargo.mjs test --manifest-path apps/api/Cargo.toml",
+    "smoke:api": "node scripts/smoke-api.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

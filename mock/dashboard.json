@@ -1,0 +1,91 @@
+{
+  "user": {
+    "name": "Joao Silva",
+    "role": "Administrador",
+    "activeCondominiums": 3,
+    "lastAccess": "Hoje, 09:42"
+  },
+  "activeCondominium": "Condominio Vila Verde",
+  "urgentNotice": {
+    "type": "tax",
+    "title": "Imposto municipal a vencer",
+    "detail": "Prazo: 20 maio",
+    "amount": "1.840,00 EUR",
+    "module": "Contabilidade",
+    "priority": "urgent"
+  },
+  "operationalSummary": {
+    "criticalBreakdowns": 1,
+    "upcomingDeadlines": 2,
+    "activeSuppliers": 9
+  },
+  "quickActions": [
+    "Novo Ticket",
+    "Emitir Recibo",
+    "Novo Condominio",
+    "Gerar Relatorio"
+  ],
+  "modules": [
+    {
+      "id": "condominiums",
+      "label": "Condominios",
+      "tone": "blue",
+      "metrics": {
+        "buildings": 12,
+        "fractions": 156,
+        "residents": 248,
+        "alerts": 7
+      }
+    },
+    {
+      "id": "accounting",
+      "label": "Contabilidade",
+      "tone": "gold-green",
+      "metrics": {
+        "currentBalance": 8450,
+        "paidRatio": 85,
+        "overdue": 12,
+        "monthlyExpenses": 2350
+      }
+    },
+    {
+      "id": "administration",
+      "label": "Administracao",
+      "tone": "purple-blue",
+      "metrics": {
+        "openTickets": 7,
+        "maintenance": 4,
+        "expiringInsurance": 2,
+        "suppliers": 9
+      }
+    },
+    {
+      "id": "reports",
+      "label": "Relatorios",
+      "tone": "gold-orange",
+      "metrics": {
+        "reports": 24,
+        "minutes": 18,
+        "exports": 8,
+        "pending": 0
+      }
+    }
+  ],
+  "alerts": [
+    {
+      "type": "tax",
+      "title": "Imposto municipal a vencer",
+      "detail": "Prazo: 20 maio - 1.840,00 EUR"
+    },
+    {
+      "type": "maintenance",
+      "title": "Avaria no elevador do Bloco B",
+      "detail": "Fornecedor notificado - prioridade alta"
+    },
+    {
+      "type": "insurance",
+      "title": "Seguro do predio expira em 5 dias",
+      "detail": "Condominio Vila Verde"
+    }
+  ]
+}

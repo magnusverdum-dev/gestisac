@@ -1,0 +1,305 @@
+{
+  "version": {
+    "name": "GESTISAC Demo API",
+    "version": "0.1.0",
+    "environment": "client-demo"
+  },
+  "user": {
+    "name": "João Silva",
+    "role": "Administrador",
+    "activeCondominiums": 3,
+    "lastAccess": "Hoje, 09:42"
+  },
+  "activeCondominium": "Condomínio Vila Verde",
+  "urgentNotice": {
+    "type": "tax",
+    "title": "Imposto municipal a vencer",
+    "detail": "Prazo: 20 maio · 1.840,00 € · Contabilidade",
+    "priority": "urgent"
+  },
+  "operationalSummary": [
+    {
+      "label": "1 avaria crítica",
+      "tone": "risk"
+    },
+    {
+      "label": "2 prazos próximos",
+      "tone": "warning"
+    },
+    {
+      "label": "9 fornecedores ativos",
+      "tone": "stable"
+    }
+  ],
+  "quickActions": [
+    {
+      "title": "Novo Ticket",
+      "description": "Abrir ocorrência",
+      "icon": "+",
+      "tone": "blue"
+    },
+    {
+      "title": "Emitir Recibo",
+      "description": "Gerar recibo",
+      "icon": "R",
+      "tone": "green"
+    },
+    {
+      "title": "Novo Condomínio",
+      "description": "Adicionar prédio",
+      "icon": "B",
+      "tone": "purple"
+    },
+    {
+      "title": "Gerar Relatório",
+      "description": "Exportar dados",
+      "icon": "Q",
+      "tone": "gold"
+    }
+  ],
+  "dashboardModules": [
+    {
+      "id": "condominiums",
+      "title": "Condomínios",
+      "subtitle": "Gestão de prédios e frações",
+      "tone": "blue",
+      "cta": "Ver condomínios",
+      "path": "/condominios",
+      "visual": "building",
+      "metrics": [
+        { "value": "12", "label": "Prédios" },
+        { "value": "156", "label": "Frações" },
+        { "value": "248", "label": "Moradores" },
+        { "value": "7", "label": "Alertas", "status": "urgent" }
+      ]
+    },
+    {
+      "id": "accounting",
+      "title": "Contabilidade",
+      "subtitle": "Finanças e pagamentos",
+      "tone": "green",
+      "cta": "Abrir contabilidade",
+      "path": "/contabilidade",
+      "visual": "wallet",
+      "metrics": [
+        { "value": "8.450,00 €", "label": "Saldo atual" },
+        { "value": "85%", "label": "Quotas pagas" },
+        { "value": "12", "label": "Em atraso", "status": "warning" },
+        { "value": "2.350,00 €", "label": "Despesas do mês" }
+      ]
+    },
+    {
+      "id": "administration",
+      "title": "Administração",
+      "subtitle": "Operações e manutenção",
+      "tone": "purple",
+      "cta": "Gerir administração",
+      "path": "/administracao",
+      "visual": "tools",
+      "metrics": [
+        { "value": "7", "label": "Tickets abertos", "status": "urgent" },
+        { "value": "4", "label": "Manutenções", "status": "warning" },
+        { "value": "2", "label": "Seguros a expirar", "status": "warning" },
+        { "value": "9", "label": "Fornecedores", "status": "success" }
+      ]
+    },
+    {
+      "id": "reports",
+      "title": "Relatórios",
+      "subtitle": "Análises e documentos",
+      "tone": "gold",
+      "cta": "Gerar relatório",
+      "path": "/relatorios",
+      "visual": "chart",
+      "metrics": [
+        { "value": "24", "label": "Relatórios" },
+        { "value": "18", "label": "Atas" },
+        { "value": "8", "label": "Exportações", "status": "new" },
+        { "value": "0", "label": "Pendentes", "status": "success" }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "type": "tax",
+      "title": "Imposto municipal a vencer",
+      "detail": "Prazo: 20 maio · 1.840,00 €",
+      "tone": "danger",
+      "icon": "€"
+    },
+    {
+      "type": "maintenance",
+      "title": "Avaria no elevador do Bloco B",
+      "detail": "Fornecedor notificado · prioridade alta",
+      "tone": "gold",
+      "icon": "!"
+    },
+    {
+      "type": "insurance",
+      "title": "Seguro do prédio expira em 5 dias",
+      "detail": "Condomínio Vila Verde",
+      "tone": "purple",
+      "icon": "P"
+    }
+  ],
+  "condominiums": [
+    {
+      "name": "Condomínio Vila Verde",
+      "location": "Lisboa",
+      "buildings": 4,
+      "fractions": 64,
+      "residents": 112,
+      "status": "Operacional",
+      "notice": "Seguro expira em 5 dias"
+    },
+    {
+      "name": "Edifício Atlântico",
+      "location": "Cascais",
+      "buildings": 1,
+      "fractions": 28,
+      "residents": 46,
+      "status": "Acompanhamento",
+      "notice": "2 quotas em atraso"
+    },
+    {
+      "name": "Residencial Monte Claro",
+      "location": "Oeiras",
+      "buildings": 2,
+      "fractions": 44,
+      "residents": 90,
+      "status": "Estável",
+      "notice": "Assembleia próxima"
+    }
+  ],
+  "tickets": [
+    {
+      "title": "Avaria no elevador do Bloco B",
+      "condominium": "Condomínio Vila Verde",
+      "priority": "Crítica",
+      "status": "Fornecedor notificado",
+      "updatedAt": "Hoje, 09:18"
+    },
+    {
+      "title": "Infiltração na garagem - piso -1",
+      "condominium": "Edifício Atlântico",
+      "priority": "Alta",
+      "status": "A aguardar orçamento",
+      "updatedAt": "Ontem, 17:40"
+    },
+    {
+      "title": "Luz fundida no hall principal",
+      "condominium": "Residencial Monte Claro",
+      "priority": "Normal",
+      "status": "Agendado",
+      "updatedAt": "Hoje, 08:05"
+    }
+  ],
+  "payments": [
+    {
+      "label": "Quotas pagas",
+      "value": "85%",
+      "detail": "132 de 156 frações regularizadas"
+    },
+    {
+      "label": "Valor em atraso",
+      "value": "1.250,00 €",
+      "detail": "12 quotas pendentes"
+    },
+    {
+      "label": "Fundo de reserva",
+      "value": "18.900,00 €",
+      "detail": "Sem movimentos críticos"
+    }
+  ],
+  "documents": [
+    {
+      "title": "Apólice de seguro 2026",
+      "type": "Seguro",
+      "condominium": "Condomínio Vila Verde",
+      "status": "A expirar"
+    },
+    {
+      "title": "Ata da assembleia de abril",
+      "type": "Ata",
+      "condominium": "Residencial Monte Claro",
+      "status": "Publicada"
+    },
+    {
+      "title": "Relatório financeiro mensal",
+      "type": "Relatório",
+      "condominium": "Edifício Atlântico",
+      "status": "Revisto"
+    }
+  ],
+  "reports": [
+    {
+      "title": "Relatório financeiro mensal",
+      "period": "Maio 2026",
+      "status": "Pronto para exportar"
+    },
+    {
+      "title": "Mapa de dívidas por fração",
+      "period": "Últimos 90 dias",
+      "status": "Atualizado hoje"
+    },
+    {
+      "title": "Resumo de manutenção",
+      "period": "Trimestre atual",
+      "status": "Em revisão"
+    }
+  ],
+  "maintenance": [
+    {
+      "title": "Elevador Bloco B",
+      "supplier": "Elevatec Lisboa",
+      "status": "Intervenção urgente",
+      "date": "Hoje"
+    },
+    {
+      "title": "Sistema de incêndio",
+      "supplier": "SafeBuilding",
+      "status": "Inspeção marcada",
+      "date": "18 maio"
+    },
+    {
+      "title": "Limpeza garagem",
+      "supplier": "Brilho Urbano",
+      "status": "Rotina semanal",
+      "date": "Sexta-feira"
+    }
+  ],
+  "suppliers": [
+    {
+      "name": "Elevatec Lisboa",
+      "category": "Elevadores",
+      "status": "Ativo",
+      "contact": "suporte@elevatec.pt"
+    },
+    {
+      "name": "SafeBuilding",
+      "category": "Segurança",
+      "status": "Ativo",
+      "contact": "geral@safebuilding.pt"
+    },
+    {
+      "name": "Brilho Urbano",
+      "category": "Limpeza",
+      "status": "Ativo",
+      "contact": "operacoes@brilhourbano.pt"
+    }
+  ],
+  "assemblies": [
+    {
+      "title": "Assembleia ordinária",
+      "condominium": "Condomínio Vila Verde",
+      "date": "Amanhã, 19:00",
+      "status": "Convocatória enviada"
+    },
+    {
+      "title": "Reunião extraordinária",
+      "condominium": "Edifício Atlântico",
+      "date": "24 maio, 18:30",
+      "status": "Em preparação"
+    }
+  ]
+}

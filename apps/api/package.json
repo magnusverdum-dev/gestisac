@@ -1,0 +1,13 @@
+{
+  "name": "@gestisac/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:mock": "node mock-server.mjs",
+    "fmt": "node ../../scripts/run-cargo.mjs fmt",
+    "check:rust": "node ../../scripts/run-cargo.mjs check",
+    "clippy": "node ../../scripts/run-cargo.mjs clippy -- -D warnings",
+    "test": "node ../../scripts/run-cargo.mjs test"
+  }
+}
