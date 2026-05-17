@@ -1,16 +1,18 @@
 {
   "name": "GESTISAC Command Center",
   "short_name": "GESTISAC",
-  "description": "Plataforma premium de gestao de condominios.",
+  "description": "Plataforma premium de gestao de condominios com avarias operacionais offline-first.",
   "id": "/",
-  "start_url": "/",
+  "start_url": "/dashboard?source=pwa",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "portrait-primary",
   "background_color": "#050b18",
   "theme_color": "#050b18",
   "categories": ["business", "finance", "productivity"],
   "lang": "pt-PT",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/gestisac-192.png",
@@ -61,6 +63,18 @@
       "short_name": "Tickets",
       "url": "/tickets",
       "description": "Abrir ocorrencias e avarias."
+    },
+    {
+      "name": "Tecnico - Avarias",
+      "short_name": "Tecnico",
+      "url": "/tecnico/avarias",
+      "description": "Abrir tarefas tecnicas atribuidas."
+    },
+    {
+      "name": "Condomino - Avarias",
+      "short_name": "Condomino",
+      "url": "/condomino/avarias",
+      "description": "Reportar e acompanhar avarias."
     }
   ]
 }

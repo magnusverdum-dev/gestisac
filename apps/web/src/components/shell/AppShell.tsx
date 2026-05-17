@@ -1,5 +1,6 @@
 import { component$, Slot, type PropFunction } from '@builder.io/qwik';
 import type { Condominium, DashboardResponse, GlobalSearchResult } from '../../lib/api';
+import { PwaInstallPanel } from '../dashboard/PwaInstallPanel';
 import { Sidebar } from './Sidebar';
 import { Topbar, type ApiStatus } from './Topbar';
 
@@ -37,6 +38,9 @@ export const AppShell = component$((props: AppShellProps) => {
           onSelectCondominium$={props.onSelectCondominium$}
           onLogout$={props.onLogout$}
         />
+        {props.currentPath !== '/dashboard' ? (
+          <PwaInstallPanel compact variant="shell" />
+        ) : null}
         <Slot />
       </section>
     </main>

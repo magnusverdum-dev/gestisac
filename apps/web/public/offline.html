@@ -34,6 +34,39 @@
         box-shadow: 0 26px 80px rgba(0, 0, 0, 0.34);
       }
 
+      .mark {
+        display: inline-grid;
+        grid-template-columns: repeat(3, 8px);
+        align-items: end;
+        gap: 4px;
+        width: 44px;
+        height: 48px;
+        margin-bottom: 18px;
+        padding: 8px;
+        border: 1px solid rgba(244, 210, 122, 0.34);
+        border-radius: 15px;
+        background: linear-gradient(145deg, rgba(217, 164, 65, 0.28), rgba(47, 125, 246, 0.12));
+        box-shadow: 0 0 34px rgba(217, 164, 65, 0.22);
+      }
+
+      .mark span {
+        display: block;
+        border-radius: 3px 3px 1px 1px;
+        background: linear-gradient(180deg, #f8d98a, #d9a441);
+      }
+
+      .mark span:nth-child(1) {
+        height: 18px;
+      }
+
+      .mark span:nth-child(2) {
+        height: 30px;
+      }
+
+      .mark span:nth-child(3) {
+        height: 24px;
+      }
+
       strong {
         display: block;
         color: #f4d27a;
@@ -53,13 +86,59 @@
         color: #94a3b8;
         line-height: 1.6;
       }
+
+      .actions {
+        display: grid;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      a,
+      button {
+        min-height: 44px;
+        border-radius: 14px;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #081126;
+        text-decoration: none;
+        background: linear-gradient(135deg, #f4d27a, #d9a441);
+      }
+
+      button {
+        color: #f8fafc;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      small {
+        display: block;
+        margin-top: 18px;
+        color: #64748b;
+        line-height: 1.5;
+      }
     </style>
   </head>
   <body>
     <main>
+      <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
       <strong>GESTISAC</strong>
       <h1>Sem ligacao.</h1>
-      <p>A aplicacao esta instalada, mas precisa de internet para sincronizar os dados operacionais.</p>
+      <p>
+        A app continua instalada e pronta para consulta offline. As acoes de avarias ficam
+        guardadas no dispositivo e sincronizam quando a ligacao voltar.
+      </p>
+      <div class="actions">
+        <a href="/tecnico/avarias">Abrir avarias tecnico</a>
+        <button type="button" onclick="window.location.reload()">Tentar sincronizar</button>
+      </div>
+      <small>Se a rede estiver instavel, evita fechar a app ate a fila de sincronizacao terminar.</small>
     </main>
   </body>
 </html>

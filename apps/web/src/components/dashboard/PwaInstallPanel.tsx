@@ -7,6 +7,7 @@ type BeforeInstallPromptEvent = Event & {
 
 type PwaInstallPanelProps = {
   compact?: boolean;
+  variant?: 'dashboard' | 'shell';
 };
 
 export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
@@ -15,6 +16,8 @@ export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
   const showInstructions = useSignal(false);
   const platform = useSignal<'android' | 'ios' | 'desktop' | 'unknown'>('unknown');
   const installState = useSignal<'ready' | 'installing' | 'installed' | 'manual'>('manual');
+
+  const isShellVariant = props.variant === 'shell';
 
   const refreshInstallState = $(() => {
     const standalone = window.matchMedia('(display-mode: standalone)').matches;
@@ -91,19 +94,27 @@ export const PwaInstallPanel = component$((props: PwaInstallPanelProps) => {
 
   return (
     <section
-      class={props.compact ? 'mobile-version-panel compact glass-panel' : 'mobile-version-panel glass-panel'}
-      aria-label="Versao telemovel"
+      class={`mobile-version-panel glass-panel${props.compact ? ' compact' : ''}${
+        isShellVariant ? ' shell-install-panel' : ''
+      }`}
+      aria-label={isShellVariant ? 'Instalacao da PWA' : 'Versao telemovel'}
     >
       <div class="mobile-version-copy">
-        <span class="eyebrow">Versao Telemovel</span>
+        <span class="eyebrow">{isShellVariant ? 'PWA operacional' : 'Versao Telemovel'}</span>
         <strong>
-          {isInstalled.value ? 'Aplicacao instalada' : 'Aplicacao pronta para instalar'}
+          {isInstalled.value
+            ? 'Aplicacao instalada'
+            : isShellVariant
+              ? 'Instalar app neste dispositivo'
+              : 'Aplicacao pronta para instalar'}
         </strong>
         <p>
           {installState.value === 'installed'
             ? 'A GESTISAC ja esta disponivel como app neste dispositivo.'
             : installState.value === 'ready'
-              ? 'Toca em instalar para abrir a GESTISAC como uma app.'
+              ? isShellVariant
+                ? 'Instala para trabalhar em modo app, com cache das rotas principais.'
+                : 'Toca em instalar para abrir a GESTISAC como uma app.'
               : platform.value === 'ios'
                 ? 'No iPhone, usa Partilhar e depois Adicionar ao ecra principal.'
                 : 'Se o botao direto nao aparecer, segue os passos abaixo.'}

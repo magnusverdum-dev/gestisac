@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestisac-pwa-v5-avarias';
+const CACHE_NAME = 'gestisac-pwa-v6-audit';
 const APP_SHELL = [
   '/',
   '/dashboard',
@@ -8,6 +8,11 @@ const APP_SHELL = [
   '/administracao',
   '/manutencao',
   '/documentos',
+  '/contabilidade',
+  '/relatorios',
+  '/assembleias',
+  '/fornecedores',
+  '/definicoes',
   '/offline.html',
   '/manifest.webmanifest',
   '/icons/gestisac-192.png',
@@ -17,12 +22,14 @@ const APP_SHELL = [
   '/icons/gestisac-maskable.svg'
 ];
 
+const cacheAppShell = async () => {
+  const cache = await caches.open(CACHE_NAME);
+  await Promise.all(APP_SHELL.map((url) => cache.add(url).catch(() => undefined)));
+};
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
+    cacheAppShell().then(() => self.skipWaiting())
   );
 });
 

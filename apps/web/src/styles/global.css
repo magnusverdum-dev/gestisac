@@ -64,6 +64,29 @@ button {
   overflow-x: hidden;
 }
 
+html.pwa-standalone body {
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+
+html.pwa-standalone .app-shell {
+  min-height: 100dvh;
+}
+
+html.pwa-standalone .main-stage {
+  padding-bottom: calc(26px + env(safe-area-inset-bottom));
+}
+
+html.pwa-standalone .shell-install-panel {
+  display: none;
+}
+
+@media (min-width: 761px) {
+  html.pwa-standalone .sidebar {
+    padding-top: calc(30px + env(safe-area-inset-top));
+  }
+}
+
 .ambient {
   position: fixed;
   z-index: 0;
@@ -960,6 +983,45 @@ kbd {
   flex-direction: column;
   gap: 4px;
   padding-top: 12px;
+}
+
+.mobile-version-panel.shell-install-panel {
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 18px;
+  border-color: rgba(34, 197, 94, 0.22);
+  background:
+    radial-gradient(circle at 92% 12%, rgba(34, 197, 94, 0.18), transparent 13rem),
+    radial-gradient(circle at 8% 0%, rgba(75, 163, 255, 0.16), transparent 16rem),
+    linear-gradient(145deg, rgba(8, 23, 52, 0.78), rgba(3, 7, 18, 0.72));
+}
+
+.shell-install-panel::after {
+  content: "";
+  position: absolute;
+  inset: auto 14px 12px auto;
+  width: 86px;
+  height: 86px;
+  border: 1px solid rgba(244, 210, 122, 0.14);
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(244, 210, 122, 0.16), rgba(75, 163, 255, 0.08));
+  transform: rotate(12deg);
+}
+
+.shell-install-panel .mobile-version-copy,
+.shell-install-panel .mobile-version-actions,
+.shell-install-panel .install-instructions,
+.shell-install-panel .build-signature {
+  position: relative;
+  z-index: 1;
+}
+
+.shell-install-panel .install-status {
+  background: rgba(3, 7, 18, 0.46);
+}
+
+.shell-install-panel .build-signature {
+  display: none;
 }
 
 .module-grid {
@@ -2916,6 +2978,10 @@ kbd {
     backdrop-filter: blur(18px);
   }
 
+  html.pwa-standalone .topbar {
+    top: calc(98px + env(safe-area-inset-top));
+  }
+
   .topbar-actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -2956,6 +3022,22 @@ kbd {
 
   .mobile-version-panel {
     grid-template-columns: 1fr;
+  }
+
+  .mobile-version-panel.shell-install-panel {
+    margin: 0 0 12px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .shell-install-panel::after {
+    width: 62px;
+    height: 62px;
+    border-radius: 22px;
+  }
+
+  .shell-install-panel .mobile-version-copy p {
+    display: none;
   }
 
   .mobile-version-actions {
