@@ -26,6 +26,7 @@ use uuid::Uuid;
 const MAX_DOCUMENT_BYTES: usize = 10 * 1024 * 1024;
 const MAX_AVARIA_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CondominiumInput {
@@ -360,6 +361,7 @@ pub async fn update_active_condominium(
     Ok(Json(requested_name))
 }
 
+#[allow(dead_code)]
 pub async fn condominiums(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -370,6 +372,7 @@ pub async fn condominiums(
     Ok(Json(paginate(&store.condominiums, &params)))
 }
 
+#[allow(dead_code)]
 pub async fn create_condominium(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -390,6 +393,7 @@ pub async fn create_condominium(
         notice: input
             .notice
             .unwrap_or_else(|| "Sem avisos criticos".to_string()),
+        ..Default::default()
     };
 
     let mut store = state.store.write().await;
@@ -407,6 +411,7 @@ pub async fn create_condominium(
     Ok(Json(item))
 }
 
+#[allow(dead_code)]
 pub async fn update_condominium(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -445,6 +450,7 @@ pub async fn update_condominium(
     Ok(Json(response))
 }
 
+#[allow(dead_code)]
 pub async fn delete_condominium(
     State(state): State<AppState>,
     headers: HeaderMap,

@@ -1,6 +1,7 @@
 import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 import { LoginPage } from './components/auth/LoginPage';
 import { DashboardPage } from './components/dashboard/DashboardPage';
+import { CondominiumsPage } from './components/pages/CondominiumsPage';
 import { PageOverview } from './components/pages/PageOverview';
 import { AppShell } from './components/shell/AppShell';
 import {
@@ -58,7 +59,15 @@ import {
   type PublicUser
 } from './lib/api';
 
-const normalizePath = (path: string) => (path === '/' ? '/dashboard' : path);
+const normalizePath = (path: string) => {
+  if (!path || path === '/') {
+    return '/dashboard';
+  }
+
+  const pathname = path.split('?')[0]?.split('#')[0] ?? '/';
+  const normalized = pathname.replace(/\/+$/, '');
+  return normalized || '/dashboard';
+};
 
 const triggerBrowserDownload = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
@@ -261,7 +270,6 @@ export const App = component$(() => {
     try {
       await updateActiveCondominium(session.token, name);
       await loadWorkspace$(session.token);
-      await navigate$('/dashboard');
       notice.value = `Condominio ativo alterado para ${name}.`;
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Nao foi possivel alterar o condominio ativo';
@@ -843,7 +851,6 @@ export const App = component$(() => {
       condominiums={resources.value.condominiums}
       searchResults={searchResults}
       navigate$={navigate$}
-      onSelectCondominium$={selectCondominium$}
       onLogout$={logout$}
     >
       {error.value ? <div class="app-error glass-panel">{error.value}</div> : null}
@@ -855,6 +862,19 @@ export const App = component$(() => {
           onQuickAction$={runDashboardAction$}
           onModuleCommand$={runModuleCommand$}
         />
+      ) : page.path === '/condominios' ? (
+        <CondominiumsPage
+          token={session.token}
+          dashboard={dashboard.value}
+          resources={resources.value}
+          isSaving={isSaving.value}
+          onRefresh$={$(async () => {
+            if (session.token) {
+              await loadWorkspace$(session.token);
+            }
+          })}
+          onSelectCondominium$={selectCondominium$}
+        />
       ) : (
         <PageOverview
           page={page}
@@ -865,6 +885,7 @@ export const App = component$(() => {
           pendingTicketUploads={pendingTicketUploads.value}
           reportPreview={reportPreview.value}
           documentPreview={documentPreview.value}
+          activeCondominium={dashboard.value.activeCondominium}
           createIntentResource={createIntent.path === page.path ? createIntent.resource : ''}
           createIntentVersion={createIntent.version}
           onCreate$={createRecord$}
@@ -884,6 +905,7 @@ export const App = component$(() => {
           onExportReport$={exportReport$}
           onPreviewDocument$={previewDocument$}
           onDownloadDocument$={downloadDocument$}
+          onSelectCondominium$={selectCondominium$}
           onCloseReportPreview$={closeReportPreview$}
           onCloseDocumentPreview$={closeDocumentPreview$}
         />

@@ -9,6 +9,8 @@ type SidebarProps = {
 };
 
 export const Sidebar = component$((props: SidebarProps) => {
+  const normalizedCurrentPath = normalizeMenuPath(props.currentPath);
+
   return (
     <aside class="sidebar" aria-label="Navegacao principal">
       <div class="brand">
@@ -24,20 +26,25 @@ export const Sidebar = component$((props: SidebarProps) => {
       </div>
 
       <nav class="nav-list">
-        {navPages.map((page) => (
-          <a
-            class={props.currentPath === page.path ? 'nav-item active' : 'nav-item'}
-            href={page.path}
-            key={page.path}
-            onClick$={(event) => {
-              event.preventDefault();
-              props.navigate$(page.path);
-            }}
-          >
-            <span>{page.icon}</span>
-            {page.navLabel}
-          </a>
-        ))}
+        {navPages.map((page) => {
+          const isActive = isPathActive(normalizedCurrentPath, page.path);
+
+          return (
+            <a
+              class={isActive ? 'nav-item active' : 'nav-item'}
+              href={page.path}
+              key={page.path}
+              aria-current={isActive ? 'page' : undefined}
+              onClick$={(event) => {
+                event.preventDefault();
+                props.navigate$(page.path);
+              }}
+            >
+              <span>{page.icon}</span>
+              {page.navLabel}
+            </a>
+          );
+        })}
       </nav>
 
       <div class="profile-card">
@@ -54,6 +61,24 @@ export const Sidebar = component$((props: SidebarProps) => {
     </aside>
   );
 });
+
+function normalizeMenuPath(path: string) {
+  if (!path || path === '/') {
+    return '/dashboard';
+  }
+
+  const pathname = path.split('?')[0]?.split('#')[0] ?? '/';
+  const normalized = pathname.replace(/\/+$/, '');
+  return normalized || '/dashboard';
+}
+
+function isPathActive(currentPath: string, targetPath: string) {
+  const normalizedTarget = normalizeMenuPath(targetPath);
+  return (
+    currentPath === normalizedTarget ||
+    currentPath.startsWith(`${normalizedTarget}/`)
+  );
+}
 
 function initials(name: string) {
   return name

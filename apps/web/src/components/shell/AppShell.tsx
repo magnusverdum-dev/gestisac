@@ -11,7 +11,6 @@ type AppShellProps = {
   condominiums: Condominium[];
   searchResults: GlobalSearchResult[];
   navigate$: PropFunction<(path: string) => void>;
-  onSelectCondominium$: PropFunction<(name: string) => void>;
   onLogout$: PropFunction<() => void>;
 };
 
@@ -35,7 +34,6 @@ export const AppShell = component$((props: AppShellProps) => {
           searchResults={props.searchResults}
           user={props.dashboard.user}
           navigate$={props.navigate$}
-          onSelectCondominium$={props.onSelectCondominium$}
           onLogout$={props.onLogout$}
         />
         {props.currentPath !== '/dashboard' ? (

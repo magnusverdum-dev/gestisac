@@ -24,6 +24,7 @@ type PageOverviewProps = {
   pendingTicketUploads: number;
   reportPreview: ReportPreview | null;
   documentPreview: DocumentPreview | null;
+  activeCondominium: string;
   createIntentResource: CreateResource | '';
   createIntentVersion: number;
   onCreate$: PropFunction<(resource: ResourceEndpoint, payload: Record<string, string | number>) => void>;
@@ -47,6 +48,7 @@ type PageOverviewProps = {
   onExportReport$: PropFunction<(id: string) => void>;
   onPreviewDocument$: PropFunction<(id: string) => void>;
   onDownloadDocument$: PropFunction<(id: string) => void>;
+  onSelectCondominium$: PropFunction<(name: string) => void>;
   onCloseReportPreview$: PropFunction<() => void>;
   onCloseDocumentPreview$: PropFunction<() => void>;
 };
@@ -700,6 +702,20 @@ export const PageOverview = component$((props: PageOverviewProps) => {
                       {quickAction.label}
                     </button>
                   ))}
+                  {props.page.path === '/condominios' && record.resource === 'condominiums' ? (
+                    <button
+                      class="quick-record-action success"
+                      type="button"
+                      disabled={props.isSaving || record.title === props.activeCondominium}
+                      onClick$={async () => {
+                        await props.onSelectCondominium$(record.title);
+                        detailIndex.value = -1;
+                        editIndex.value = -1;
+                      }}
+                    >
+                      {record.title === props.activeCondominium ? 'Ativo' : 'Tornar ativo'}
+                    </button>
+                  ) : null}
                   {record.canEdit && record.fields?.length ? (
                     <button
                       type="button"

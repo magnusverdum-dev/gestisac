@@ -106,7 +106,7 @@ pub struct Session {
     pub refresh_expires_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Condominium {
     pub id: String,
@@ -117,6 +117,569 @@ pub struct Condominium {
     pub residents: u16,
     pub status: String,
     pub notice: String,
+    #[serde(default)]
+    pub internal_code: String,
+    #[serde(default)]
+    pub external_reference: String,
+    #[serde(default)]
+    pub condominium_type: String,
+    #[serde(default)]
+    pub subtype: String,
+    #[serde(default)]
+    pub management_start_date: String,
+    #[serde(default)]
+    pub management_end_date: String,
+    #[serde(default)]
+    pub manager: String,
+    #[serde(default)]
+    pub team: String,
+    #[serde(default)]
+    pub management_company: String,
+    #[serde(default)]
+    pub short_description: String,
+    #[serde(default)]
+    pub administrative_notes: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub archived: bool,
+    #[serde(default)]
+    pub archived_at: Option<String>,
+    #[serde(default)]
+    pub address: CondominiumAddress,
+    #[serde(default)]
+    pub structure: CondominiumStructure,
+    #[serde(default)]
+    pub operational_status: CondominiumOperationalStatus,
+    #[serde(default)]
+    pub primary_image_url: String,
+    #[serde(default)]
+    pub blocks_detailed: Vec<CondominiumBlock>,
+    #[serde(default)]
+    pub floors_detailed: Vec<CondominiumFloor>,
+    #[serde(default)]
+    pub zones: Vec<CondominiumZone>,
+    #[serde(default)]
+    pub equipment: Vec<CondominiumEquipment>,
+    #[serde(default)]
+    pub contacts: Vec<CondominiumContact>,
+    #[serde(default)]
+    pub managed_documents: Vec<CondominiumManagedDocument>,
+    #[serde(default)]
+    pub media: Vec<CondominiumMedia>,
+    #[serde(default)]
+    pub internal_notes_registry: Vec<CondominiumInternalNote>,
+    #[serde(default)]
+    pub history: Vec<CondominiumHistoryEvent>,
+    #[serde(default)]
+    pub onboarding_draft: Option<CondominiumOnboardingDraft>,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumAddress {
+    #[serde(default)]
+    pub street: String,
+    #[serde(default)]
+    pub number: String,
+    #[serde(default)]
+    pub lot: String,
+    #[serde(default)]
+    pub address_block: String,
+    #[serde(default)]
+    pub postal_code: String,
+    #[serde(default)]
+    pub locality: String,
+    #[serde(default)]
+    pub parish: String,
+    #[serde(default)]
+    pub municipality: String,
+    #[serde(default)]
+    pub district: String,
+    #[serde(default)]
+    pub country: String,
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    #[serde(default)]
+    pub longitude: Option<f64>,
+    #[serde(default)]
+    pub google_maps_url: String,
+    #[serde(default)]
+    pub apple_maps_url: String,
+    #[serde(default)]
+    pub access_notes: String,
+    #[serde(default)]
+    pub main_entry_point: String,
+    #[serde(default)]
+    pub technical_entry_point: String,
+    #[serde(default)]
+    pub garage_entry_point: String,
+    #[serde(default)]
+    pub access_restrictions: String,
+    #[serde(default)]
+    pub visual_reference: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumStructure {
+    #[serde(default)]
+    pub total_fractions: u16,
+    #[serde(default)]
+    pub residential_fractions: u16,
+    #[serde(default)]
+    pub commercial_fractions: u16,
+    #[serde(default)]
+    pub garages_count: u16,
+    #[serde(default)]
+    pub storage_units_count: u16,
+    #[serde(default)]
+    pub shops_count: u16,
+    #[serde(default)]
+    pub blocks_count: u16,
+    #[serde(default)]
+    pub entrances_count: u16,
+    #[serde(default)]
+    pub floors_above_ground: u16,
+    #[serde(default)]
+    pub basements_count: u16,
+    #[serde(default)]
+    pub technical_floors_count: u16,
+    #[serde(default)]
+    pub elevators_count: u16,
+    #[serde(default)]
+    pub stairs_count: u16,
+    #[serde(default)]
+    pub parking_spaces_count: u16,
+    #[serde(default)]
+    pub has_garden: bool,
+    #[serde(default)]
+    pub has_pool: bool,
+    #[serde(default)]
+    pub has_condominium_room: bool,
+    #[serde(default)]
+    pub has_trash_house: bool,
+    #[serde(default)]
+    pub has_accessible_roof: bool,
+    #[serde(default)]
+    pub has_technical_roof: bool,
+    #[serde(default)]
+    pub has_solar_panels: bool,
+    #[serde(default)]
+    pub has_cctv: bool,
+    #[serde(default)]
+    pub has_porter_desk: bool,
+    #[serde(default)]
+    pub has_doorman: bool,
+    #[serde(default)]
+    pub has_security: bool,
+    #[serde(default)]
+    pub construction_year: Option<u16>,
+    #[serde(default)]
+    pub last_renovation_year: Option<u16>,
+    #[serde(default)]
+    pub common_area_estimate: String,
+    #[serde(default)]
+    pub structural_notes: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumOperationalStatus {
+    pub general_status: String,
+    pub alert_level: String,
+    pub summary: String,
+    pub reason: String,
+    pub updated_by: String,
+    pub updated_at: String,
+}
+
+impl Default for CondominiumOperationalStatus {
+    fn default() -> Self {
+        Self {
+            general_status: "normal".to_string(),
+            alert_level: "verde".to_string(),
+            summary: "Sem alertas relevantes".to_string(),
+            reason: String::new(),
+            updated_by: String::new(),
+            updated_at: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumBlock {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub code: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub specific_address: String,
+    #[serde(default)]
+    pub main_entry: String,
+    #[serde(default)]
+    pub floors_count: u16,
+    #[serde(default)]
+    pub basements_count: u16,
+    #[serde(default)]
+    pub fractions_count: u16,
+    #[serde(default)]
+    pub elevators_count: u16,
+    #[serde(default)]
+    pub stairs_count: u16,
+    #[serde(default)]
+    pub garages_count: u16,
+    #[serde(default)]
+    pub operational_status: String,
+    #[serde(default)]
+    pub access_notes: String,
+    #[serde(default)]
+    pub internal_notes: String,
+    #[serde(default)]
+    pub archived: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumFloor {
+    pub id: String,
+    #[serde(default)]
+    pub block_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub number: String,
+    #[serde(default)]
+    pub floor_type: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub fractions_count: u16,
+    #[serde(default)]
+    pub operational_status: String,
+    #[serde(default)]
+    pub notes: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumZone {
+    pub id: String,
+    #[serde(default)]
+    pub block_id: String,
+    #[serde(default)]
+    pub floor_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub zone_type: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub operational_status: String,
+    #[serde(default)]
+    pub alert_level: String,
+    #[serde(default)]
+    pub qr_code_reference: String,
+    #[serde(default)]
+    pub public_qr_url: String,
+    #[serde(default)]
+    pub internal_location: String,
+    #[serde(default)]
+    pub access_notes: String,
+    #[serde(default)]
+    pub technical_notes: String,
+    #[serde(default)]
+    pub image_url: String,
+    #[serde(default)]
+    pub plan_url: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumEquipment {
+    pub id: String,
+    #[serde(default)]
+    pub block_id: String,
+    #[serde(default)]
+    pub floor_id: String,
+    #[serde(default)]
+    pub zone_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub equipment_type: String,
+    #[serde(default)]
+    pub brand: String,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub serial_number: String,
+    #[serde(default)]
+    pub internal_reference: String,
+    #[serde(default)]
+    pub supplier: String,
+    #[serde(default)]
+    pub maintenance_company: String,
+    #[serde(default)]
+    pub installation_date: String,
+    #[serde(default)]
+    pub last_maintenance_date: String,
+    #[serde(default)]
+    pub next_maintenance_date: String,
+    #[serde(default)]
+    pub maintenance_frequency: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub criticality: String,
+    #[serde(default)]
+    pub warranty_until: String,
+    #[serde(default)]
+    pub contract_reference: String,
+    #[serde(default)]
+    pub technical_notes: String,
+    #[serde(default)]
+    pub document_ids: Vec<String>,
+    #[serde(default)]
+    pub media_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumContact {
+    pub id: String,
+    #[serde(default)]
+    pub contact_type: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub company: String,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub phone: String,
+    #[serde(default)]
+    pub alternate_phone: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub schedule: String,
+    #[serde(default)]
+    pub service: String,
+    #[serde(default)]
+    pub is_emergency: bool,
+    #[serde(default)]
+    pub priority: String,
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(default)]
+    pub contract_reference: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumManagedDocument {
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub document_type: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub file_name: String,
+    #[serde(default)]
+    pub file_url: String,
+    #[serde(default)]
+    pub block_id: String,
+    #[serde(default)]
+    pub zone_id: String,
+    #[serde(default)]
+    pub equipment_id: String,
+    #[serde(default)]
+    pub document_date: String,
+    #[serde(default)]
+    pub expiry_date: String,
+    #[serde(default)]
+    pub uploaded_by: String,
+    #[serde(default)]
+    pub uploaded_at: String,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub notes: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumMedia {
+    pub id: String,
+    #[serde(default)]
+    pub media_type: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub file_name: String,
+    #[serde(default)]
+    pub file_url: String,
+    #[serde(default)]
+    pub block_id: String,
+    #[serde(default)]
+    pub floor_id: String,
+    #[serde(default)]
+    pub zone_id: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub is_primary: bool,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumInternalNote {
+    pub id: String,
+    #[serde(default)]
+    pub note_type: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub created_by: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+    #[serde(default)]
+    pub visibility: String,
+    #[serde(default)]
+    pub priority: String,
+    #[serde(default)]
+    pub pinned: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumHistoryEvent {
+    pub id: String,
+    #[serde(default)]
+    pub event_type: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub user_name: String,
+    #[serde(default)]
+    pub timestamp: String,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub old_data: String,
+    #[serde(default)]
+    pub new_data: String,
+    #[serde(default)]
+    pub entity: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumOnboardingDraft {
+    #[serde(default)]
+    pub current_step: u8,
+    #[serde(default)]
+    pub completed_steps: Vec<u8>,
+    #[serde(default)]
+    pub is_quick_mode: bool,
+    #[serde(default)]
+    pub saved_at: String,
+}
+
+impl Condominium {
+    pub fn ensure_profile_defaults(&mut self) {
+        if self.internal_code.trim().is_empty() {
+            self.internal_code = format!(
+                "COND-{}",
+                self.name.chars().take(6).collect::<String>().to_uppercase()
+            );
+        }
+        if self.condominium_type.trim().is_empty() {
+            self.condominium_type = "residencial".to_string();
+        }
+        if self.status.trim().is_empty() {
+            self.status = "ativo".to_string();
+        }
+        if self.notice.trim().is_empty() {
+            self.notice = "Sem avisos criticos".to_string();
+        }
+        if self.address.locality.trim().is_empty() {
+            self.address.locality = self.location.clone();
+        }
+        if self.address.country.trim().is_empty() {
+            self.address.country = "Portugal".to_string();
+        }
+        if self.operational_status.updated_at.trim().is_empty() {
+            self.operational_status.updated_at = Utc::now().to_rfc3339();
+        }
+        if self.structure.total_fractions == 0 {
+            self.structure.total_fractions = self.fractions;
+        }
+        if self.structure.blocks_count == 0 {
+            self.structure.blocks_count = self.buildings;
+        }
+        if self.created_at.trim().is_empty() {
+            self.created_at = Utc::now().to_rfc3339();
+        }
+        if self.updated_at.trim().is_empty() {
+            self.updated_at = self.created_at.clone();
+        }
+    }
+
+    pub fn touch(&mut self) {
+        self.updated_at = Utc::now().to_rfc3339();
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn push_history(
+        &mut self,
+        event_type: impl Into<String>,
+        description: impl Into<String>,
+        user_name: impl Into<String>,
+        entity: impl Into<String>,
+        old_data: impl Into<String>,
+        new_data: impl Into<String>,
+        source: impl Into<String>,
+    ) {
+        self.history.insert(
+            0,
+            CondominiumHistoryEvent {
+                id: Uuid::new_v4().to_string(),
+                event_type: event_type.into(),
+                description: description.into(),
+                user_name: user_name.into(),
+                timestamp: Utc::now().to_rfc3339(),
+                source: source.into(),
+                old_data: old_data.into(),
+                new_data: new_data.into(),
+                entity: entity.into(),
+            },
+        );
+        self.history.truncate(300);
+        self.touch();
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -998,6 +1561,51 @@ impl AppStore {
                     residents: item.residents,
                     status: item.status.clone(),
                     notice: item.notice.clone(),
+                    internal_code: String::new(),
+                    external_reference: String::new(),
+                    condominium_type: "residencial".to_string(),
+                    subtype: String::new(),
+                    management_start_date: String::new(),
+                    management_end_date: String::new(),
+                    manager: demo.user.name.clone(),
+                    team: "Equipa GESTISAC".to_string(),
+                    management_company: "GESTISAC".to_string(),
+                    short_description: String::new(),
+                    administrative_notes: String::new(),
+                    tags: Vec::new(),
+                    archived: false,
+                    archived_at: None,
+                    address: CondominiumAddress {
+                        locality: item.location.clone(),
+                        country: "Portugal".to_string(),
+                        ..Default::default()
+                    },
+                    structure: CondominiumStructure {
+                        total_fractions: item.fractions,
+                        blocks_count: item.buildings,
+                        ..Default::default()
+                    },
+                    operational_status: CondominiumOperationalStatus {
+                        general_status: "normal".to_string(),
+                        alert_level: "verde".to_string(),
+                        summary: item.notice.clone(),
+                        reason: String::new(),
+                        updated_by: demo.user.name.clone(),
+                        updated_at: Utc::now().to_rfc3339(),
+                    },
+                    primary_image_url: String::new(),
+                    blocks_detailed: Vec::new(),
+                    floors_detailed: Vec::new(),
+                    zones: Vec::new(),
+                    equipment: Vec::new(),
+                    contacts: Vec::new(),
+                    managed_documents: Vec::new(),
+                    media: Vec::new(),
+                    internal_notes_registry: Vec::new(),
+                    history: Vec::new(),
+                    onboarding_draft: None,
+                    created_at: Utc::now().to_rfc3339(),
+                    updated_at: Utc::now().to_rfc3339(),
                 })
                 .collect(),
             buildings: default_buildings(&demo.active_condominium),
@@ -1138,6 +1746,9 @@ impl AppStore {
             if session.active_condominium.is_empty() {
                 session.active_condominium = self.active_condominium.clone();
             }
+        }
+        for condominium in &mut self.condominiums {
+            condominium.ensure_profile_defaults();
         }
         if self.buildings.is_empty() {
             self.buildings = default_buildings(&demo.active_condominium);

@@ -88,7 +88,7 @@ export type DemoPage = {
     status: string;
     detail: string;
     fields?: CreateField[];
-    values?: Record<string, string | number>;
+    values?: Record<string, unknown>;
     quickActions?: RecordQuickAction[];
     operational?: TicketOperationalDetail;
     canEdit?: boolean;

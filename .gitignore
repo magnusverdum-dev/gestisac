@@ -11,3 +11,5 @@ apps/api/data/
 npm-debug.log*
 .DS_Store
 Thumbs.db
+
+.vercel
