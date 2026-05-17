@@ -23,7 +23,8 @@
     "fmt:api": "node scripts/run-cargo.mjs fmt --manifest-path apps/api/Cargo.toml",
     "clippy:api": "node scripts/run-cargo.mjs clippy --manifest-path apps/api/Cargo.toml -- -D warnings",
     "test:api": "node scripts/run-cargo.mjs test --manifest-path apps/api/Cargo.toml",
-    "smoke:api": "node scripts/smoke-api.mjs"
+    "smoke:api": "node scripts/smoke-api.mjs",
+    "smoke:avarias": "node scripts/smoke-avarias.mjs"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

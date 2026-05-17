@@ -3,8 +3,9 @@ use crate::{
     models::{
         api::{paginate, Paginated, PaginationParams},
         store::{
-            AppStore, Assembly, AuditLogEntry, Building, Condominium, Document, Fraction,
-            MaintenanceItem, Report, Resident, Supplier, Ticket,
+            AppStore, Assembly, AttachmentKind, AuditLogEntry, AvariaAttachment, AvariaEvent,
+            AvariaEventType, AvariaMessage, AvariaPriority, AvariaStatus, Building, Condominium,
+            Document, Fraction, MaintenanceItem, Report, Resident, SlaState, Supplier, Ticket,
         },
     },
     routes::auth::{current_context, current_user, require_delete, require_write},
@@ -23,6 +24,7 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 const MAX_DOCUMENT_BYTES: usize = 10 * 1024 * 1024;
+const MAX_AVARIA_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +79,111 @@ pub struct TicketInput {
     pub priority: Option<String>,
     pub status: Option<String>,
     pub detail: Option<String>,
+    pub category: Option<String>,
+    pub location: Option<String>,
+    pub resident: Option<String>,
+    pub reporter_name: Option<String>,
+    pub assigned_technician: Option<String>,
+    pub sla_due_at: Option<String>,
+    pub is_emergency: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketTransitionInput {
+    pub status: String,
+    pub note: Option<String>,
+    pub client_action_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketAssignInput {
+    pub technician: String,
+    pub note: Option<String>,
+    pub client_action_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketAttachmentInput {
+    pub kind: Option<String>,
+    pub file_name: String,
+    pub mime_type: Option<String>,
+    pub url: Option<String>,
+    pub caption: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketMessageInput {
+    pub author: Option<String>,
+    pub role: Option<String>,
+    pub message: String,
+    pub client_action_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketResolutionInput {
+    pub confirmed: bool,
+    pub comment: Option<String>,
+    pub signature: Option<String>,
+    pub client_action_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketReopenInput {
+    pub reason: String,
+    pub client_action_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketChecklistInput {
+    pub completed: bool,
+    pub client_action_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationsFeedParams {
+    pub since: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationsMetrics {
+    pub open_tickets: usize,
+    pub emergencies: usize,
+    pub sla_at_risk: usize,
+    pub active_technicians: usize,
+    pub average_resolution_label: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationsFeedItem {
+    pub id: String,
+    pub ticket_id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub title: String,
+    pub detail: String,
+    pub tone: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QrZone {
+    pub id: String,
+    pub condominium: String,
+    pub label: String,
+    pub location: String,
+    pub ticket_template: String,
+    pub qr_payload: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -727,6 +834,23 @@ pub async fn tickets(
     Ok(Json(paginate(&store.tickets, &params)))
 }
 
+pub async fn ticket_detail(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Ticket>, ApiError> {
+    require_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let ticket = store
+        .tickets
+        .iter()
+        .find(|item| item.id == id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+
+    Ok(Json(ticket))
+}
+
 pub async fn create_ticket(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -736,17 +860,45 @@ pub async fn create_ticket(
     validate_required(&input.title, "Titulo")?;
     validate_required(&input.condominium, "Condominio")?;
 
-    let item = Ticket {
+    let priority = input
+        .priority
+        .as_deref()
+        .map(AvariaPriority::from_label)
+        .unwrap_or_default();
+    let status = input
+        .status
+        .as_deref()
+        .map(AvariaStatus::from_label)
+        .unwrap_or_default();
+    let now = Utc::now().to_rfc3339();
+    let mut item = Ticket {
         id: new_id(),
         title: input.title.trim().to_string(),
         condominium: input.condominium.trim().to_string(),
-        priority: input.priority.unwrap_or_else(|| "Normal".to_string()),
-        status: input.status.unwrap_or_else(|| "Aberto".to_string()),
+        priority,
+        status,
         detail: input
             .detail
             .unwrap_or_else(|| "Ocorrencia registada".to_string()),
-        updated_at: "Agora".to_string(),
+        updated_at: now.clone(),
+        category: input.category.unwrap_or_else(|| "Operacional".to_string()),
+        location: input.location.unwrap_or_else(|| "Zona comum".to_string()),
+        resident: input.resident.unwrap_or_default(),
+        reporter_name: input.reporter_name.unwrap_or_else(|| user.name.clone()),
+        assigned_technician: input.assigned_technician.unwrap_or_default(),
+        sla_due_at: input.sla_due_at.unwrap_or_default(),
+        sla_state: SlaState::SemSla,
+        created_at: now,
+        resolved_at: None,
+        confirmed_at: None,
+        is_emergency: input.is_emergency.unwrap_or(false),
+        timeline: Vec::new(),
+        attachments: Vec::new(),
+        messages: Vec::new(),
+        checklist: Vec::new(),
+        customer_profile: Default::default(),
     };
+    item.ensure_operational_defaults();
 
     let mut store = state.store.write().await;
     store.tickets.insert(0, item.clone());
@@ -777,12 +929,73 @@ pub async fn update_ticket(
         .find(|item| item.id == id)
         .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
 
+    validate_required(&input.title, "Titulo")?;
+    validate_required(&input.condominium, "Condominio")?;
+    let previous_status = item.status.clone();
+    let previous_assignee = item.assigned_technician.clone();
     item.title = input.title.trim().to_string();
     item.condominium = input.condominium.trim().to_string();
-    item.priority = input.priority.unwrap_or_else(|| item.priority.clone());
-    item.status = input.status.unwrap_or_else(|| item.status.clone());
+    item.priority = input
+        .priority
+        .as_deref()
+        .map(AvariaPriority::from_label)
+        .unwrap_or_else(|| item.priority.clone());
+    if let Some(status) = input.status.as_deref() {
+        let target_status = AvariaStatus::from_label(status);
+        if !item.status.can_transition_to(&target_status) {
+            return Err(ApiError::validation("Transicao de estado invalida"));
+        }
+        item.status = target_status;
+    }
     item.detail = input.detail.unwrap_or_else(|| item.detail.clone());
-    item.updated_at = "Agora".to_string();
+    if let Some(category) = input.category {
+        item.category = category;
+    }
+    if let Some(location) = input.location {
+        item.location = location;
+    }
+    if let Some(resident) = input.resident {
+        item.resident = resident;
+    }
+    if let Some(reporter_name) = input.reporter_name {
+        item.reporter_name = reporter_name;
+    }
+    if let Some(assigned_technician) = input.assigned_technician {
+        item.assigned_technician = assigned_technician;
+    }
+    if let Some(sla_due_at) = input.sla_due_at {
+        item.sla_due_at = sla_due_at;
+    }
+    if let Some(is_emergency) = input.is_emergency {
+        item.is_emergency = is_emergency;
+    }
+    item.updated_at = Utc::now().to_rfc3339();
+    if previous_status != item.status {
+        if matches!(item.status, AvariaStatus::Resolvida) {
+            item.resolved_at = Some(item.updated_at.clone());
+        }
+        if matches!(item.status, AvariaStatus::Confirmada) {
+            item.confirmed_at = Some(item.updated_at.clone());
+        }
+        if matches!(item.status, AvariaStatus::Reaberta) {
+            item.confirmed_at = None;
+        }
+        item.add_event(
+            AvariaEventType::StatusChanged,
+            format!("Estado atualizado para {}", item.status),
+            item.detail.clone(),
+            user.name.clone(),
+        );
+    }
+    if previous_assignee != item.assigned_technician && !item.assigned_technician.is_empty() {
+        item.add_event(
+            AvariaEventType::Assigned,
+            "Tecnico atribuido",
+            format!("Responsavel: {}", item.assigned_technician),
+            user.name.clone(),
+        );
+    }
+    item.ensure_operational_defaults();
     let response = item.clone();
     store.add_audit(
         &user,
@@ -827,6 +1040,682 @@ pub async fn delete_ticket(
     persist(&state).await?;
 
     Ok(Json(response))
+}
+
+pub async fn ticket_timeline(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<AvariaEvent>>, ApiError> {
+    require_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let ticket = store
+        .tickets
+        .iter()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+
+    Ok(Json(ticket.timeline.clone()))
+}
+
+pub async fn transition_ticket(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<TicketTransitionInput>,
+) -> Result<Json<Ticket>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    validate_required(&input.status, "Estado")?;
+    let target_status = AvariaStatus::from_label(&input.status);
+    let client_action_id = normalize_client_action_id(input.client_action_id.as_deref());
+    let mut store = state.store.write().await;
+    let ticket = store
+        .tickets
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+    if ticket.has_client_action(client_action_id.as_deref()) {
+        return Ok(Json(ticket.clone()));
+    }
+    if !ticket.status.can_transition_to(&target_status) {
+        return Err(ApiError::validation("Transicao de estado invalida"));
+    }
+
+    ticket.status = target_status;
+    ticket.updated_at = Utc::now().to_rfc3339();
+    if matches!(ticket.status, AvariaStatus::Resolvida) {
+        ticket.resolved_at = Some(ticket.updated_at.clone());
+    }
+    let detail = input.note.unwrap_or_else(|| ticket.detail.clone());
+    ticket.add_event_with_client_action(
+        AvariaEventType::StatusChanged,
+        format!("Estado atualizado para {}", ticket.status),
+        detail,
+        user.name.clone(),
+        client_action_id,
+    );
+    ticket.refresh_sla_state();
+    let response = ticket.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "transition",
+        &response.id,
+        format!("Ticket {} mudou para {}", response.title, response.status),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn assign_ticket(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<TicketAssignInput>,
+) -> Result<Json<Ticket>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    validate_required(&input.technician, "Tecnico")?;
+    let client_action_id = normalize_client_action_id(input.client_action_id.as_deref());
+    let mut store = state.store.write().await;
+    let ticket = store
+        .tickets
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+    if ticket.has_client_action(client_action_id.as_deref()) {
+        return Ok(Json(ticket.clone()));
+    }
+    ticket.assigned_technician = input.technician.trim().to_string();
+    ticket.status = AvariaStatus::Atribuida;
+    ticket.updated_at = Utc::now().to_rfc3339();
+    ticket.add_event_with_client_action(
+        AvariaEventType::Assigned,
+        "Tecnico atribuido",
+        input
+            .note
+            .unwrap_or_else(|| format!("Responsavel: {}", ticket.assigned_technician)),
+        user.name.clone(),
+        client_action_id,
+    );
+    ticket.refresh_sla_state();
+    let response = ticket.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "assign",
+        &response.id,
+        format!(
+            "Ticket {} atribuido a {}",
+            response.title, response.assigned_technician
+        ),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn add_ticket_attachment(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<TicketAttachmentInput>,
+) -> Result<Json<Ticket>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    validate_required(&input.file_name, "Ficheiro")?;
+    let mut store = state.store.write().await;
+    let ticket = store
+        .tickets
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+    let attachment = AvariaAttachment {
+        id: new_id(),
+        kind: input
+            .kind
+            .as_deref()
+            .map(AttachmentKind::from_label)
+            .unwrap_or_default(),
+        file_name: input.file_name.trim().to_string(),
+        mime_type: input
+            .mime_type
+            .unwrap_or_else(|| "application/octet-stream".to_string()),
+        url: input.url.unwrap_or_default(),
+        storage_key: String::new(),
+        size_bytes: 0,
+        caption: input.caption.unwrap_or_default(),
+        uploaded_by: user.name.clone(),
+        uploaded_at: Utc::now().to_rfc3339(),
+        pending_sync: false,
+    };
+    ticket.add_event(
+        AvariaEventType::AttachmentAdded,
+        "Anexo adicionado",
+        attachment.file_name.clone(),
+        user.name.clone(),
+    );
+    ticket.attachments.insert(0, attachment);
+    ticket.updated_at = Utc::now().to_rfc3339();
+    let response = ticket.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "attachment",
+        &response.id,
+        format!("Anexo registado no ticket {}", response.title),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn upload_ticket_attachment(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    mut multipart: Multipart,
+) -> Result<Json<Ticket>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    let mut kind: Option<String> = None;
+    let mut caption = String::new();
+    let mut client_action_id: Option<String> = None;
+    let mut uploaded_file: Option<UploadedAvariaFile> = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| ApiError::validation("Upload invalido"))?
+    {
+        let field_name = field.name().unwrap_or_default().to_string();
+
+        if field_name == "file" {
+            let original_name = field
+                .file_name()
+                .map(str::to_string)
+                .unwrap_or_else(|| "avaria.bin".to_string());
+            let mime_type = field
+                .content_type()
+                .map(str::to_string)
+                .unwrap_or_else(|| "application/octet-stream".to_string());
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|_| ApiError::validation("Nao foi possivel ler o ficheiro"))?;
+
+            if bytes.is_empty() {
+                return Err(ApiError::validation("Seleciona um ficheiro"));
+            }
+
+            if bytes.len() > MAX_AVARIA_ATTACHMENT_BYTES {
+                return Err(ApiError::validation("O ficheiro excede 25 MB"));
+            }
+
+            uploaded_file = Some(UploadedAvariaFile {
+                original_name,
+                mime_type,
+                bytes: bytes.to_vec(),
+            });
+        } else {
+            let value = field
+                .text()
+                .await
+                .map_err(|_| ApiError::validation("Campo de upload invalido"))?
+                .trim()
+                .to_string();
+
+            match field_name.as_str() {
+                "kind" if !value.is_empty() => kind = Some(value),
+                "caption" => caption = value,
+                "clientActionId" if !value.is_empty() => client_action_id = Some(value),
+                _ => {}
+            }
+        }
+    }
+
+    let uploaded_file =
+        uploaded_file.ok_or_else(|| ApiError::validation("Seleciona um ficheiro"))?;
+    let client_action_id = normalize_client_action_id(client_action_id.as_deref());
+    {
+        let store = state.store.read().await;
+        let ticket = store
+            .tickets
+            .iter()
+            .find(|item| item.id == id)
+            .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+        if ticket.has_client_action(client_action_id.as_deref()) {
+            return Ok(Json(ticket.clone()));
+        }
+    }
+
+    let attachment_id = new_id();
+    let safe_name = safe_file_name(&uploaded_file.original_name);
+    let storage_key = format!("{id}-{attachment_id}-{safe_name}");
+    write_avaria_bytes(&state, &storage_key, &uploaded_file.bytes).await?;
+
+    let mut store = state.store.write().await;
+    let ticket_index = match store.tickets.iter().position(|item| item.id == id) {
+        Some(index) => index,
+        None => {
+            drop(store);
+            remove_avaria_file(&state, &storage_key).await;
+            return Err(ApiError::not_found("Ticket nao encontrado"));
+        }
+    };
+    let ticket = &mut store.tickets[ticket_index];
+    let attachment = AvariaAttachment {
+        id: attachment_id.clone(),
+        kind: kind
+            .as_deref()
+            .map(AttachmentKind::from_label)
+            .unwrap_or_default(),
+        file_name: uploaded_file.original_name,
+        mime_type: uploaded_file.mime_type,
+        url: format!("/api/tickets/{id}/attachments/{attachment_id}/download"),
+        storage_key,
+        size_bytes: uploaded_file.bytes.len().try_into().unwrap_or(u64::MAX),
+        caption,
+        uploaded_by: user.name.clone(),
+        uploaded_at: Utc::now().to_rfc3339(),
+        pending_sync: false,
+    };
+    ticket.add_event_with_client_action(
+        AvariaEventType::AttachmentAdded,
+        "Ficheiro carregado",
+        attachment.file_name.clone(),
+        user.name.clone(),
+        client_action_id,
+    );
+    ticket.attachments.insert(0, attachment);
+    ticket.updated_at = Utc::now().to_rfc3339();
+    let response = ticket.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "attachment-upload",
+        &response.id,
+        format!("Ficheiro carregado no ticket {}", response.title),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn download_ticket_attachment(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((ticket_id, attachment_id)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    require_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let ticket = store
+        .tickets
+        .iter()
+        .find(|item| item.id == ticket_id)
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+    let attachment = ticket
+        .attachments
+        .iter()
+        .find(|item| item.id == attachment_id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("Anexo nao encontrado"))?;
+    drop(store);
+
+    if attachment.storage_key.is_empty() {
+        return Err(ApiError::not_found("Anexo sem ficheiro associado"));
+    }
+
+    let bytes = read_avaria_bytes(&state, &attachment.storage_key).await?;
+    let mime_type = if attachment.mime_type.is_empty() {
+        "application/octet-stream".to_string()
+    } else {
+        attachment.mime_type.clone()
+    };
+    let file_name = if attachment.file_name.is_empty() {
+        "avaria.bin".to_string()
+    } else {
+        attachment.file_name.clone()
+    };
+
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, mime_type),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("inline; filename=\"{}\"", safe_download_name(&file_name)),
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+pub async fn add_ticket_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<TicketMessageInput>,
+) -> Result<Json<Ticket>, ApiError> {
+    let user = current_user(&headers, &state).await?;
+    validate_required(&input.message, "Mensagem")?;
+    let client_action_id = normalize_client_action_id(input.client_action_id.as_deref());
+    let mut store = state.store.write().await;
+    let ticket = store
+        .tickets
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+    if ticket.has_client_action(client_action_id.as_deref()) {
+        return Ok(Json(ticket.clone()));
+    }
+    let author = input.author.unwrap_or_else(|| user.name.clone());
+    let message = AvariaMessage {
+        id: new_id(),
+        author: author.clone(),
+        role: input.role.unwrap_or_else(|| user.role.clone()),
+        message: input.message.trim().to_string(),
+        created_at: Utc::now().to_rfc3339(),
+    };
+    ticket.add_event_with_client_action(
+        AvariaEventType::MessageAdded,
+        "Mensagem adicionada",
+        message.message.clone(),
+        author,
+        client_action_id,
+    );
+    ticket.messages.insert(0, message);
+    ticket.updated_at = Utc::now().to_rfc3339();
+    let response = ticket.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "message",
+        &response.id,
+        format!("Mensagem registada no ticket {}", response.title),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn update_ticket_checklist(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, checklist_item_id)): Path<(String, String)>,
+    Json(input): Json<TicketChecklistInput>,
+) -> Result<Json<Ticket>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    let client_action_id = normalize_client_action_id(input.client_action_id.as_deref());
+    let mut store = state.store.write().await;
+    let ticket = store
+        .tickets
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+    if ticket.has_client_action(client_action_id.as_deref()) {
+        return Ok(Json(ticket.clone()));
+    }
+    let checklist_item = ticket
+        .checklist
+        .iter_mut()
+        .find(|item| item.id == checklist_item_id)
+        .ok_or_else(|| ApiError::not_found("Item de checklist nao encontrado"))?;
+
+    checklist_item.completed = input.completed;
+    let detail = if checklist_item.completed {
+        format!("{} concluido", checklist_item.label)
+    } else {
+        format!("{} reaberto", checklist_item.label)
+    };
+    ticket.updated_at = Utc::now().to_rfc3339();
+    ticket.add_event_with_client_action(
+        AvariaEventType::ChecklistUpdated,
+        "Checklist atualizada",
+        detail,
+        user.name.clone(),
+        client_action_id,
+    );
+    let response = ticket.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "checklist",
+        &response.id,
+        format!("Checklist atualizada no ticket {}", response.title),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn confirm_ticket_resolution(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<TicketResolutionInput>,
+) -> Result<Json<Ticket>, ApiError> {
+    let user = current_user(&headers, &state).await?;
+    let client_action_id = normalize_client_action_id(input.client_action_id.as_deref());
+    let mut store = state.store.write().await;
+    let ticket = store
+        .tickets
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+    if ticket.has_client_action(client_action_id.as_deref()) {
+        return Ok(Json(ticket.clone()));
+    }
+    let comment = input
+        .comment
+        .unwrap_or_else(|| "Sem comentario final".to_string());
+    let signature = input.signature.unwrap_or_else(|| user.name.clone());
+    ticket.updated_at = Utc::now().to_rfc3339();
+    if input.confirmed {
+        if !ticket.status.can_transition_to(&AvariaStatus::Confirmada) {
+            return Err(ApiError::validation(
+                "A resolucao so pode ser confirmada depois de estar resolvida",
+            ));
+        }
+        ticket.status = AvariaStatus::Confirmada;
+        ticket.confirmed_at = Some(ticket.updated_at.clone());
+        ticket.customer_profile.valid_reports =
+            ticket.customer_profile.valid_reports.saturating_add(1);
+        ticket.add_event_with_client_action(
+            AvariaEventType::ResolutionConfirmed,
+            "Resolucao confirmada pelo morador",
+            format!("{comment} - assinatura: {signature}"),
+            user.name.clone(),
+            client_action_id,
+        );
+    } else {
+        ticket.status = AvariaStatus::Reaberta;
+        ticket.customer_profile.reopened_reports =
+            ticket.customer_profile.reopened_reports.saturating_add(1);
+        ticket.add_event_with_client_action(
+            AvariaEventType::ResolutionRejected,
+            "Resolucao rejeitada pelo morador",
+            format!("{comment} - assinatura: {signature}"),
+            user.name.clone(),
+            client_action_id,
+        );
+    }
+    ticket.customer_profile.last_interaction = ticket.updated_at.clone();
+    ticket.refresh_sla_state();
+    let response = ticket.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "confirm-resolution",
+        &response.id,
+        format!("Confirmacao de resolucao registada em {}", response.title),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn reopen_ticket(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<TicketReopenInput>,
+) -> Result<Json<Ticket>, ApiError> {
+    let user = current_user(&headers, &state).await?;
+    validate_required(&input.reason, "Motivo")?;
+    let client_action_id = normalize_client_action_id(input.client_action_id.as_deref());
+    let mut store = state.store.write().await;
+    let ticket = store
+        .tickets
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
+    if ticket.has_client_action(client_action_id.as_deref()) {
+        return Ok(Json(ticket.clone()));
+    }
+    ticket.status = AvariaStatus::Reaberta;
+    ticket.updated_at = Utc::now().to_rfc3339();
+    ticket.customer_profile.reopened_reports =
+        ticket.customer_profile.reopened_reports.saturating_add(1);
+    ticket.customer_profile.last_interaction = ticket.updated_at.clone();
+    ticket.add_event_with_client_action(
+        AvariaEventType::Reopened,
+        "Avaria reaberta",
+        input.reason.trim().to_string(),
+        user.name.clone(),
+        client_action_id,
+    );
+    ticket.refresh_sla_state();
+    let response = ticket.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "reopen",
+        &response.id,
+        format!("Ticket {} reaberto", response.title),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn operations_feed(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(params): Query<OperationsFeedParams>,
+) -> Result<Json<Vec<OperationsFeedItem>>, ApiError> {
+    require_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let mut feed = Vec::new();
+    let since = params
+        .since
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    for ticket in &store.tickets {
+        for event in &ticket.timeline {
+            if since.is_some_and(|since| event.created_at.as_str() <= since) {
+                continue;
+            }
+            feed.push(OperationsFeedItem {
+                id: event.id.clone(),
+                ticket_id: ticket.id.clone(),
+                kind: event.kind.as_label().to_string(),
+                title: ticket.title.clone(),
+                detail: format!("{} - {}", event.label, event.detail),
+                tone: operation_tone(ticket),
+                created_at: event.created_at.clone(),
+            });
+        }
+    }
+
+    feed.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    feed.truncate(30);
+    Ok(Json(feed))
+}
+
+pub async fn operations_metrics(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<OperationsMetrics>, ApiError> {
+    require_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let open_tickets = store
+        .tickets
+        .iter()
+        .filter(|ticket| !ticket.status.is_closed())
+        .count();
+    let emergencies = store
+        .tickets
+        .iter()
+        .filter(|ticket| ticket.is_emergency)
+        .count();
+    let sla_at_risk = store
+        .tickets
+        .iter()
+        .filter(|ticket| matches!(ticket.sla_state, SlaState::EmRisco | SlaState::Expirado))
+        .count();
+    let active_technicians = store
+        .tickets
+        .iter()
+        .filter(|ticket| {
+            !ticket.assigned_technician.trim().is_empty() && !ticket.status.is_closed()
+        })
+        .map(|ticket| ticket.assigned_technician.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+
+    Ok(Json(OperationsMetrics {
+        open_tickets,
+        emergencies,
+        sla_at_risk,
+        active_technicians,
+        average_resolution_label: "Primeira base: medir com timestamps reais na fase PostgreSQL"
+            .to_string(),
+    }))
+}
+
+pub async fn qr_zones(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<QrZone>>, ApiError> {
+    let context = current_context(&headers, &state).await?;
+    let condominium = if context.active_condominium.trim().is_empty() {
+        "GESTISAC".to_string()
+    } else {
+        context.active_condominium
+    };
+    let zones = [
+        "Garagem",
+        "Elevador",
+        "Entrada",
+        "Piscina",
+        "Quadro eletrico",
+    ]
+    .into_iter()
+    .map(|location| QrZone {
+        id: format!("qr-{}-{}", slugify(&condominium), slugify(location)),
+        condominium: condominium.clone(),
+        label: format!("QR {}", location),
+        location: location.to_string(),
+        ticket_template: format!("Avaria em {}", location),
+        qr_payload: format!(
+            "/condomino/avarias?condominium={}&location={}&template={}",
+            query_component(&condominium),
+            query_component(location),
+            query_component(&format!("Avaria em {location}"))
+        ),
+    })
+    .collect();
+
+    Ok(Json(zones))
 }
 
 pub async fn suppliers(
@@ -1774,6 +2663,13 @@ fn validate_required(value: &str, label: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+fn normalize_client_action_id(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.chars().take(96).collect())
+}
+
 async fn persist(state: &AppState) -> Result<(), ApiError> {
     state
         .save()
@@ -2358,6 +3254,12 @@ struct UploadedDocumentFile {
     bytes: Vec<u8>,
 }
 
+struct UploadedAvariaFile {
+    original_name: String,
+    mime_type: String,
+    bytes: Vec<u8>,
+}
+
 async fn write_document_bytes(
     state: &AppState,
     storage_key: &str,
@@ -2389,10 +3291,48 @@ async fn remove_document_file(state: &AppState, storage_key: &str) {
     let _ = tokio::fs::remove_file(document_path(state, storage_key)).await;
 }
 
+async fn write_avaria_bytes(
+    state: &AppState,
+    storage_key: &str,
+    bytes: &[u8],
+) -> Result<(), ApiError> {
+    tokio::fs::create_dir_all(&state.config.avaria_storage_path)
+        .await
+        .map_err(|_| ApiError::internal("Nao foi possivel preparar o arquivo de avarias"))?;
+    tokio::fs::write(avaria_attachment_path(state, storage_key), bytes)
+        .await
+        .map_err(|_| ApiError::internal("Nao foi possivel guardar o anexo da avaria"))
+}
+
+async fn read_avaria_bytes(state: &AppState, storage_key: &str) -> Result<Vec<u8>, ApiError> {
+    if storage_key.is_empty() {
+        return Err(ApiError::not_found("Anexo sem ficheiro associado"));
+    }
+
+    tokio::fs::read(avaria_attachment_path(state, storage_key))
+        .await
+        .map_err(|_| ApiError::not_found("Ficheiro da avaria nao encontrado"))
+}
+
+async fn remove_avaria_file(state: &AppState, storage_key: &str) {
+    if storage_key.is_empty() {
+        return;
+    }
+
+    let _ = tokio::fs::remove_file(avaria_attachment_path(state, storage_key)).await;
+}
+
 fn document_path(state: &AppState, storage_key: &str) -> PathBuf {
     state
         .config
         .document_storage_path
+        .join(safe_file_name(storage_key))
+}
+
+fn avaria_attachment_path(state: &AppState, storage_key: &str) -> PathBuf {
+    state
+        .config
+        .avaria_storage_path
         .join(safe_file_name(storage_key))
 }
 
@@ -2435,6 +3375,22 @@ fn safe_file_name(value: &str) -> String {
 
 fn safe_download_name(value: &str) -> String {
     safe_file_name(value)
+}
+
+fn query_component(value: &str) -> String {
+    value
+        .bytes()
+        .flat_map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                vec![byte as char]
+            }
+            b' ' => vec!['+'],
+            _ => {
+                let encoded = format!("%{byte:02X}");
+                encoded.chars().collect()
+            }
+        })
+        .collect()
 }
 
 fn build_report_preview(store: &crate::models::store::AppStore, report: Report) -> ReportPreview {
@@ -2540,7 +3496,7 @@ fn build_report_preview(store: &crate::models::store::AppStore, report: Report) 
                     .take(5)
                     .map(|item| ReportRow {
                         label: item.title.clone(),
-                        value: item.priority.clone(),
+                        value: item.priority.to_string(),
                         detail: format!("{} - {}", item.condominium, item.status),
                     })
                     .chain(store.maintenance.iter().take(5).map(|item| ReportRow {
@@ -2654,9 +3610,8 @@ fn recommended_report_actions(store: &crate::models::store::AppStore) -> Vec<Str
     actions
 }
 
-fn is_critical_priority(priority: &str) -> bool {
-    let normalized = priority.to_lowercase();
-    normalized.contains("crit") || normalized.contains("tic")
+fn is_critical_priority(priority: &AvariaPriority) -> bool {
+    priority.is_critical()
 }
 
 fn is_closed_status(status: &str) -> bool {
@@ -2664,6 +3619,18 @@ fn is_closed_status(status: &str) -> bool {
     normalized.contains("conclu")
         || normalized.contains("resolvido")
         || normalized.contains("fechado")
+}
+
+fn operation_tone(ticket: &Ticket) -> String {
+    if ticket.is_emergency {
+        "danger".to_string()
+    } else if matches!(ticket.sla_state, SlaState::EmRisco | SlaState::Expirado) {
+        "warning".to_string()
+    } else if ticket.priority.is_critical() {
+        "gold".to_string()
+    } else {
+        "blue".to_string()
+    }
 }
 
 fn format_currency(value: Decimal) -> String {

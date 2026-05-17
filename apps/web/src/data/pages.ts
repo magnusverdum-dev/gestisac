@@ -2,8 +2,10 @@ import type {
   CreateResource,
   DashboardResponse,
   GlobalSearchResult,
+  OperationsState,
   ResourceEndpoint,
-  ResourceState
+  ResourceState,
+  Ticket
 } from '../lib/api';
 
 export type CreateField = {
@@ -71,6 +73,7 @@ export type DemoPage = {
   createFields?: CreateField[];
   createOptions?: CreateOption[];
   documentTemplates?: DocumentTemplateOption[];
+  operations?: OperationsState;
   stats: Array<{
     label: string;
     value: string;
@@ -87,9 +90,59 @@ export type DemoPage = {
     fields?: CreateField[];
     values?: Record<string, string | number>;
     quickActions?: RecordQuickAction[];
+    operational?: TicketOperationalDetail;
     canEdit?: boolean;
     canDelete?: boolean;
   }>;
+};
+
+export type TicketOperationalDetail = {
+  priority: string;
+  status: string;
+  category: string;
+  location: string;
+  resident: string;
+  reporterName: string;
+  assignedTechnician: string;
+  slaDueAt: string;
+  slaState: string;
+  isEmergency: boolean;
+  timeline: Array<{
+    id: string;
+    type: string;
+    label: string;
+    detail: string;
+    actor: string;
+    createdAt: string;
+  }>;
+  attachments: Array<{
+    id: string;
+    kind: string;
+    fileName: string;
+    caption: string;
+    uploadedBy: string;
+    uploadedAt: string;
+  }>;
+  messages: Array<{
+    id: string;
+    author: string;
+    role: string;
+    message: string;
+    createdAt: string;
+  }>;
+  checklist: Array<{
+    id: string;
+    label: string;
+    required: boolean;
+    completed: boolean;
+  }>;
+  customerProfile: {
+    validReports: number;
+    reopenedReports: number;
+    falseAlarms: number;
+    internalNotes: string;
+    lastInteraction: string;
+  };
 };
 
 export const emptyResources: ResourceState = {
@@ -124,6 +177,17 @@ export const emptyResources: ResourceState = {
   permissions: {
     role: 'Leitura',
     modules: []
+  },
+  operations: {
+    metrics: {
+      openTickets: 0,
+      emergencies: 0,
+      slaAtRisk: 0,
+      activeTechnicians: 0,
+      averageResolutionLabel: 'Sem dados operacionais'
+    },
+    feed: [],
+    qrZones: []
   }
 };
 
@@ -158,6 +222,8 @@ export const navPages: Array<Pick<DemoPage, 'path' | 'navLabel' | 'icon'>> = [
   { path: '/relatorios', navLabel: 'Relatorios', icon: 'R' },
   { path: '/assembleias', navLabel: 'Assembleias', icon: 'M' },
   { path: '/tickets', navLabel: 'Tickets', icon: 'T' },
+  { path: '/tecnico/avarias', navLabel: 'Tecnico', icon: 'TX' },
+  { path: '/condomino/avarias', navLabel: 'Condomino', icon: 'CO' },
   { path: '/documentos', navLabel: 'Documentos', icon: 'F' },
   { path: '/manutencao', navLabel: 'Manutencao', icon: 'W' },
   { path: '/fornecedores', navLabel: 'Fornecedores', icon: 'S' },
@@ -284,10 +350,11 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
       action: 'Nova ocorrencia',
       resource: 'tickets',
       createFields: ticketFields(),
+      operations: resources.operations,
       stats: [
-        { label: 'Tickets abertos', value: String(resources.tickets.length), detail: `${urgentTickets} critico`, tone: 'danger' },
-        { label: 'Manutencoes', value: String(resources.maintenance.length), detail: 'Intervencoes ativas', tone: 'gold' },
-        { label: 'Fornecedores', value: String(activeSuppliers), detail: 'Com contacto ativo', tone: 'green' }
+        { label: 'Avarias abertas', value: String(resources.operations.metrics.openTickets), detail: `${urgentTickets} criticas`, tone: 'danger' },
+        { label: 'SLA em risco', value: String(resources.operations.metrics.slaAtRisk), detail: 'Prioridade operacional', tone: 'gold' },
+        { label: 'Tecnicos ativos', value: String(resources.operations.metrics.activeTechnicians), detail: `${activeSuppliers} fornecedores disponiveis`, tone: 'green' }
       ],
       records: resources.tickets.map((item) =>
         ticketRecord(item, canManageOperations, canDeleteOperations)
@@ -461,14 +528,81 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
       action: 'Abrir ticket',
       resource: 'tickets',
       createFields: ticketFields(),
+      operations: resources.operations,
       stats: [
-        { label: 'Abertos', value: String(resources.tickets.length), detail: `${urgentTickets} critico`, tone: 'danger' },
-        { label: 'Em curso', value: String(resources.tickets.filter((item) => item.status !== 'Resolvido').length), detail: 'Acompanhamento ativo', tone: 'gold' },
-        { label: 'Resolvidos', value: String(resources.tickets.filter((item) => item.status === 'Resolvido').length), detail: 'Historico', tone: 'green' }
+        { label: 'Abertos', value: String(resources.operations.metrics.openTickets), detail: `${urgentTickets} criticas`, tone: 'danger' },
+        { label: 'Emergencias', value: String(resources.operations.metrics.emergencies), detail: 'Topo da operacao', tone: 'gold' },
+        { label: 'Tecnicos ativos', value: String(resources.operations.metrics.activeTechnicians), detail: resources.operations.metrics.averageResolutionLabel, tone: 'green' }
       ],
       records: resources.tickets.map((item) =>
         ticketRecord(item, canManageOperations, canDeleteOperations)
       )
+    },
+    {
+      path: '/tecnico/avarias',
+      navLabel: 'Tecnico',
+      icon: 'TX',
+      title: 'Fila Tecnica De Avarias',
+      description: 'Vista mobile-first para aceitar tarefas, atualizar estado, anexar fotos e trabalhar com fila offline.',
+      action: 'Fila sincronizada',
+      operations: resources.operations,
+      stats: [
+        {
+          label: 'Atribuidas',
+          value: String(resources.tickets.filter((item) => item.assignedTechnician && !isDoneStatus(item.status)).length),
+          detail: 'Tarefas ativas para tecnico',
+          tone: 'blue'
+        },
+        {
+          label: 'Em campo',
+          value: String(resources.tickets.filter((item) => ['Em deslocacao', 'No local', 'Em reparacao'].includes(item.status)).length),
+          detail: 'Estados de intervencao',
+          tone: 'gold'
+        },
+        {
+          label: 'A resolver',
+          value: String(resources.tickets.filter((item) => !isDoneStatus(item.status)).length),
+          detail: 'Inclui fila sem tecnico',
+          tone: 'green'
+        }
+      ],
+      records: resources.tickets
+        .filter((item) => item.assignedTechnician || !isDoneStatus(item.status))
+        .map((item) => ticketRecord(item, canManageOperations, false))
+    },
+    {
+      path: '/condomino/avarias',
+      navLabel: 'Condomino',
+      icon: 'CO',
+      title: 'Avarias Do Condomino',
+      description: 'Fluxo simples para reportar avaria, acompanhar timeline, enviar mensagem, confirmar resolucao ou reabrir.',
+      action: 'Reportar avaria',
+      resource: 'tickets',
+      createFields: residentTicketFields(dashboard.activeCondominium),
+      operations: resources.operations,
+      stats: [
+        {
+          label: 'Reportadas',
+          value: String(resources.tickets.filter((item) => item.resident || item.reporterName).length),
+          detail: 'Pedidos com morador associado',
+          tone: 'blue'
+        },
+        {
+          label: 'A aguardar',
+          value: String(resources.tickets.filter((item) => ['Aberta', 'Em analise', 'Atribuida'].includes(item.status)).length),
+          detail: 'Ainda em acompanhamento',
+          tone: 'gold'
+        },
+        {
+          label: 'Por confirmar',
+          value: String(resources.tickets.filter((item) => item.status === 'Resolvida').length),
+          detail: 'Precisam de validacao do morador',
+          tone: 'green'
+        }
+      ],
+      records: resources.tickets
+        .filter((item) => item.resident || item.reporterName || !isDoneStatus(item.status))
+        .map((item) => ticketRecord(item, true, false))
     },
     {
       path: '/documentos',
@@ -734,50 +868,87 @@ function ticketFields(): CreateField[] {
   return [
     { name: 'title', label: 'Titulo', placeholder: 'Avaria no elevador' },
     { name: 'condominium', label: 'Condominio', placeholder: 'Condominio Vila Verde' },
-    { name: 'priority', label: 'Prioridade', placeholder: 'Normal' },
-    { name: 'status', label: 'Estado', placeholder: 'Aberto' },
+    { name: 'location', label: 'Localizacao', placeholder: 'Garagem, elevador, entrada...' },
+    { name: 'category', label: 'Tipo de avaria', placeholder: 'Elevadores, Eletricidade, Agua...' },
+    { name: 'priority', label: 'Prioridade', placeholder: 'Normal, Alta, Critica ou Emergencia' },
+    { name: 'status', label: 'Estado', placeholder: 'Aberta' },
     { name: 'detail', label: 'Detalhe', placeholder: 'Descricao curta da ocorrencia' }
   ];
 }
 
+function residentTicketFields(activeCondominium: string): CreateField[] {
+  return [
+    { name: 'title', label: 'O que aconteceu?', placeholder: 'Luz fundida na garagem' },
+    { name: 'condominium', label: 'Condominio', placeholder: activeCondominium },
+    { name: 'location', label: 'Onde?', placeholder: 'Garagem, entrada, piso...' },
+    { name: 'resident', label: 'Nome do condomino', placeholder: 'Maria Fernandes' },
+    { name: 'reporterName', label: 'Reportado por', placeholder: 'Maria Fernandes' },
+    { name: 'priority', label: 'Urgencia', placeholder: 'Normal, Alta ou Emergencia' },
+    { name: 'detail', label: 'Descricao', placeholder: 'Explica o problema em poucas palavras' }
+  ];
+}
+
 function ticketRecord(
-  item: {
-    id: string;
-    title: string;
-    condominium: string;
-    priority: string;
-    status: string;
-    detail: string;
-    updatedAt: string;
-  },
+  item: Ticket,
   canEdit: boolean,
   canDeleteRecord: boolean
 ) {
+  const operational = ticketOperationalDetail(item);
+
   return {
     id: item.id,
     resource: 'tickets' as ResourceEndpoint,
     title: item.title,
-    meta: item.condominium,
-    status: item.priority,
-    detail: `${item.status} - ${item.updatedAt}`,
+    meta: `${item.condominium} - ${item.location || 'Zona comum'}`,
+    status: item.status,
+    detail: `${item.priority} - ${item.assignedTechnician || 'Sem tecnico'} - ${item.slaState || 'SLA por calcular'}`,
     fields: ticketFields(),
-    values: item,
-    quickActions: canEdit && !isDoneStatus(item.status)
-      ? [
-          {
-            label: 'Resolver',
-            tone: 'success' as const,
-            action: {
-              type: 'update' as const,
-              resource: 'tickets' as ResourceEndpoint,
-              id: item.id,
-              payload: { ...item, status: 'Resolvido', priority: 'Normal' }
-            }
-          }
-        ]
-      : undefined,
+    values: ticketPayload(item),
+    operational,
     canEdit,
     canDelete: canDeleteRecord
+  };
+}
+
+function ticketPayload(
+  item: Ticket,
+  status = item.status,
+  priority = item.priority
+): Record<string, string | number> {
+  return {
+    title: item.title,
+    condominium: item.condominium,
+    location: item.location || 'Zona comum',
+    category: item.category || 'Operacional',
+    priority,
+    status,
+    detail: item.detail
+  };
+}
+
+function ticketOperationalDetail(item: Ticket): TicketOperationalDetail {
+  return {
+    priority: item.priority,
+    status: item.status,
+    category: item.category || 'Operacional',
+    location: item.location || 'Zona comum',
+    resident: item.resident || 'Nao associado',
+    reporterName: item.reporterName || 'Morador',
+    assignedTechnician: item.assignedTechnician || 'Por atribuir',
+    slaDueAt: item.slaDueAt || 'Sem SLA',
+    slaState: item.slaState || 'Sem SLA',
+    isEmergency: Boolean(item.isEmergency),
+    timeline: item.timeline ?? [],
+    attachments: item.attachments ?? [],
+    messages: item.messages ?? [],
+    checklist: item.checklist ?? [],
+    customerProfile: item.customerProfile ?? {
+      validReports: 0,
+      reopenedReports: 0,
+      falseAlarms: 0,
+      internalNotes: '',
+      lastInteraction: ''
+    }
   };
 }
 

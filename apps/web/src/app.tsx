@@ -14,6 +14,8 @@ import {
   SESSION_TOKEN_KEY,
   SESSION_EXPIRES_KEY,
   SESSION_REFRESH_KEY,
+  assignTicket,
+  confirmTicketResolution,
   createResource,
   deleteResource,
   downloadDocument,
@@ -22,19 +24,35 @@ import {
   getApiHealth,
   getDashboard,
   getDocumentPreview,
+  getOperationsFeed,
   getReportPreview,
   getResources,
   login,
   logout,
   me,
+  queuePendingTicketAction,
+  readPendingTicketActions,
   refreshSession,
+  reopenTicket,
+  sendTicketMessage,
+  syncPendingTicketActions,
+  transitionTicket,
+  updateTicketChecklist,
   uploadDocument,
+  uploadTicketAttachment,
   updateActiveCondominium,
   updateResource,
   type ApiStatus,
   type CreateResource,
   type DocumentPreview,
   type GenerateDocumentPayload,
+  type TicketAssignPayload,
+  type TicketChecklistPayload,
+  type TicketMessagePayload,
+  type PendingTicketAction,
+  type TicketReopenPayload,
+  type TicketResolutionPayload,
+  type TicketTransitionPayload,
   type ReportPreview,
   type ResourceEndpoint,
   type PublicUser
@@ -55,6 +73,15 @@ const triggerBrowserDownload = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
+const shouldQueueOfflineAction = (apiStatus: ApiStatus) =>
+  apiStatus === 'offline' || (typeof navigator !== 'undefined' && !navigator.onLine);
+
+const summarizePendingQueue = (actions: PendingTicketAction[]) => ({
+  total: actions.length,
+  failed: actions.filter((action) => action.status === 'failed').length,
+  uploads: actions.filter((action) => action.type === 'attachment').length
+});
+
 export const App = component$(() => {
   const currentPath = useSignal('/dashboard');
   const apiStatus = useSignal<ApiStatus>('checking');
@@ -62,6 +89,10 @@ export const App = component$(() => {
   const resources = useSignal(emptyResources);
   const error = useSignal('');
   const notice = useSignal('');
+  const pendingTicketActions = useSignal(0);
+  const failedTicketActions = useSignal(0);
+  const pendingTicketUploads = useSignal(0);
+  const lastFeedSync = useSignal('');
   const reportPreview = useSignal<ReportPreview | null>(null);
   const documentPreview = useSignal<DocumentPreview | null>(null);
   const isLoading = useSignal(false);
@@ -86,6 +117,13 @@ export const App = component$(() => {
     version: 0
   });
 
+  const refreshPendingQueue$ = $(async () => {
+    const summary = summarizePendingQueue(await readPendingTicketActions());
+    pendingTicketActions.value = summary.total;
+    failedTicketActions.value = summary.failed;
+    pendingTicketUploads.value = summary.uploads;
+  });
+
   const loadWorkspace$ = $(async (token: string) => {
     const [dashboardData, resourceData] = await Promise.all([
       getDashboard(token),
@@ -94,6 +132,8 @@ export const App = component$(() => {
     dashboard.value = dashboardData;
     resources.value = resourceData;
     session.user = dashboardData.user;
+    await refreshPendingQueue$();
+    lastFeedSync.value = resourceData.operations.feed[0]?.createdAt ?? lastFeedSync.value;
     apiStatus.value = 'online';
   });
 
@@ -271,6 +311,239 @@ export const App = component$(() => {
       notice.value = 'Alteracao guardada com sucesso.';
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Nao foi possivel atualizar';
+    } finally {
+      isSaving.value = false;
+    }
+  });
+
+  const transitionTicket$ = $(async (id: string, payload: TicketTransitionPayload) => {
+    if (!session.token) {
+      error.value = 'Sessao expirada. Entra novamente.';
+      notice.value = '';
+      return;
+    }
+
+    error.value = '';
+    notice.value = '';
+    isSaving.value = true;
+    try {
+      await transitionTicket(session.token, id, payload);
+      await loadWorkspace$(session.token);
+      notice.value = `Estado atualizado para ${payload.status}.`;
+    } catch (err) {
+      if (shouldQueueOfflineAction(apiStatus.value)) {
+        await queuePendingTicketAction({ ticketId: id, type: 'transition', payload });
+        await refreshPendingQueue$();
+        notice.value = 'Sem ligacao: acao de estado guardada para sincronizacao.';
+      } else {
+        error.value = err instanceof Error ? err.message : 'Nao foi possivel alterar o estado';
+      }
+    } finally {
+      isSaving.value = false;
+    }
+  });
+
+  const assignTicket$ = $(async (id: string, payload: TicketAssignPayload) => {
+    if (!session.token) {
+      error.value = 'Sessao expirada. Entra novamente.';
+      notice.value = '';
+      return;
+    }
+
+    error.value = '';
+    notice.value = '';
+    isSaving.value = true;
+    try {
+      await assignTicket(session.token, id, payload);
+      await loadWorkspace$(session.token);
+      notice.value = `Avaria atribuida a ${payload.technician}.`;
+    } catch (err) {
+      if (shouldQueueOfflineAction(apiStatus.value)) {
+        await queuePendingTicketAction({ ticketId: id, type: 'assign', payload });
+        await refreshPendingQueue$();
+        notice.value = 'Sem ligacao: atribuicao guardada para sincronizacao.';
+      } else {
+        error.value = err instanceof Error ? err.message : 'Nao foi possivel atribuir tecnico';
+      }
+    } finally {
+      isSaving.value = false;
+    }
+  });
+
+  const sendTicketMessage$ = $(async (id: string, payload: TicketMessagePayload) => {
+    if (!session.token) {
+      error.value = 'Sessao expirada. Entra novamente.';
+      notice.value = '';
+      return;
+    }
+
+    error.value = '';
+    notice.value = '';
+    isSaving.value = true;
+    try {
+      await sendTicketMessage(session.token, id, payload);
+      await loadWorkspace$(session.token);
+      notice.value = 'Mensagem enviada.';
+    } catch (err) {
+      if (shouldQueueOfflineAction(apiStatus.value)) {
+        await queuePendingTicketAction({ ticketId: id, type: 'message', payload });
+        await refreshPendingQueue$();
+        notice.value = 'Sem ligacao: mensagem guardada para sincronizacao.';
+      } else {
+        error.value = err instanceof Error ? err.message : 'Nao foi possivel enviar mensagem';
+      }
+    } finally {
+      isSaving.value = false;
+    }
+  });
+
+  const updateTicketChecklist$ = $(async (id: string, payload: TicketChecklistPayload) => {
+    if (!session.token) {
+      error.value = 'Sessao expirada. Entra novamente.';
+      notice.value = '';
+      return;
+    }
+
+    error.value = '';
+    notice.value = '';
+    isSaving.value = true;
+    try {
+      await updateTicketChecklist(session.token, id, payload);
+      await loadWorkspace$(session.token);
+      notice.value = 'Checklist atualizada.';
+    } catch (err) {
+      if (shouldQueueOfflineAction(apiStatus.value)) {
+        await queuePendingTicketAction({ ticketId: id, type: 'checklist', payload });
+        await refreshPendingQueue$();
+        notice.value = 'Sem ligacao: checklist guardada para sincronizacao.';
+      } else {
+        error.value = err instanceof Error ? err.message : 'Nao foi possivel atualizar checklist';
+      }
+    } finally {
+      isSaving.value = false;
+    }
+  });
+
+  const confirmTicketResolution$ = $(async (id: string, payload: TicketResolutionPayload) => {
+    if (!session.token) {
+      error.value = 'Sessao expirada. Entra novamente.';
+      notice.value = '';
+      return;
+    }
+
+    error.value = '';
+    notice.value = '';
+    isSaving.value = true;
+    try {
+      await confirmTicketResolution(session.token, id, payload);
+      await loadWorkspace$(session.token);
+      notice.value = payload.confirmed ? 'Resolucao confirmada.' : 'Resolucao rejeitada e avaria reaberta.';
+    } catch (err) {
+      if (shouldQueueOfflineAction(apiStatus.value)) {
+        await queuePendingTicketAction({ ticketId: id, type: 'confirmResolution', payload });
+        await refreshPendingQueue$();
+        notice.value = 'Sem ligacao: confirmacao guardada para sincronizacao.';
+      } else {
+        error.value = err instanceof Error ? err.message : 'Nao foi possivel confirmar resolucao';
+      }
+    } finally {
+      isSaving.value = false;
+    }
+  });
+
+  const reopenTicket$ = $(async (id: string, payload: TicketReopenPayload) => {
+    if (!session.token) {
+      error.value = 'Sessao expirada. Entra novamente.';
+      notice.value = '';
+      return;
+    }
+
+    error.value = '';
+    notice.value = '';
+    isSaving.value = true;
+    try {
+      await reopenTicket(session.token, id, payload);
+      await loadWorkspace$(session.token);
+      notice.value = 'Avaria reaberta.';
+    } catch (err) {
+      if (shouldQueueOfflineAction(apiStatus.value)) {
+        await queuePendingTicketAction({ ticketId: id, type: 'reopen', payload });
+        await refreshPendingQueue$();
+        notice.value = 'Sem ligacao: reabertura guardada para sincronizacao.';
+      } else {
+        error.value = err instanceof Error ? err.message : 'Nao foi possivel reabrir avaria';
+      }
+    } finally {
+      isSaving.value = false;
+    }
+  });
+
+  const uploadTicketAttachment$ = $(async (id: string, payload: FormData) => {
+    if (!session.token) {
+      error.value = 'Sessao expirada. Entra novamente.';
+      notice.value = '';
+      return;
+    }
+
+    error.value = '';
+    notice.value = '';
+    isSaving.value = true;
+    try {
+      await uploadTicketAttachment(session.token, id, payload);
+      await loadWorkspace$(session.token);
+      notice.value = 'Anexo carregado na avaria.';
+    } catch (err) {
+      if (shouldQueueOfflineAction(apiStatus.value)) {
+        const file = payload.get('file');
+        if (!(file instanceof File)) {
+          error.value = 'Sem ligacao: nao foi possivel guardar este anexo offline.';
+        } else {
+          try {
+            await queuePendingTicketAction({
+              ticketId: id,
+              type: 'attachment',
+              payload: {
+                kind: String(payload.get('kind') ?? 'Foto antes'),
+                caption: String(payload.get('caption') ?? ''),
+                fileName: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                sizeBytes: file.size,
+                file
+              }
+            });
+            await refreshPendingQueue$();
+            notice.value = 'Sem ligacao: anexo guardado em fila offline.';
+          } catch (queueError) {
+            error.value = queueError instanceof Error ? queueError.message : 'Nao foi possivel guardar anexo offline';
+          }
+        }
+      } else {
+        error.value = err instanceof Error ? err.message : 'Nao foi possivel carregar anexo';
+      }
+    } finally {
+      isSaving.value = false;
+    }
+  });
+
+  const syncPendingTicketActions$ = $(async () => {
+    if (!session.token) {
+      error.value = 'Sessao expirada. Entra novamente.';
+      notice.value = '';
+      return;
+    }
+
+    error.value = '';
+    notice.value = '';
+    isSaving.value = true;
+    try {
+      const result = await syncPendingTicketActions(session.token);
+      await refreshPendingQueue$();
+      await loadWorkspace$(session.token);
+      notice.value = result.failed
+        ? `${result.synced} acoes sincronizadas; ${result.failed} continuam pendentes.`
+        : `${result.synced} acoes sincronizadas.`;
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Nao foi possivel sincronizar a fila offline';
     } finally {
       isSaving.value = false;
     }
@@ -518,6 +791,35 @@ export const App = component$(() => {
     }
   });
 
+  useVisibleTask$(({ track, cleanup }) => {
+    const token = track(() => session.token);
+    if (!token) {
+      return;
+    }
+
+    const poll = window.setInterval(async () => {
+      await refreshPendingQueue$();
+      try {
+        let syncedOfflineQueue = false;
+        if (pendingTicketActions.value && navigator.onLine) {
+          const result = await syncPendingTicketActions(token);
+          await refreshPendingQueue$();
+          syncedOfflineQueue = result.synced > 0;
+        }
+
+        const feed = await getOperationsFeed(token, lastFeedSync.value);
+        if (feed.length || syncedOfflineQueue) {
+          await loadWorkspace$(token);
+        }
+        apiStatus.value = 'online';
+      } catch {
+        apiStatus.value = 'offline';
+      }
+    }, 15_000);
+
+    cleanup(() => window.clearInterval(poll));
+  });
+
   if (!session.ready || !session.token) {
     return (
       <LoginPage
@@ -558,6 +860,9 @@ export const App = component$(() => {
           page={page}
           isSaving={isSaving.value}
           isPreviewLoading={isPreviewLoading.value}
+          pendingTicketActions={pendingTicketActions.value}
+          failedTicketActions={failedTicketActions.value}
+          pendingTicketUploads={pendingTicketUploads.value}
           reportPreview={reportPreview.value}
           documentPreview={documentPreview.value}
           createIntentResource={createIntent.path === page.path ? createIntent.resource : ''}
@@ -565,6 +870,14 @@ export const App = component$(() => {
           onCreate$={createRecord$}
           onUpdate$={updateRecord$}
           onDelete$={deleteRecord$}
+          onTicketTransition$={transitionTicket$}
+          onTicketAssign$={assignTicket$}
+          onTicketMessage$={sendTicketMessage$}
+          onTicketAttachmentUpload$={uploadTicketAttachment$}
+          onTicketChecklist$={updateTicketChecklist$}
+          onTicketConfirmResolution$={confirmTicketResolution$}
+          onTicketReopen$={reopenTicket$}
+          onSyncPendingTicketActions$={syncPendingTicketActions$}
           onUploadDocument$={uploadDocument$}
           onGenerateDocument$={generateDocument$}
           onPreviewReport$={previewReport$}

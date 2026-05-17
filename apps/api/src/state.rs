@@ -22,6 +22,7 @@ pub struct ApiConfig {
     pub port: u16,
     pub data_path: PathBuf,
     pub document_storage_path: PathBuf,
+    pub avaria_storage_path: PathBuf,
 }
 
 impl ApiConfig {
@@ -42,12 +43,16 @@ impl ApiConfig {
         let document_storage_path = std::env::var("GESTISAC_DOCUMENT_STORAGE_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/documents"));
+        let avaria_storage_path = std::env::var("GESTISAC_AVARIA_STORAGE_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/avarias"));
 
         Self {
             host,
             port,
             data_path,
             document_storage_path,
+            avaria_storage_path,
         }
     }
 

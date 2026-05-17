@@ -1,7 +1,12 @@
-const CACHE_NAME = 'gestisac-pwa-v3';
+const CACHE_NAME = 'gestisac-pwa-v5-avarias';
 const APP_SHELL = [
   '/',
   '/dashboard',
+  '/tickets',
+  '/tecnico/avarias',
+  '/condomino/avarias',
+  '/administracao',
+  '/manutencao',
   '/documentos',
   '/offline.html',
   '/manifest.webmanifest',
@@ -81,4 +86,10 @@ self.addEventListener('fetch', (event) => {
       return cached || network;
     })
   );
+});
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'gestisac-avarias-sync') {
+    event.waitUntil(self.clients.matchAll());
+  }
 });

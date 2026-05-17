@@ -115,6 +115,69 @@ export type Ticket = {
   status: string;
   detail: string;
   updatedAt: string;
+  category: string;
+  location: string;
+  resident: string;
+  reporterName: string;
+  assignedTechnician: string;
+  slaDueAt: string;
+  slaState: string;
+  createdAt: string;
+  resolvedAt?: string | null;
+  confirmedAt?: string | null;
+  isEmergency: boolean;
+  timeline: AvariaEvent[];
+  attachments: AvariaAttachment[];
+  messages: AvariaMessage[];
+  checklist: AvariaChecklistItem[];
+  customerProfile: CustomerOperationalProfile;
+};
+
+export type AvariaEvent = {
+  id: string;
+  type: string;
+  label: string;
+  detail: string;
+  actor: string;
+  createdAt: string;
+  clientActionId?: string | null;
+};
+
+export type AvariaAttachment = {
+  id: string;
+  kind: string;
+  fileName: string;
+  mimeType: string;
+  url: string;
+  storageKey?: string;
+  sizeBytes?: number;
+  caption: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  pendingSync: boolean;
+};
+
+export type AvariaMessage = {
+  id: string;
+  author: string;
+  role: string;
+  message: string;
+  createdAt: string;
+};
+
+export type AvariaChecklistItem = {
+  id: string;
+  label: string;
+  required: boolean;
+  completed: boolean;
+};
+
+export type CustomerOperationalProfile = {
+  validReports: number;
+  reopenedReports: number;
+  falseAlarms: number;
+  internalNotes: string;
+  lastInteraction: string;
 };
 
 export type Supplier = {
@@ -309,6 +372,112 @@ export type PermissionsResponse = {
   }>;
 };
 
+export type OperationsMetrics = {
+  openTickets: number;
+  emergencies: number;
+  slaAtRisk: number;
+  activeTechnicians: number;
+  averageResolutionLabel: string;
+};
+
+export type OperationsFeedItem = {
+  id: string;
+  ticketId?: string;
+  type: string;
+  title: string;
+  detail: string;
+  tone: string;
+  createdAt: string;
+};
+
+export type QrZone = {
+  id: string;
+  condominium: string;
+  label: string;
+  location: string;
+  ticketTemplate: string;
+  qrPayload: string;
+};
+
+export type OperationsState = {
+  metrics: OperationsMetrics;
+  feed: OperationsFeedItem[];
+  qrZones: QrZone[];
+};
+
+export type TicketTransitionPayload = {
+  status: string;
+  note?: string;
+  clientActionId?: string;
+};
+
+export type TicketAssignPayload = {
+  technician: string;
+  note?: string;
+  clientActionId?: string;
+};
+
+export type TicketMessagePayload = {
+  author?: string;
+  role?: string;
+  message: string;
+  clientActionId?: string;
+};
+
+export type TicketResolutionPayload = {
+  confirmed: boolean;
+  comment?: string;
+  signature?: string;
+  clientActionId?: string;
+};
+
+export type TicketReopenPayload = {
+  reason: string;
+  clientActionId?: string;
+};
+
+export type TicketChecklistPayload = {
+  checklistItemId: string;
+  completed: boolean;
+  clientActionId?: string;
+};
+
+export type TicketAttachmentUploadPayload = {
+  kind?: string;
+  caption?: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  file?: Blob;
+  clientActionId?: string;
+};
+
+export type PendingTicketActionType =
+  | 'transition'
+  | 'assign'
+  | 'message'
+  | 'checklist'
+  | 'confirmResolution'
+  | 'reopen'
+  | 'attachment';
+
+export type PendingTicketAction = {
+  id: string;
+  ticketId: string;
+  type: PendingTicketActionType;
+  payload:
+    | TicketTransitionPayload
+    | TicketAssignPayload
+    | TicketMessagePayload
+    | TicketResolutionPayload
+    | TicketReopenPayload
+    | TicketChecklistPayload
+    | TicketAttachmentUploadPayload;
+  createdAt: string;
+  status: 'pending' | 'syncing' | 'failed';
+  error?: string;
+};
+
 export type ResourceState = {
   condominiums: Condominium[];
   buildings: Building[];
@@ -323,6 +492,7 @@ export type ResourceState = {
   accounting: AccountingState;
   auditLog: AuditLogEntry[];
   permissions: PermissionsResponse;
+  operations: OperationsState;
 };
 
 export type PaginatedResponse<T> = {
@@ -362,6 +532,11 @@ export type ResourceEndpoint = CreateResource;
 export const SESSION_TOKEN_KEY = 'gestisac.sessionToken';
 export const SESSION_REFRESH_KEY = 'gestisac.refreshToken';
 export const SESSION_EXPIRES_KEY = 'gestisac.expiresAt';
+export const PENDING_TICKET_ACTIONS_KEY = 'gestisac.pendingTicketActions.v3';
+const PENDING_TICKET_DB_NAME = 'gestisac-avarias-v3';
+const PENDING_TICKET_DB_VERSION = 1;
+const PENDING_TICKET_STORE = 'pendingTicketActions';
+const MAX_OFFLINE_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') ?? '';
 
 export async function getApiHealth(): Promise<{ service: string; status: 'online' }> {
@@ -408,7 +583,8 @@ export async function getResources(token: string): Promise<ResourceState> {
     assemblies,
     accounting,
     auditLog,
-    permissions
+    permissions,
+    operations
   ] = await Promise.all([
     getResourcePage<Condominium>(token, '/api/condominiums'),
     getResourcePage<Building>(token, '/api/buildings'),
@@ -422,7 +598,8 @@ export async function getResources(token: string): Promise<ResourceState> {
     getResourcePage<Assembly>(token, '/api/assemblies'),
     getAccounting(token),
     getResourcePage<AuditLogEntry>(token, '/api/audit-log', 1, 25),
-    apiRequest<PermissionsResponse>('/api/permissions', { token })
+    apiRequest<PermissionsResponse>('/api/permissions', { token }),
+    getOperations(token)
   ]);
 
   return {
@@ -438,8 +615,29 @@ export async function getResources(token: string): Promise<ResourceState> {
     assemblies,
     accounting,
     auditLog,
-    permissions
+    permissions,
+    operations
   };
+}
+
+export async function getOperations(token: string): Promise<OperationsState> {
+  const [metrics, feed, qrZones] = await Promise.all([
+    apiRequest<OperationsMetrics>('/api/operations/metrics', { token }),
+    getOperationsFeed(token),
+    apiRequest<QrZone[]>('/api/qr-zones', { token })
+  ]);
+
+  return { metrics, feed, qrZones };
+}
+
+export async function getOperationsFeed(token: string, since = ''): Promise<OperationsFeedItem[]> {
+  const params = new URLSearchParams();
+  if (since.trim()) {
+    params.set('since', since.trim());
+  }
+
+  const query = params.toString();
+  return apiRequest<OperationsFeedItem[]>(`/api/operations/feed${query ? `?${query}` : ''}`, { token });
 }
 
 export async function getAccounting(token: string): Promise<AccountingState> {
@@ -525,6 +723,115 @@ export async function uploadDocument(token: string, payload: FormData): Promise<
   return response.json();
 }
 
+export async function getTicket(token: string, id: string): Promise<Ticket> {
+  return apiRequest(`/api/tickets/${id}`, { token });
+}
+
+export async function transitionTicket(
+  token: string,
+  id: string,
+  payload: TicketTransitionPayload
+): Promise<Ticket> {
+  return apiRequest(`/api/tickets/${id}/transition`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function assignTicket(
+  token: string,
+  id: string,
+  payload: TicketAssignPayload
+): Promise<Ticket> {
+  return apiRequest(`/api/tickets/${id}/assign`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function sendTicketMessage(
+  token: string,
+  id: string,
+  payload: TicketMessagePayload
+): Promise<Ticket> {
+  return apiRequest(`/api/tickets/${id}/messages`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateTicketChecklist(
+  token: string,
+  id: string,
+  payload: TicketChecklistPayload
+): Promise<Ticket> {
+  return apiRequest(`/api/tickets/${id}/checklist/${payload.checklistItemId}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify({ completed: payload.completed })
+  });
+}
+
+export async function confirmTicketResolution(
+  token: string,
+  id: string,
+  payload: TicketResolutionPayload
+): Promise<Ticket> {
+  return apiRequest(`/api/tickets/${id}/confirm-resolution`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function reopenTicket(
+  token: string,
+  id: string,
+  payload: TicketReopenPayload
+): Promise<Ticket> {
+  return apiRequest(`/api/tickets/${id}/reopen`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function uploadTicketAttachment(
+  token: string,
+  id: string,
+  payload: FormData
+): Promise<Ticket> {
+  const response = await fetch(resolveApiUrl(`/api/tickets/${id}/attachments/upload`), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: payload
+  });
+
+  if (!response.ok) {
+    if (canUseBrowserDemoApi(response.status)) {
+      return demoUploadTicketAttachment(id, payload);
+    }
+
+    const message = await response
+      .json()
+      .then((body) => body.message || 'Upload da avaria falhou')
+      .catch(() => 'Upload da avaria falhou');
+    throw new Error(message);
+  }
+
+  if (isHtmlFallbackResponse(response)) {
+    return demoUploadTicketAttachment(id, payload);
+  }
+
+  return response.json();
+}
+
 export async function getDocumentTemplates(token: string): Promise<DocumentTemplate[]> {
   return apiRequest('/api/documents/templates', { token });
 }
@@ -562,6 +869,66 @@ export async function deleteResource(
     method: 'DELETE',
     token
   });
+}
+
+export async function readPendingTicketActions(): Promise<PendingTicketAction[]> {
+  return readPendingActionsFromStorage();
+}
+
+export async function queuePendingTicketAction(
+  action: Omit<PendingTicketAction, 'id' | 'createdAt' | 'status' | 'error'>
+): Promise<PendingTicketAction> {
+  if (action.type === 'attachment') {
+    const payload = action.payload as TicketAttachmentUploadPayload;
+    if (payload.sizeBytes > MAX_OFFLINE_ATTACHMENT_BYTES) {
+      throw new Error('O ficheiro excede o limite offline de 8 MB. Tenta carregar quando estiveres online.');
+    }
+  }
+
+  const actionId = createClientActionId();
+  const pendingAction: PendingTicketAction = {
+    ...action,
+    id: actionId,
+    payload: {
+      ...action.payload,
+      clientActionId: action.payload.clientActionId ?? actionId
+    },
+    createdAt: new Date().toISOString(),
+    status: 'pending'
+  };
+  await savePendingTicketAction(pendingAction);
+
+  return pendingAction;
+}
+
+export async function removePendingTicketAction(id: string): Promise<void> {
+  await deletePendingTicketAction(id);
+}
+
+export async function syncPendingTicketActions(
+  token: string
+): Promise<{ synced: number; failed: number; remaining: number }> {
+  const pending = await readPendingTicketActions();
+  let synced = 0;
+  let failed = 0;
+
+  for (const action of pending) {
+    try {
+      await runPendingTicketAction(token, action);
+      await removePendingTicketAction(action.id);
+      synced += 1;
+    } catch (err) {
+      failed += 1;
+      await savePendingTicketAction({
+        ...action,
+        status: 'failed',
+        error: err instanceof Error ? err.message : 'Falha ao sincronizar'
+      });
+    }
+  }
+
+  const remaining = await readPendingTicketActions();
+  return { synced, failed, remaining: remaining.length };
 }
 
 export async function updateActiveCondominium(token: string, name: string): Promise<string> {
@@ -649,6 +1016,186 @@ export async function exportReport(
 
 function filenameFromDisposition(disposition: string | null, fallback: string): string {
   return disposition?.match(/filename="?([^"]+)"?/)?.[1] ?? fallback;
+}
+
+async function readPendingActionsFromStorage(): Promise<PendingTicketAction[]> {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  if (!('indexedDB' in window)) {
+    return readPendingActionsFromLocalStorage();
+  }
+
+  try {
+    const db = await openPendingTicketDb();
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(PENDING_TICKET_STORE, 'readonly');
+      const request = transaction.objectStore(PENDING_TICKET_STORE).getAll();
+      request.onsuccess = () => resolve((request.result as PendingTicketAction[]).sort(sortPendingAction));
+      request.onerror = () => reject(request.error);
+    });
+  } catch {
+    return readPendingActionsFromLocalStorage();
+  }
+}
+
+async function savePendingTicketAction(action: PendingTicketAction): Promise<void> {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (!('indexedDB' in window)) {
+    writePendingActionsToLocalStorage([
+      ...readPendingActionsFromLocalStorage().filter((item) => item.id !== action.id),
+      action
+    ]);
+    return;
+  }
+
+  try {
+    const db = await openPendingTicketDb();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(PENDING_TICKET_STORE, 'readwrite');
+      const request = transaction.objectStore(PENDING_TICKET_STORE).put(action);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch {
+    writePendingActionsToLocalStorage([
+      ...readPendingActionsFromLocalStorage().filter((item) => item.id !== action.id),
+      withoutQueuedFile(action)
+    ]);
+  }
+}
+
+async function deletePendingTicketAction(id: string): Promise<void> {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if ('indexedDB' in window) {
+    try {
+      const db = await openPendingTicketDb();
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(PENDING_TICKET_STORE, 'readwrite');
+        const request = transaction.objectStore(PENDING_TICKET_STORE).delete(id);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch {
+      // LocalStorage fallback below keeps deletion best-effort across browsers.
+    }
+  }
+
+  writePendingActionsToLocalStorage(readPendingActionsFromLocalStorage().filter((action) => action.id !== id));
+}
+
+function openPendingTicketDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(PENDING_TICKET_DB_NAME, PENDING_TICKET_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(PENDING_TICKET_STORE)) {
+        const store = db.createObjectStore(PENDING_TICKET_STORE, { keyPath: 'id' });
+        store.createIndex('createdAt', 'createdAt', { unique: false });
+        store.createIndex('ticketId', 'ticketId', { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function readPendingActionsFromLocalStorage(): PendingTicketAction[] {
+  const stored = localStorage.getItem(PENDING_TICKET_ACTIONS_KEY);
+  if (!stored) {
+    return [];
+  }
+
+  try {
+    return (JSON.parse(stored) as PendingTicketAction[]).sort(sortPendingAction);
+  } catch {
+    localStorage.removeItem(PENDING_TICKET_ACTIONS_KEY);
+    return [];
+  }
+}
+
+function writePendingActionsToLocalStorage(actions: PendingTicketAction[]): void {
+  localStorage.setItem(PENDING_TICKET_ACTIONS_KEY, JSON.stringify(actions.map(withoutQueuedFile)));
+}
+
+function withoutQueuedFile(action: PendingTicketAction): PendingTicketAction {
+  if (action.type !== 'attachment') {
+    return action;
+  }
+
+  const payload = action.payload as TicketAttachmentUploadPayload;
+  return {
+    ...action,
+    status: 'failed',
+    error: action.error ?? 'O browser nao suportou IndexedDB para guardar o ficheiro offline.',
+    payload: {
+      ...payload,
+      file: undefined
+    }
+  };
+}
+
+function sortPendingAction(left: PendingTicketAction, right: PendingTicketAction): number {
+  return left.createdAt.localeCompare(right.createdAt);
+}
+
+function createClientActionId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `ticket-action-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
+}
+
+async function runPendingTicketAction(token: string, action: PendingTicketAction): Promise<void> {
+  if (action.type === 'transition') {
+    await transitionTicket(token, action.ticketId, action.payload as TicketTransitionPayload);
+    return;
+  }
+
+  if (action.type === 'assign') {
+    await assignTicket(token, action.ticketId, action.payload as TicketAssignPayload);
+    return;
+  }
+
+  if (action.type === 'message') {
+    await sendTicketMessage(token, action.ticketId, action.payload as TicketMessagePayload);
+    return;
+  }
+
+  if (action.type === 'checklist') {
+    await updateTicketChecklist(token, action.ticketId, action.payload as TicketChecklistPayload);
+    return;
+  }
+
+  if (action.type === 'confirmResolution') {
+    await confirmTicketResolution(token, action.ticketId, action.payload as TicketResolutionPayload);
+    return;
+  }
+
+  if (action.type === 'reopen') {
+    await reopenTicket(token, action.ticketId, action.payload as TicketReopenPayload);
+    return;
+  }
+
+  const payload = action.payload as TicketAttachmentUploadPayload;
+  if (!payload.file) {
+    throw new Error('Ficheiro offline indisponivel. Repete o upload quando estiveres online.');
+  }
+
+  const formData = new FormData();
+  formData.set('kind', payload.kind ?? 'Foto antes');
+  formData.set('caption', payload.caption ?? '');
+  formData.set('clientActionId', payload.clientActionId ?? action.id);
+  formData.set('file', payload.file, payload.fileName);
+  await uploadTicketAttachment(token, action.ticketId, formData);
 }
 
 async function apiRequest<T>(
@@ -825,6 +1372,186 @@ async function demoApiRequest<T>(
     return document as T;
   }
 
+  if (pathname === 'operations/metrics') {
+    return buildDemoOperationsMetrics(store) as T;
+  }
+
+  if (pathname === 'operations/feed') {
+    return buildDemoOperationsFeed(store, url.searchParams.get('since') ?? '') as T;
+  }
+
+  if (pathname === 'qr-zones') {
+    return buildDemoQrZones(store) as T;
+  }
+
+  const ticketTimelineMatch = pathname.match(/^tickets\/([^/]+)\/timeline$/);
+  if (ticketTimelineMatch) {
+    const ticket = store.tickets.find((item) => item.id === ticketTimelineMatch[1]);
+    return (ticket?.timeline ?? []) as T;
+  }
+
+  const ticketTransitionMatch = pathname.match(/^tickets\/([^/]+)\/transition$/);
+  if (ticketTransitionMatch && method === 'PUT') {
+    const ticket = updateDemoTicket(store, ticketTransitionMatch[1], (item) => {
+      if (hasDemoClientAction(item, body.clientActionId)) {
+        return;
+      }
+      const status = String(body.status ?? item.status);
+      item.status = status;
+      item.updatedAt = new Date().toISOString();
+      if (status === 'Resolvida') {
+        item.resolvedAt = item.updatedAt;
+      }
+      appendDemoTicketEvent(
+        item,
+        'StatusChanged',
+        `Estado atualizado para ${status}`,
+        String(body.note ?? item.detail),
+        'GESTISAC Demo',
+        String(body.clientActionId ?? '')
+      );
+    });
+    saveDemoStore(store);
+    return ticket as T;
+  }
+
+  const ticketAssignMatch = pathname.match(/^tickets\/([^/]+)\/assign$/);
+  if (ticketAssignMatch && method === 'PUT') {
+    const ticket = updateDemoTicket(store, ticketAssignMatch[1], (item) => {
+      if (hasDemoClientAction(item, body.clientActionId)) {
+        return;
+      }
+      item.assignedTechnician = String(body.technician ?? '').trim();
+      item.status = 'Atribuida';
+      item.updatedAt = new Date().toISOString();
+      appendDemoTicketEvent(
+        item,
+        'Assigned',
+        'Tecnico atribuido',
+        String(body.note ?? `Responsavel: ${item.assignedTechnician}`),
+        'GESTISAC Demo',
+        String(body.clientActionId ?? '')
+      );
+    });
+    saveDemoStore(store);
+    return ticket as T;
+  }
+
+  const ticketMessageMatch = pathname.match(/^tickets\/([^/]+)\/messages$/);
+  if (ticketMessageMatch && method === 'POST') {
+    const ticket = updateDemoTicket(store, ticketMessageMatch[1], (item) => {
+      if (hasDemoClientAction(item, body.clientActionId)) {
+        return;
+      }
+      const message = String(body.message ?? '').trim();
+      const author = String(body.author ?? store.user.name);
+      item.messages.unshift({
+        id: createDemoId('msg'),
+        author,
+        role: String(body.role ?? store.user.role),
+        message,
+        createdAt: new Date().toISOString()
+      });
+      item.updatedAt = new Date().toISOString();
+      appendDemoTicketEvent(
+        item,
+        'MessageAdded',
+        'Mensagem adicionada',
+        message,
+        author,
+        String(body.clientActionId ?? '')
+      );
+    });
+    saveDemoStore(store);
+    return ticket as T;
+  }
+
+  const ticketChecklistMatch = pathname.match(/^tickets\/([^/]+)\/checklist\/([^/]+)$/);
+  if (ticketChecklistMatch && method === 'PUT') {
+    const ticket = updateDemoTicket(store, ticketChecklistMatch[1], (item) => {
+      if (hasDemoClientAction(item, body.clientActionId)) {
+        return;
+      }
+      const checklistItem = item.checklist.find((entry) => entry.id === ticketChecklistMatch[2]);
+      if (!checklistItem) {
+        throw new Error('Item de checklist nao encontrado');
+      }
+      checklistItem.completed = Boolean(body.completed);
+      item.updatedAt = new Date().toISOString();
+      appendDemoTicketEvent(
+        item,
+        'ChecklistUpdated',
+        'Checklist atualizada',
+        `${checklistItem.label}: ${checklistItem.completed ? 'concluido' : 'pendente'}`,
+        'GESTISAC Demo',
+        String(body.clientActionId ?? '')
+      );
+    });
+    saveDemoStore(store);
+    return ticket as T;
+  }
+
+  const ticketConfirmMatch = pathname.match(/^tickets\/([^/]+)\/confirm-resolution$/);
+  if (ticketConfirmMatch && method === 'POST') {
+    const ticket = updateDemoTicket(store, ticketConfirmMatch[1], (item) => {
+      if (hasDemoClientAction(item, body.clientActionId)) {
+        return;
+      }
+      const confirmed = Boolean(body.confirmed);
+      item.status = confirmed ? 'Confirmada' : 'Reaberta';
+      item.updatedAt = new Date().toISOString();
+      if (confirmed) {
+        item.confirmedAt = item.updatedAt;
+        item.customerProfile.validReports += 1;
+      } else {
+        item.customerProfile.reopenedReports += 1;
+      }
+      item.customerProfile.lastInteraction = item.updatedAt;
+      appendDemoTicketEvent(
+        item,
+        confirmed ? 'ResolutionConfirmed' : 'ResolutionRejected',
+        confirmed ? 'Resolucao confirmada pelo morador' : 'Resolucao rejeitada pelo morador',
+        String(body.comment ?? 'Sem comentario final'),
+        'GESTISAC Demo',
+        String(body.clientActionId ?? '')
+      );
+    });
+    saveDemoStore(store);
+    return ticket as T;
+  }
+
+  const ticketReopenMatch = pathname.match(/^tickets\/([^/]+)\/reopen$/);
+  if (ticketReopenMatch && method === 'POST') {
+    const ticket = updateDemoTicket(store, ticketReopenMatch[1], (item) => {
+      if (hasDemoClientAction(item, body.clientActionId)) {
+        return;
+      }
+      item.status = 'Reaberta';
+      item.updatedAt = new Date().toISOString();
+      item.customerProfile.reopenedReports += 1;
+      item.customerProfile.lastInteraction = item.updatedAt;
+      appendDemoTicketEvent(
+        item,
+        'Reopened',
+        'Avaria reaberta',
+        String(body.reason ?? 'Sem motivo'),
+        'GESTISAC Demo',
+        String(body.clientActionId ?? '')
+      );
+    });
+    saveDemoStore(store);
+    return ticket as T;
+  }
+
+  const ticketDetailMatch = pathname.match(/^tickets\/([^/]+)$/);
+  if (ticketDetailMatch && method === 'GET') {
+    const ticket = store.tickets.find((item) => item.id === ticketDetailMatch[1]);
+    if (!ticket) {
+      throw new Error('Ticket nao encontrado');
+    }
+    return ticket as T;
+  }
+
   const reportPreviewMatch = pathname.match(/^reports\/([^/]+)\/preview$/);
   if (reportPreviewMatch) {
     return buildDemoReportPreview(store, reportPreviewMatch[1]) as T;
@@ -876,6 +1603,44 @@ async function demoApiRequest<T>(
   throw new Error('Operacao demo nao suportada');
 }
 
+function updateDemoTicket(store: DemoStore, id: string, mutate: (ticket: Ticket) => void): Ticket {
+  const ticket = store.tickets.find((item) => item.id === id);
+  if (!ticket) {
+    throw new Error('Ticket nao encontrado');
+  }
+
+  mutate(ticket);
+  appendDemoAudit(store, 'tickets', 'Atualizado', id, ticket.title);
+  return ticket;
+}
+
+function hasDemoClientAction(ticket: Ticket, clientActionId: unknown): boolean {
+  const normalized = String(clientActionId ?? '').trim();
+  return Boolean(
+    normalized &&
+      ticket.timeline.some((event) => event.clientActionId === normalized)
+  );
+}
+
+function appendDemoTicketEvent(
+  ticket: Ticket,
+  type: string,
+  label: string,
+  detail: string,
+  actor = 'GESTISAC Demo',
+  clientActionId = ''
+): void {
+  ticket.timeline.unshift({
+    id: createDemoId('evt'),
+    type,
+    label,
+    detail,
+    actor,
+    createdAt: new Date().toISOString(),
+    clientActionId: clientActionId.trim() || null
+  });
+}
+
 function readDemoStore(): DemoStore {
   const stored = localStorage.getItem(DEMO_STORE_KEY);
   if (stored) {
@@ -896,13 +1661,13 @@ function saveDemoStore(store: DemoStore): void {
   localStorage.setItem(DEMO_STORE_KEY, JSON.stringify(store));
 }
 
-function parseJsonBody(body: BodyInit | undefined): Record<string, string | number> {
+function parseJsonBody(body: BodyInit | undefined): Record<string, unknown> {
   if (typeof body !== 'string') {
     return {};
   }
 
   try {
-    return JSON.parse(body) as Record<string, string | number>;
+    return JSON.parse(body) as Record<string, unknown>;
   } catch {
     return {};
   }
@@ -1135,19 +1900,116 @@ function createDemoStore(): DemoStore {
         id: 'ticket-001',
         title: 'Avaria no elevador do Bloco B',
         condominium: 'Condominio Vila Verde',
-        priority: 'Critico',
-        status: 'Fornecedor contactado',
+        priority: 'Critica',
+        status: 'Atribuida',
         detail: 'Elevador parado desde as 08:20. Tecnico agendado para hoje.',
-        updatedAt: '2026-05-15 10:30'
+        updatedAt: '2026-05-15T10:30:00.000Z',
+        category: 'Elevadores',
+        location: 'Elevador Bloco B',
+        resident: 'Carlos Almeida',
+        reporterName: 'Carlos Almeida',
+        assignedTechnician: 'Elevatec Lisboa',
+        slaDueAt: '2026-05-15T16:30:00.000Z',
+        slaState: 'SLA em risco',
+        createdAt: '2026-05-15T08:20:00.000Z',
+        resolvedAt: null,
+        confirmedAt: null,
+        isEmergency: true,
+        timeline: [
+          {
+            id: 'evt-001',
+            type: 'created',
+            label: 'Avaria reportada',
+            detail: 'Elevador parado desde as 08:20.',
+            actor: 'Carlos Almeida',
+            createdAt: '2026-05-15T08:20:00.000Z'
+          },
+          {
+            id: 'evt-002',
+            type: 'assigned',
+            label: 'Tecnico atribuido',
+            detail: 'Elevatec Lisboa recebeu a intervencao.',
+            actor: 'Joao Silva',
+            createdAt: '2026-05-15T10:30:00.000Z'
+          }
+        ],
+        attachments: [
+          {
+            id: 'att-001',
+            kind: 'beforePhoto',
+            fileName: 'elevador-bloco-b-antes.jpg',
+            mimeType: 'image/jpeg',
+            url: '',
+            caption: 'Painel do elevador indisponivel',
+            uploadedBy: 'Carlos Almeida',
+            uploadedAt: '2026-05-15T08:25:00.000Z',
+            pendingSync: false
+          }
+        ],
+        messages: [
+          {
+            id: 'msg-001',
+            author: 'Joao Silva',
+            role: 'Administrador',
+            message: 'Fornecedor notificado. Acompanhamos chegada do tecnico.',
+            createdAt: '2026-05-15T10:32:00.000Z'
+          }
+        ],
+        checklist: [
+          { id: 'chk-001', label: 'Confirmar elevador afetado', required: true, completed: true },
+          { id: 'chk-002', label: 'Contactar fornecedor certificado', required: true, completed: true },
+          { id: 'chk-003', label: 'Validar reposicao do servico', required: true, completed: false }
+        ],
+        customerProfile: {
+          validReports: 3,
+          reopenedReports: 0,
+          falseAlarms: 0,
+          internalNotes: 'Reportes objetivos e com fotografia.',
+          lastInteraction: '2026-05-15T10:32:00.000Z'
+        }
       },
       {
         id: 'ticket-002',
         title: 'Infiltracao na garagem',
         condominium: 'Condominio Vila Verde',
-        priority: 'Importante',
+        priority: 'Alta',
         status: 'Em analise',
         detail: 'Pedido de vistoria aberto para a garagem -1.',
-        updatedAt: '2026-05-14 16:10'
+        updatedAt: '2026-05-14T16:10:00.000Z',
+        category: 'Agua e infiltracoes',
+        location: 'Garagem - piso -1',
+        resident: 'Maria Fernandes',
+        reporterName: 'Maria Fernandes',
+        assignedTechnician: '',
+        slaDueAt: '2026-05-16T16:10:00.000Z',
+        slaState: 'Proximo do limite',
+        createdAt: '2026-05-14T16:10:00.000Z',
+        resolvedAt: null,
+        confirmedAt: null,
+        isEmergency: false,
+        timeline: [
+          {
+            id: 'evt-003',
+            type: 'created',
+            label: 'Avaria reportada',
+            detail: 'Infiltracao visivel na zona de garagem.',
+            actor: 'Maria Fernandes',
+            createdAt: '2026-05-14T16:10:00.000Z'
+          }
+        ],
+        attachments: [],
+        messages: [],
+        checklist: [
+          { id: 'chk-004', label: 'Localizar origem provavel', required: true, completed: false },
+          { id: 'chk-005', label: 'Registar fotos antes da intervencao', required: true, completed: false }
+        ],
+        customerProfile: {
+          validReports: 1,
+          reopenedReports: 0,
+          falseAlarms: 0,
+          internalNotes: '',
+          lastInteraction: '2026-05-14T16:10:00.000Z'
+        }
       }
     ],
     suppliers: [
@@ -1219,6 +2081,17 @@ function createDemoStore(): DemoStore {
         createdAt: new Date().toISOString()
       }
     ],
+    operations: {
+      metrics: {
+        openTickets: 0,
+        emergencies: 0,
+        slaAtRisk: 0,
+        activeTechnicians: 0,
+        averageResolutionLabel: 'Demo local'
+      },
+      feed: [],
+      qrZones: []
+    },
     permissions
   };
 }
@@ -1290,6 +2163,57 @@ function computeAccountingSummary(store: Pick<DemoStore, 'accounting'>): Account
     reserveFund,
     currency: 'EUR'
   };
+}
+
+function buildDemoOperationsMetrics(store: DemoStore): OperationsMetrics {
+  const openTickets = store.tickets.filter((ticket) => !isClosedDemoStatus(ticket.status)).length;
+  const emergencies = store.tickets.filter((ticket) => ticket.isEmergency).length;
+  const slaAtRisk = store.tickets.filter((ticket) =>
+    ['SLA em risco', 'SLA expirado'].includes(ticket.slaState)
+  ).length;
+  const activeTechnicians = new Set(
+    store.tickets
+      .filter((ticket) => ticket.assignedTechnician && !isClosedDemoStatus(ticket.status))
+      .map((ticket) => ticket.assignedTechnician)
+  ).size;
+
+  return {
+    openTickets,
+    emergencies,
+    slaAtRisk,
+    activeTechnicians,
+    averageResolutionLabel: 'Base demo preparada para medir tempos reais'
+  };
+}
+
+function buildDemoOperationsFeed(store: DemoStore, since = ''): OperationsFeedItem[] {
+  return store.tickets
+    .flatMap((ticket) =>
+      (ticket.timeline ?? []).map((event) => ({
+        id: event.id,
+        ticketId: ticket.id,
+        type: event.type,
+        title: ticket.title,
+        detail: `${event.label} - ${event.detail}`,
+        tone: ticket.isEmergency ? 'danger' : ticket.slaState.includes('risco') ? 'warning' : 'blue',
+        createdAt: event.createdAt
+      }))
+    )
+    .filter((event) => !since.trim() || event.createdAt > since)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, 30);
+}
+
+function buildDemoQrZones(store: DemoStore): QrZone[] {
+  const condominium = store.activeCondominium || 'Condominio Vila Verde';
+  return ['Garagem', 'Elevador', 'Entrada', 'Piscina', 'Quadro eletrico'].map((location) => ({
+    id: `qr-${slugifyDemo(condominium)}-${slugifyDemo(location)}`,
+    condominium,
+    label: `QR ${location}`,
+    location,
+    ticketTemplate: `Avaria em ${location}`,
+    qrPayload: `/condomino/avarias?condominium=${encodeURIComponent(condominium)}&location=${encodeURIComponent(location)}&template=${encodeURIComponent(`Avaria em ${location}`)}`
+  }));
 }
 
 function buildDemoDashboard(store: DemoStore): DashboardResponse {
@@ -1467,9 +2391,40 @@ async function demoUploadDocument(payload: FormData): Promise<DocumentItem> {
   return document;
 }
 
+async function demoUploadTicketAttachment(id: string, payload: FormData): Promise<Ticket> {
+  const store = readDemoStore();
+  const file = payload.get('file');
+  const uploadedFile = file instanceof File ? file : null;
+  const ticket = updateDemoTicket(store, id, (item) => {
+    const clientActionId = String(payload.get('clientActionId') ?? '');
+    if (hasDemoClientAction(item, clientActionId)) {
+      return;
+    }
+    const attachmentId = createDemoId('att');
+    const fileName = uploadedFile?.name ?? 'avaria-demo.txt';
+    item.attachments.unshift({
+      id: attachmentId,
+      kind: String(payload.get('kind') || 'Foto antes'),
+      fileName,
+      mimeType: uploadedFile?.type || 'text/plain',
+      url: `/api/tickets/${id}/attachments/${attachmentId}/download`,
+      storageKey: `demo/${slugifyDemo(fileName)}`,
+      sizeBytes: uploadedFile?.size ?? 512,
+      caption: String(payload.get('caption') || 'Anexo registado na demo'),
+      uploadedBy: store.user.name,
+      uploadedAt: new Date().toISOString(),
+      pendingSync: false
+    });
+    item.updatedAt = new Date().toISOString();
+    appendDemoTicketEvent(item, 'AttachmentAdded', 'Ficheiro carregado', fileName, store.user.name, clientActionId);
+  });
+  saveDemoStore(store);
+  return ticket;
+}
+
 function createDemoGeneratedDocument(
   store: DemoStore,
-  payload: Record<string, string | number>
+  payload: Record<string, unknown>
 ): DocumentItem {
   const template = String(payload.template || 'documento');
   const templateLabel = demoDocumentTemplates().find((item) => item.id === template)?.label ?? 'Documento gerado';
@@ -1644,6 +2599,14 @@ function demoDocumentTemplates(): DocumentTemplate[] {
 function isCriticalDemoStatus(value: string): boolean {
   const normalized = value.toLowerCase();
   return normalized.includes('crit') || normalized.includes('urgente');
+}
+
+function isClosedDemoStatus(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return normalized.includes('resolvida') ||
+    normalized.includes('confirmada') ||
+    normalized.includes('fechada') ||
+    normalized.includes('conclu');
 }
 
 function isPaidDemoStatus(value: string): boolean {

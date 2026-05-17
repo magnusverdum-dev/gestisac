@@ -1,17 +1,27 @@
-import { component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
+import { component$, useSignal, useTask$, useVisibleTask$, type PropFunction } from '@builder.io/qwik';
 import type {
   CreateResource,
   DocumentPreview,
   GenerateDocumentPayload,
   ReportPreview,
-  ResourceEndpoint
+  ResourceEndpoint,
+  TicketAssignPayload,
+  TicketChecklistPayload,
+  TicketMessagePayload,
+  TicketReopenPayload,
+  TicketResolutionPayload,
+  TicketTransitionPayload
 } from '../../lib/api';
 import type { DemoPage } from '../../data/pages';
+import { TicketOperationalPanel } from './TicketOperationalPanel';
 
 type PageOverviewProps = {
   page: DemoPage;
   isSaving: boolean;
   isPreviewLoading: boolean;
+  pendingTicketActions: number;
+  failedTicketActions: number;
+  pendingTicketUploads: number;
   reportPreview: ReportPreview | null;
   documentPreview: DocumentPreview | null;
   createIntentResource: CreateResource | '';
@@ -23,6 +33,14 @@ type PageOverviewProps = {
     payload: Record<string, string | number>
   ) => void>;
   onDelete$: PropFunction<(resource: ResourceEndpoint, id: string) => void>;
+  onTicketTransition$: PropFunction<(id: string, payload: TicketTransitionPayload) => void>;
+  onTicketAssign$: PropFunction<(id: string, payload: TicketAssignPayload) => void>;
+  onTicketMessage$: PropFunction<(id: string, payload: TicketMessagePayload) => void>;
+  onTicketAttachmentUpload$: PropFunction<(id: string, payload: FormData) => void>;
+  onTicketChecklist$: PropFunction<(id: string, payload: TicketChecklistPayload) => void>;
+  onTicketConfirmResolution$: PropFunction<(id: string, payload: TicketResolutionPayload) => void>;
+  onTicketReopen$: PropFunction<(id: string, payload: TicketReopenPayload) => void>;
+  onSyncPendingTicketActions$: PropFunction<() => void>;
   onUploadDocument$: PropFunction<(payload: FormData) => void>;
   onGenerateDocument$: PropFunction<(payload: GenerateDocumentPayload) => void>;
   onPreviewReport$: PropFunction<(id: string) => void>;
@@ -41,6 +59,7 @@ export const PageOverview = component$((props: PageOverviewProps) => {
   const filtersVisible = useSignal(false);
   const searchQuery = useSignal('');
   const statusFilter = useSignal('Todos');
+  const routeCreateDefaults = useSignal<Record<string, string>>({});
   const selectedDocumentTemplate = useSignal(props.page.documentTemplates?.[0]?.id ?? '');
   const documentFormat = useSignal<'pdf' | 'txt'>('pdf');
   const activeOption = props.page.createOptions?.[activeCreateIndex.value];
@@ -84,6 +103,33 @@ export const PageOverview = component$((props: PageOverviewProps) => {
       editIndex.value = -1;
       detailIndex.value = -1;
     }
+  });
+
+  useVisibleTask$(({ track }) => {
+    const pagePath = track(() => props.page.path);
+    if (pagePath !== '/condomino/avarias') {
+      routeCreateDefaults.value = {};
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const condominium = params.get('condominium')?.trim() ?? '';
+    const location = params.get('location')?.trim() ?? '';
+    const template = params.get('template')?.trim() ?? '';
+    if (!condominium && !location && !template) {
+      routeCreateDefaults.value = {};
+      return;
+    }
+
+    routeCreateDefaults.value = {
+      title: template,
+      condominium,
+      location,
+      category: location ? `Avaria em ${location}` : '',
+      priority: 'Normal',
+      status: 'Aberta'
+    };
+    isCreating.value = true;
   });
 
   return (
@@ -165,6 +211,7 @@ export const PageOverview = component$((props: PageOverviewProps) => {
                 <input
                   name={field.name}
                   type={field.type ?? 'text'}
+                  value={routeCreateDefaults.value[field.name] ?? undefined}
                   placeholder={field.placeholder}
                   required
                 />
@@ -332,6 +379,105 @@ export const PageOverview = component$((props: PageOverviewProps) => {
           </article>
         ))}
       </section>
+
+      {props.page.operations ? (
+        <section class="operations-board glass-panel" aria-label="Centro operacional de avarias">
+          <header>
+            <div>
+              <small>Centro operacional live-ready</small>
+              <h2>Avarias, tecnicos e condominio no mesmo pulso</h2>
+              <p>
+                A base ja separa administracao, tecnico e condomino, com feed, SLA,
+                QR zones e contratos preparados para realtime.
+              </p>
+            </div>
+            <span>{props.page.operations.metrics.averageResolutionLabel}</span>
+          </header>
+
+          <div class="operations-kpis">
+            <article>
+              <small>Abertas</small>
+              <strong>{props.page.operations.metrics.openTickets}</strong>
+              <span>Tickets operacionais em curso</span>
+            </article>
+            <article class="danger">
+              <small>Emergencias</small>
+              <strong>{props.page.operations.metrics.emergencies}</strong>
+              <span>Movidas para o topo da operacao</span>
+            </article>
+            <article class="warning">
+              <small>SLA em risco</small>
+              <strong>{props.page.operations.metrics.slaAtRisk}</strong>
+              <span>Exigem decisao rapida</span>
+            </article>
+            <article class="green">
+              <small>Tecnicos ativos</small>
+              <strong>{props.page.operations.metrics.activeTechnicians}</strong>
+              <span>Atribuicoes em aberto</span>
+            </article>
+          </div>
+
+          <div class="operations-columns">
+            <article>
+              <small>Feed operacional</small>
+              <h3>Sistema vivo</h3>
+              {props.page.operations.feed.length ? (
+                props.page.operations.feed.slice(0, 5).map((item) => (
+                  <div class={`operations-feed-item ${item.tone}`} key={item.id}>
+                    <strong>{item.title}</strong>
+                    <span>{item.detail}</span>
+                    <small>{item.createdAt}</small>
+                  </div>
+                ))
+              ) : (
+                <div class="operations-feed-item">
+                  <strong>Sem eventos ainda</strong>
+                  <span>As proximas alteracoes de avarias aparecem aqui.</span>
+                  <small>Realtime-ready</small>
+                </div>
+              )}
+            </article>
+            <article>
+              <small>Experiencias PWA</small>
+              <h3>Tecnico e condomino</h3>
+              <div class="pwa-mode-card">
+                <strong>Tecnico</strong>
+                <span>Botoes grandes, check-in, fotos antes/depois e fila offline.</span>
+              </div>
+              <div class="pwa-mode-card resident">
+                <strong>Condomino</strong>
+                <span>Reportar, acompanhar timeline, confirmar ou reabrir.</span>
+              </div>
+            </article>
+            <article>
+              <small>QR zones</small>
+              <h3>Reporte rapido</h3>
+              {props.page.operations.qrZones.slice(0, 5).map((zone) => (
+                <div class="qr-zone-row" key={zone.id}>
+                  <strong>{zone.location}</strong>
+                  <span>{zone.ticketTemplate}</span>
+                </div>
+              ))}
+            </article>
+          </div>
+        </section>
+      ) : null}
+
+      {props.page.operations && props.pendingTicketActions ? (
+        <section class="offline-queue-panel glass-panel" aria-label="Fila offline de avarias">
+          <div>
+            <small>Offline-first V3</small>
+            <strong>{props.pendingTicketActions} acoes pendentes</strong>
+            <span>
+              {props.pendingTicketUploads} uploads em fila, {props.failedTicketActions} falhas para retry.
+              Estados, mensagens, checklist e confirmacoes serao reenviados quando a API voltar.
+            </span>
+          </div>
+          <button type="button" disabled={props.isSaving} onClick$={props.onSyncPendingTicketActions$}>
+            {props.isSaving ? 'A sincronizar...' : 'Sincronizar agora'}
+          </button>
+        </section>
+      ) : null}
 
       {props.page.path === '/relatorios' && (props.reportPreview || props.isPreviewLoading) ? (
         <section class="report-preview glass-panel" aria-label="Preview do relatorio">
@@ -587,6 +733,21 @@ export const PageOverview = component$((props: PageOverviewProps) => {
                     <span>{record.detail}</span>
                     <span>{record.meta}</span>
                     <span>Estado: {record.status}</span>
+                    {record.operational ? (
+                      <TicketOperationalPanel
+                        record={record}
+                        pagePath={props.page.path}
+                        pageNavLabel={props.page.navLabel}
+                        isSaving={props.isSaving}
+                        onTicketTransition$={props.onTicketTransition$}
+                        onTicketAssign$={props.onTicketAssign$}
+                        onTicketMessage$={props.onTicketMessage$}
+                        onTicketAttachmentUpload$={props.onTicketAttachmentUpload$}
+                        onTicketChecklist$={props.onTicketChecklist$}
+                        onTicketConfirmResolution$={props.onTicketConfirmResolution$}
+                        onTicketReopen$={props.onTicketReopen$}
+                      />
+                    ) : null}
                   </div>
                 ) : null}
               </article>

@@ -112,9 +112,57 @@ pub fn router(state: AppState) -> Router {
             get(administration::tickets).post(administration::create_ticket),
         )
         .route(
-            "/api/tickets/{id}",
-            put(administration::update_ticket).delete(administration::delete_ticket),
+            "/api/tickets/{id}/timeline",
+            get(administration::ticket_timeline),
         )
+        .route(
+            "/api/tickets/{id}/transition",
+            put(administration::transition_ticket),
+        )
+        .route(
+            "/api/tickets/{id}/assign",
+            put(administration::assign_ticket),
+        )
+        .route(
+            "/api/tickets/{id}/attachments",
+            post(administration::add_ticket_attachment),
+        )
+        .route(
+            "/api/tickets/{id}/attachments/upload",
+            post(administration::upload_ticket_attachment),
+        )
+        .route(
+            "/api/tickets/{id}/attachments/{attachment_id}/download",
+            get(administration::download_ticket_attachment),
+        )
+        .route(
+            "/api/tickets/{id}/messages",
+            post(administration::add_ticket_message),
+        )
+        .route(
+            "/api/tickets/{id}/checklist/{checklist_item_id}",
+            put(administration::update_ticket_checklist),
+        )
+        .route(
+            "/api/tickets/{id}/confirm-resolution",
+            post(administration::confirm_ticket_resolution),
+        )
+        .route(
+            "/api/tickets/{id}/reopen",
+            post(administration::reopen_ticket),
+        )
+        .route(
+            "/api/tickets/{id}",
+            get(administration::ticket_detail)
+                .put(administration::update_ticket)
+                .delete(administration::delete_ticket),
+        )
+        .route("/api/operations/feed", get(administration::operations_feed))
+        .route(
+            "/api/operations/metrics",
+            get(administration::operations_metrics),
+        )
+        .route("/api/qr-zones", get(administration::qr_zones))
         .route(
             "/api/reports",
             get(reports::reports).post(reports::create_report),

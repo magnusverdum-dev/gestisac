@@ -1972,6 +1972,189 @@ kbd {
   grid-column: 1 / 4;
 }
 
+.operations-board {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 20px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(244, 63, 94, 0.12), transparent 18rem),
+    radial-gradient(circle at 100% 0%, rgba(75, 163, 255, 0.14), transparent 18rem),
+    rgba(7, 18, 40, 0.7);
+}
+
+.operations-board > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.operations-board h2 {
+  margin: 5px 0 8px;
+  font-size: 24px;
+}
+
+.operations-board p,
+.operations-board small,
+.operations-board > header span {
+  color: #94a3b8;
+}
+
+.operations-board > header span {
+  max-width: 280px;
+  padding: 10px 12px;
+  text-align: right;
+  border: 1px solid rgba(75, 163, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(47, 125, 246, 0.08);
+}
+
+.operations-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.operations-kpis article,
+.operations-columns > article,
+.ticket-operational-grid article {
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 17px;
+  background: rgba(3, 7, 18, 0.3);
+}
+
+.operations-kpis article.danger,
+.ticket-operational-grid article.danger {
+  border-color: rgba(244, 63, 94, 0.26);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.14), transparent 10rem),
+    rgba(3, 7, 18, 0.3);
+}
+
+.operations-kpis article.warning {
+  border-color: rgba(217, 164, 65, 0.24);
+}
+
+.operations-kpis article.green {
+  border-color: rgba(34, 197, 94, 0.22);
+}
+
+.operations-kpis strong {
+  display: block;
+  margin: 8px 0;
+  font-size: 28px;
+}
+
+.operations-kpis span,
+.operations-columns span {
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+.operations-columns {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr 0.9fr;
+  gap: 12px;
+}
+
+.operations-columns h3 {
+  margin: 5px 0 12px;
+  font-size: 18px;
+}
+
+.operations-feed-item,
+.pwa-mode-card,
+.qr-zone-row,
+.timeline-row,
+.check-row,
+.media-row,
+.message-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.operations-feed-item:first-of-type,
+.pwa-mode-card:first-of-type,
+.qr-zone-row:first-of-type,
+.timeline-row:first-of-type,
+.check-row:first-of-type,
+.media-row:first-of-type,
+.message-row:first-of-type {
+  border-top: 0;
+}
+
+.operations-feed-item.danger strong {
+  color: #fecdd3;
+}
+
+.operations-feed-item.warning strong {
+  color: #fde68a;
+}
+
+.pwa-mode-card {
+  padding: 12px;
+  border: 1px solid rgba(75, 163, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(47, 125, 246, 0.08);
+}
+
+.pwa-mode-card.resident {
+  border-color: rgba(34, 197, 94, 0.16);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.offline-queue-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border-color: rgba(217, 164, 65, 0.26);
+  background:
+    radial-gradient(circle at 0% 50%, rgba(217, 164, 65, 0.16), transparent 16rem),
+    rgba(7, 18, 40, 0.72);
+}
+
+.offline-queue-panel div {
+  display: grid;
+  gap: 4px;
+}
+
+.offline-queue-panel small,
+.offline-queue-panel span {
+  color: #cbd5e1;
+}
+
+.offline-queue-panel button,
+.tech-command-grid button,
+.ticket-inline-form button,
+.check-row button,
+.ticket-resolution-buttons button {
+  min-height: 38px;
+  padding: 0 12px;
+  color: #dbeafe;
+  border: 1px solid rgba(75, 163, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(47, 125, 246, 0.12);
+  cursor: pointer;
+}
+
+.offline-queue-panel button:disabled,
+.tech-command-grid button:disabled,
+.ticket-inline-form button:disabled,
+.check-row button:disabled,
+.ticket-resolution-buttons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .records-panel {
   padding: 18px;
   border-radius: 20px;
@@ -2180,6 +2363,188 @@ kbd {
 .record-detail strong,
 .record-detail span {
   white-space: normal;
+}
+
+.ticket-operational-detail {
+  display: grid;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.ticket-operational-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ticket-operational-grid small,
+.ticket-detail-columns small {
+  color: #94a3b8;
+}
+
+.ticket-operational-grid strong {
+  margin: 7px 0 4px;
+  color: #fff;
+  font-size: 16px;
+}
+
+.ticket-action-lab {
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(75, 163, 255, 0.16);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(75, 163, 255, 0.12), transparent 18rem),
+    rgba(3, 7, 18, 0.22);
+}
+
+.ticket-operational-detail.technician-focus .resident-confirmation,
+.ticket-operational-detail.resident-focus .tech-command-grid {
+  display: none;
+}
+
+.ticket-operational-detail.technician-focus .ticket-action-lab {
+  border-color: rgba(34, 197, 94, 0.2);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(34, 197, 94, 0.12), transparent 18rem),
+    rgba(3, 7, 18, 0.22);
+}
+
+.ticket-operational-detail.resident-focus .ticket-action-lab {
+  border-color: rgba(217, 164, 65, 0.22);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(217, 164, 65, 0.13), transparent 18rem),
+    rgba(3, 7, 18, 0.22);
+}
+
+.tech-command-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tech-command-grid button {
+  min-height: 46px;
+  color: #e0f2fe;
+  font-weight: 800;
+}
+
+.tech-command-grid button.success,
+.ticket-resolution-buttons button:first-child {
+  color: #bbf7d0;
+  border-color: rgba(34, 197, 94, 0.26);
+  background: rgba(34, 197, 94, 0.11);
+}
+
+.tech-command-grid button.warning,
+.ticket-resolution-buttons .warning {
+  color: #fde68a;
+  border-color: rgba(217, 164, 65, 0.28);
+  background: rgba(217, 164, 65, 0.12);
+}
+
+.ticket-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ticket-inline-form {
+  display: grid;
+  gap: 9px;
+  align-content: start;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 15px;
+  background: rgba(7, 18, 40, 0.45);
+}
+
+.ticket-inline-form strong {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ticket-inline-form input,
+.ticket-inline-form select,
+.ticket-inline-form textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 11px;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 11px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ticket-inline-form textarea {
+  min-height: 76px;
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.ticket-inline-form input:focus,
+.ticket-inline-form select:focus,
+.ticket-inline-form textarea:focus {
+  border-color: rgba(75, 163, 255, 0.44);
+  box-shadow: 0 0 0 3px rgba(75, 163, 255, 0.12);
+}
+
+.ticket-resolution-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ticket-detail-columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ticket-detail-columns > article {
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(3, 7, 18, 0.24);
+}
+
+.ticket-detail-columns h4 {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.timeline-row strong,
+.media-row strong,
+.message-row strong,
+.qr-zone-row strong,
+.pwa-mode-card strong,
+.operations-feed-item strong {
+  color: #fff;
+}
+
+.check-row {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.check-row span {
+  color: #f4d27a;
+  font-weight: 900;
+}
+
+.check-row.done span,
+.check-row.done strong {
+  color: #86efac;
+}
+
+.check-row button {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
 }
 
 .edit-panel {
@@ -2427,6 +2792,15 @@ kbd {
     grid-template-columns: 1fr;
   }
 
+  .operations-kpis,
+  .operations-columns,
+  .ticket-operational-grid,
+  .ticket-form-grid,
+  .tech-command-grid,
+  .ticket-detail-columns {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .preview-kpis,
   .preview-sections,
   .document-meta-grid,
@@ -2466,6 +2840,7 @@ kbd {
   .operations-panel,
   .quick-grid,
   .module-grid,
+  .operations-board,
   .alert-strip {
     width: 100%;
     max-width: 100%;
@@ -2629,6 +3004,29 @@ kbd {
   }
 
   .document-preview > header {
+    flex-direction: column;
+  }
+
+  .operations-board > header {
+    flex-direction: column;
+  }
+
+  .operations-board > header span {
+    max-width: none;
+    text-align: left;
+  }
+
+  .operations-kpis,
+  .operations-columns,
+  .ticket-operational-grid,
+  .ticket-form-grid,
+  .tech-command-grid,
+  .ticket-detail-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .offline-queue-panel {
+    align-items: stretch;
     flex-direction: column;
   }
 

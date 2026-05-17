@@ -1,6 +1,7 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
 use uuid::Uuid;
 
 use super::demo::DemoData;
@@ -160,10 +161,561 @@ pub struct Ticket {
     pub id: String,
     pub title: String,
     pub condominium: String,
-    pub priority: String,
-    pub status: String,
+    pub priority: AvariaPriority,
+    pub status: AvariaStatus,
     pub detail: String,
     pub updated_at: String,
+    #[serde(default = "default_ticket_category")]
+    pub category: String,
+    #[serde(default)]
+    pub location: String,
+    #[serde(default)]
+    pub resident: String,
+    #[serde(default)]
+    pub reporter_name: String,
+    #[serde(default)]
+    pub assigned_technician: String,
+    #[serde(default)]
+    pub sla_due_at: String,
+    #[serde(default)]
+    pub sla_state: SlaState,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub resolved_at: Option<String>,
+    #[serde(default)]
+    pub confirmed_at: Option<String>,
+    #[serde(default)]
+    pub is_emergency: bool,
+    #[serde(default)]
+    pub timeline: Vec<AvariaEvent>,
+    #[serde(default)]
+    pub attachments: Vec<AvariaAttachment>,
+    #[serde(default)]
+    pub messages: Vec<AvariaMessage>,
+    #[serde(default)]
+    pub checklist: Vec<AvariaChecklistItem>,
+    #[serde(default)]
+    pub customer_profile: CustomerOperationalProfile,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum AvariaPriority {
+    Baixa,
+    #[default]
+    Normal,
+    Alta,
+    Critica,
+    Emergencia,
+}
+
+impl AvariaPriority {
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            Self::Baixa => "Baixa",
+            Self::Normal => "Normal",
+            Self::Alta => "Alta",
+            Self::Critica => "Critica",
+            Self::Emergencia => "Emergencia",
+        }
+    }
+
+    pub fn from_label(value: &str) -> Self {
+        let normalized = normalize_domain_text(value);
+        if normalized.contains("emerg") {
+            Self::Emergencia
+        } else if normalized.contains("crit") || normalized.contains("tic") {
+            Self::Critica
+        } else if normalized.contains("alta") || normalized.contains("urg") {
+            Self::Alta
+        } else if normalized.contains("baix") {
+            Self::Baixa
+        } else {
+            Self::Normal
+        }
+    }
+
+    pub fn is_critical(&self) -> bool {
+        matches!(self, Self::Critica | Self::Emergencia)
+    }
+
+    pub fn sla_hours(&self) -> i64 {
+        match self {
+            Self::Emergencia => 2,
+            Self::Critica => 6,
+            Self::Alta => 24,
+            Self::Normal => 72,
+            Self::Baixa => 120,
+        }
+    }
+}
+
+impl fmt::Display for AvariaPriority {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_label())
+    }
+}
+
+impl Serialize for AvariaPriority {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_label())
+    }
+}
+
+impl<'de> Deserialize<'de> for AvariaPriority {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_label(&value))
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum AvariaStatus {
+    #[default]
+    Aberta,
+    EmAnalise,
+    Atribuida,
+    EmDeslocacao,
+    NoLocal,
+    EmReparacao,
+    AguardandoMaterial,
+    Resolvida,
+    Confirmada,
+    Reaberta,
+    Fechada,
+}
+
+impl AvariaStatus {
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            Self::Aberta => "Aberta",
+            Self::EmAnalise => "Em analise",
+            Self::Atribuida => "Atribuida",
+            Self::EmDeslocacao => "Em deslocacao",
+            Self::NoLocal => "No local",
+            Self::EmReparacao => "Em reparacao",
+            Self::AguardandoMaterial => "Aguardando material",
+            Self::Resolvida => "Resolvida",
+            Self::Confirmada => "Confirmada",
+            Self::Reaberta => "Reaberta",
+            Self::Fechada => "Fechada",
+        }
+    }
+
+    pub fn from_label(value: &str) -> Self {
+        let normalized = normalize_domain_text(value);
+        if normalized.contains("fech") {
+            Self::Fechada
+        } else if normalized.contains("reab") {
+            Self::Reaberta
+        } else if normalized.contains("confirm") {
+            Self::Confirmada
+        } else if normalized.contains("resolv") || normalized.contains("conclu") {
+            Self::Resolvida
+        } else if normalized.contains("material")
+            || normalized.contains("orc")
+            || normalized.contains("aguard")
+        {
+            Self::AguardandoMaterial
+        } else if normalized.contains("repar") || normalized.contains("interv") {
+            Self::EmReparacao
+        } else if normalized.contains("local") {
+            Self::NoLocal
+        } else if normalized.contains("desloc") || normalized.contains("caminho") {
+            Self::EmDeslocacao
+        } else if normalized.contains("atribu")
+            || normalized.contains("notific")
+            || normalized.contains("agend")
+        {
+            Self::Atribuida
+        } else if normalized.contains("analise") || normalized.contains("anal") {
+            Self::EmAnalise
+        } else {
+            Self::Aberta
+        }
+    }
+
+    pub fn can_transition_to(&self, target: &Self) -> bool {
+        if self == target {
+            return true;
+        }
+
+        if matches!(self, Self::Fechada) && !matches!(target, Self::Reaberta) {
+            return false;
+        }
+
+        if matches!(target, Self::Confirmada) && !matches!(self, Self::Resolvida) {
+            return false;
+        }
+
+        true
+    }
+
+    pub fn is_closed(&self) -> bool {
+        matches!(self, Self::Resolvida | Self::Confirmada | Self::Fechada)
+    }
+}
+
+impl fmt::Display for AvariaStatus {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_label())
+    }
+}
+
+impl Serialize for AvariaStatus {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_label())
+    }
+}
+
+impl<'de> Deserialize<'de> for AvariaStatus {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_label(&value))
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum SlaState {
+    DentroPrazo,
+    ProximoLimite,
+    EmRisco,
+    Expirado,
+    #[default]
+    SemSla,
+}
+
+impl SlaState {
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            Self::DentroPrazo => "Dentro do prazo",
+            Self::ProximoLimite => "Proximo do limite",
+            Self::EmRisco => "SLA em risco",
+            Self::Expirado => "SLA expirado",
+            Self::SemSla => "Sem SLA",
+        }
+    }
+
+    pub fn from_label(value: &str) -> Self {
+        let normalized = normalize_domain_text(value);
+        if normalized.contains("expir") {
+            Self::Expirado
+        } else if normalized.contains("risco") {
+            Self::EmRisco
+        } else if normalized.contains("proximo") || normalized.contains("limite") {
+            Self::ProximoLimite
+        } else if normalized.contains("prazo") || normalized.contains("dentro") {
+            Self::DentroPrazo
+        } else {
+            Self::SemSla
+        }
+    }
+}
+
+impl fmt::Display for SlaState {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_label())
+    }
+}
+
+impl Serialize for SlaState {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_label())
+    }
+}
+
+impl<'de> Deserialize<'de> for SlaState {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_label(&value))
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum AvariaEventType {
+    #[default]
+    Created,
+    StatusChanged,
+    Assigned,
+    NoteAdded,
+    AttachmentAdded,
+    MessageAdded,
+    ChecklistUpdated,
+    ResolutionConfirmed,
+    ResolutionRejected,
+    Reopened,
+}
+
+impl AvariaEventType {
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::StatusChanged => "statusChanged",
+            Self::Assigned => "assigned",
+            Self::NoteAdded => "noteAdded",
+            Self::AttachmentAdded => "attachmentAdded",
+            Self::MessageAdded => "messageAdded",
+            Self::ChecklistUpdated => "checklistUpdated",
+            Self::ResolutionConfirmed => "resolutionConfirmed",
+            Self::ResolutionRejected => "resolutionRejected",
+            Self::Reopened => "reopened",
+        }
+    }
+
+    pub fn from_label(value: &str) -> Self {
+        match normalize_domain_text(value).as_str() {
+            "statuschanged" | "status" => Self::StatusChanged,
+            "assigned" | "atribuido" => Self::Assigned,
+            "noteadded" | "nota" => Self::NoteAdded,
+            "attachmentadded" | "anexo" => Self::AttachmentAdded,
+            "messageadded" | "mensagem" => Self::MessageAdded,
+            "checklistupdated" | "checklist" => Self::ChecklistUpdated,
+            "resolutionconfirmed" | "confirmado" => Self::ResolutionConfirmed,
+            "resolutionrejected" | "rejeitado" => Self::ResolutionRejected,
+            "reopened" | "reaberto" => Self::Reopened,
+            _ => Self::Created,
+        }
+    }
+}
+
+impl Serialize for AvariaEventType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_label())
+    }
+}
+
+impl<'de> Deserialize<'de> for AvariaEventType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_label(&value))
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum AttachmentKind {
+    #[default]
+    Image,
+    Video,
+    Document,
+    BeforePhoto,
+    AfterPhoto,
+}
+
+impl AttachmentKind {
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            Self::Image => "image",
+            Self::Video => "video",
+            Self::Document => "document",
+            Self::BeforePhoto => "beforePhoto",
+            Self::AfterPhoto => "afterPhoto",
+        }
+    }
+
+    pub fn from_label(value: &str) -> Self {
+        let normalized = normalize_domain_text(value);
+        if normalized.contains("after") || normalized.contains("depois") {
+            Self::AfterPhoto
+        } else if normalized.contains("before") || normalized.contains("antes") {
+            Self::BeforePhoto
+        } else if normalized.contains("video") {
+            Self::Video
+        } else if normalized.contains("doc") || normalized.contains("pdf") {
+            Self::Document
+        } else {
+            Self::Image
+        }
+    }
+}
+
+impl Serialize for AttachmentKind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_label())
+    }
+}
+
+impl<'de> Deserialize<'de> for AttachmentKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_label(&value))
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvariaEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: AvariaEventType,
+    pub label: String,
+    pub detail: String,
+    pub actor: String,
+    pub created_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_action_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvariaAttachment {
+    pub id: String,
+    pub kind: AttachmentKind,
+    pub file_name: String,
+    pub mime_type: String,
+    pub url: String,
+    #[serde(default)]
+    pub storage_key: String,
+    #[serde(default)]
+    pub size_bytes: u64,
+    pub caption: String,
+    pub uploaded_by: String,
+    pub uploaded_at: String,
+    pub pending_sync: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvariaMessage {
+    pub id: String,
+    pub author: String,
+    pub role: String,
+    pub message: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvariaChecklistItem {
+    pub id: String,
+    pub label: String,
+    pub required: bool,
+    pub completed: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomerOperationalProfile {
+    pub valid_reports: u16,
+    pub reopened_reports: u16,
+    pub false_alarms: u16,
+    pub internal_notes: String,
+    pub last_interaction: String,
+}
+
+impl Ticket {
+    pub fn ensure_operational_defaults(&mut self) {
+        if self.category.trim().is_empty() {
+            self.category = infer_ticket_category(&self.title);
+        }
+        if self.location.trim().is_empty() {
+            self.location = infer_ticket_location(&self.title);
+        }
+        if self.reporter_name.trim().is_empty() {
+            self.reporter_name = "Morador".to_string();
+        }
+        if self.created_at.trim().is_empty() {
+            self.created_at = if self.updated_at.trim().is_empty() {
+                Utc::now().to_rfc3339()
+            } else {
+                self.updated_at.clone()
+            };
+        }
+        if self.sla_due_at.trim().is_empty() {
+            self.sla_due_at =
+                (Utc::now() + Duration::hours(self.priority.sla_hours())).to_rfc3339();
+        }
+        self.is_emergency = self.is_emergency || is_emergency_ticket(&self.title, &self.priority);
+        self.refresh_sla_state();
+        if self.timeline.is_empty() {
+            self.timeline.push(AvariaEvent {
+                id: Uuid::new_v4().to_string(),
+                kind: AvariaEventType::Created,
+                label: "Avaria registada".to_string(),
+                detail: self.detail.clone(),
+                actor: self.reporter_name.clone(),
+                created_at: self.created_at.clone(),
+                client_action_id: None,
+            });
+        }
+        if self.checklist.is_empty() {
+            self.checklist = default_checklist_for_category(&self.category);
+        }
+    }
+
+    pub fn add_event(
+        &mut self,
+        kind: AvariaEventType,
+        label: impl Into<String>,
+        detail: impl Into<String>,
+        actor: impl Into<String>,
+    ) {
+        self.add_event_with_client_action(kind, label, detail, actor, None);
+    }
+
+    pub fn add_event_with_client_action(
+        &mut self,
+        kind: AvariaEventType,
+        label: impl Into<String>,
+        detail: impl Into<String>,
+        actor: impl Into<String>,
+        client_action_id: Option<String>,
+    ) {
+        self.timeline.insert(
+            0,
+            AvariaEvent {
+                id: Uuid::new_v4().to_string(),
+                kind,
+                label: label.into(),
+                detail: detail.into(),
+                actor: actor.into(),
+                created_at: Utc::now().to_rfc3339(),
+                client_action_id,
+            },
+        );
+        self.timeline.truncate(120);
+    }
+
+    pub fn has_client_action(&self, client_action_id: Option<&str>) -> bool {
+        client_action_id.is_some_and(|client_action_id| {
+            self.timeline
+                .iter()
+                .any(|event| event.client_action_id.as_deref() == Some(client_action_id))
+        })
+    }
+
+    pub fn refresh_sla_state(&mut self) {
+        self.sla_state = calculate_sla_state(&self.sla_due_at, &self.status);
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -454,14 +1006,37 @@ impl AppStore {
             tickets: demo
                 .tickets
                 .iter()
-                .map(|item| Ticket {
-                    id: Uuid::new_v4().to_string(),
-                    title: item.title.clone(),
-                    condominium: item.condominium.clone(),
-                    priority: item.priority.clone(),
-                    status: item.status.clone(),
-                    detail: item.status.clone(),
-                    updated_at: item.updated_at.clone(),
+                .map(|item| {
+                    let mut ticket = Ticket {
+                        id: Uuid::new_v4().to_string(),
+                        title: item.title.clone(),
+                        condominium: item.condominium.clone(),
+                        priority: AvariaPriority::from_label(&item.priority),
+                        status: AvariaStatus::from_label(&item.status),
+                        detail: item.status.clone(),
+                        updated_at: item.updated_at.clone(),
+                        category: infer_ticket_category(&item.title),
+                        location: infer_ticket_location(&item.title),
+                        resident: String::new(),
+                        reporter_name: "Morador".to_string(),
+                        assigned_technician: infer_assigned_technician(&item.title),
+                        sla_due_at: String::new(),
+                        sla_state: SlaState::SemSla,
+                        created_at: item.updated_at.clone(),
+                        resolved_at: None,
+                        confirmed_at: None,
+                        is_emergency: is_emergency_ticket(
+                            &item.title,
+                            &AvariaPriority::from_label(&item.priority),
+                        ),
+                        timeline: Vec::new(),
+                        attachments: Vec::new(),
+                        messages: Vec::new(),
+                        checklist: Vec::new(),
+                        customer_profile: CustomerOperationalProfile::default(),
+                    };
+                    ticket.ensure_operational_defaults();
+                    ticket
                 })
                 .collect(),
             suppliers: demo
@@ -590,6 +1165,9 @@ impl AppStore {
         }
         if self.reserve_funds.is_empty() {
             self.reserve_funds = default_reserve_funds(&demo.active_condominium);
+        }
+        for ticket in &mut self.tickets {
+            ticket.ensure_operational_defaults();
         }
     }
 
@@ -914,13 +1492,149 @@ fn now_utc() -> DateTime<Utc> {
     Utc::now()
 }
 
-fn is_critical_priority(priority: &str) -> bool {
-    let normalized = priority.to_lowercase();
-    normalized.contains("crit") || normalized.contains("tic")
+fn is_critical_priority(priority: &AvariaPriority) -> bool {
+    priority.is_critical()
 }
 
 fn format_currency(value: Decimal) -> String {
     format!("{value:.2} EUR")
+}
+
+fn default_ticket_category() -> String {
+    "Operacional".to_string()
+}
+
+fn infer_ticket_category(title: &str) -> String {
+    let normalized = normalize_domain_text(title);
+    if normalized.contains("elevador") {
+        "Elevadores".to_string()
+    } else if normalized.contains("infiltr") || normalized.contains("agua") {
+        "Agua e infiltracoes".to_string()
+    } else if normalized.contains("luz")
+        || normalized.contains("eletric")
+        || normalized.contains("curto")
+    {
+        "Eletricidade".to_string()
+    } else if normalized.contains("incend") || normalized.contains("alarme") {
+        "Seguranca".to_string()
+    } else {
+        default_ticket_category()
+    }
+}
+
+fn infer_ticket_location(title: &str) -> String {
+    let normalized = normalize_domain_text(title);
+    if normalized.contains("garagem") {
+        "Garagem".to_string()
+    } else if normalized.contains("elevador") {
+        "Elevador".to_string()
+    } else if normalized.contains("hall") {
+        "Hall principal".to_string()
+    } else if normalized.contains("piscina") {
+        "Piscina".to_string()
+    } else if normalized.contains("entrada") {
+        "Entrada".to_string()
+    } else {
+        "Zona comum".to_string()
+    }
+}
+
+fn infer_assigned_technician(title: &str) -> String {
+    let normalized = normalize_domain_text(title);
+    if normalized.contains("elevador") {
+        "Elevatec Lisboa".to_string()
+    } else if normalized.contains("incend") || normalized.contains("alarme") {
+        "SafeBuilding".to_string()
+    } else {
+        String::new()
+    }
+}
+
+fn is_emergency_ticket(title: &str, priority: &AvariaPriority) -> bool {
+    let normalized = normalize_domain_text(title);
+    priority.is_critical()
+        || normalized.contains("incend")
+        || normalized.contains("fuga")
+        || normalized.contains("curto")
+        || normalized.contains("preso")
+        || normalized.contains("falha eletrica")
+}
+
+fn default_checklist_for_category(category: &str) -> Vec<AvariaChecklistItem> {
+    let normalized = normalize_domain_text(category);
+    if normalized.contains("eletric") {
+        vec![
+            checklist_item("Validar seguranca da zona", true),
+            checklist_item("Verificar disjuntor/quadro eletrico", true),
+            checklist_item("Testar tensao", true),
+            checklist_item("Confirmar reparacao com evidencia visual", true),
+        ]
+    } else if normalized.contains("elevador") {
+        vec![
+            checklist_item("Confirmar elevador afetado", true),
+            checklist_item("Contactar fornecedor certificado", true),
+            checklist_item("Sinalizar indisponibilidade aos moradores", true),
+            checklist_item("Validar reposicao do servico", true),
+        ]
+    } else if normalized.contains("agua") || normalized.contains("infiltr") {
+        vec![
+            checklist_item("Localizar origem provavel", true),
+            checklist_item("Registar fotos antes da intervencao", true),
+            checklist_item("Avaliar risco de danos adicionais", true),
+            checklist_item("Registar fotos depois da intervencao", false),
+        ]
+    } else {
+        vec![
+            checklist_item("Validar descricao da avaria", true),
+            checklist_item("Registar evidencia visual", false),
+            checklist_item("Atualizar estado operacional", true),
+        ]
+    }
+}
+
+fn checklist_item(label: &str, required: bool) -> AvariaChecklistItem {
+    AvariaChecklistItem {
+        id: Uuid::new_v4().to_string(),
+        label: label.to_string(),
+        required,
+        completed: false,
+    }
+}
+
+fn calculate_sla_state(sla_due_at: &str, status: &AvariaStatus) -> SlaState {
+    if status.is_closed() {
+        return SlaState::DentroPrazo;
+    }
+
+    let Ok(due_at) = DateTime::parse_from_rfc3339(sla_due_at) else {
+        return SlaState::SemSla;
+    };
+    let remaining = due_at.with_timezone(&Utc) - Utc::now();
+    if remaining <= Duration::zero() {
+        SlaState::Expirado
+    } else if remaining <= Duration::hours(2) {
+        SlaState::EmRisco
+    } else if remaining <= Duration::hours(8) {
+        SlaState::ProximoLimite
+    } else {
+        SlaState::DentroPrazo
+    }
+}
+
+fn normalize_domain_text(value: &str) -> String {
+    value
+        .to_lowercase()
+        .chars()
+        .map(|character| match character {
+            'á' | 'à' | 'ã' | 'â' => 'a',
+            'é' | 'ê' => 'e',
+            'í' => 'i',
+            'ó' | 'õ' | 'ô' => 'o',
+            'ú' => 'u',
+            'ç' => 'c',
+            other => other,
+        })
+        .collect()
 }
 
 fn default_buildings(condominium: &str) -> Vec<Building> {
@@ -1183,5 +1897,43 @@ mod tests {
         let dashboard = store.dashboard(user);
 
         assert_eq!(dashboard.operational_summary[0].label, "1 avaria critica");
+    }
+
+    #[test]
+    fn seeded_tickets_gain_operational_defaults() {
+        let store = seeded_store();
+        let ticket = &store.tickets[0];
+
+        assert!(ticket.priority.is_critical());
+        assert!(!ticket.timeline.is_empty());
+        assert!(!ticket.checklist.is_empty());
+        assert!(!ticket.sla_due_at.is_empty());
+    }
+
+    #[test]
+    fn status_confirmation_requires_resolved_ticket() {
+        assert!(!AvariaStatus::Aberta.can_transition_to(&AvariaStatus::Confirmada));
+        assert!(AvariaStatus::Resolvida.can_transition_to(&AvariaStatus::Confirmada));
+        assert!(!AvariaStatus::Fechada.can_transition_to(&AvariaStatus::Atribuida));
+        assert!(AvariaStatus::Fechada.can_transition_to(&AvariaStatus::Reaberta));
+    }
+
+    #[test]
+    fn ticket_detects_replayed_client_actions() {
+        let mut store = seeded_store();
+        let ticket = &mut store.tickets[0];
+
+        assert!(!ticket.has_client_action(Some("offline-1")));
+
+        ticket.add_event_with_client_action(
+            AvariaEventType::MessageAdded,
+            "Mensagem adicionada",
+            "Teste offline",
+            "Tecnico",
+            Some("offline-1".to_string()),
+        );
+
+        assert!(ticket.has_client_action(Some("offline-1")));
+        assert!(!ticket.has_client_action(Some("offline-2")));
     }
 }
