@@ -1,0 +1,11 @@
+{
+  "remoteName": "origin",
+  "projects": [
+    {
+      "id": "prj_Ujf8D20P7K0n0lLI4nT6dqSc04G4",
+      "name": "gestisac-web",
+      "directory": "apps/web",
+      "orgId": "team_fPcBf4h51RlzSe0Gt1fmPd3P"
+    }
+  ]
+}
