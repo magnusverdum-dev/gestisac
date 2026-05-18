@@ -51,6 +51,12 @@
       "description": "Abrir o centro operacional."
     },
     {
+      "name": "Condomínios",
+      "short_name": "Condomínios",
+      "url": "/condominios",
+      "description": "Abrir a gestão operacional de condomínios."
+    },
+    {
       "name": "Documentos",
       "short_name": "Documentos",
       "url": "/documentos",

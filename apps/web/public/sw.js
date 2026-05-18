@@ -1,8 +1,10 @@
-const CACHE_NAME = 'gestisac-pwa-v3';
+const CACHE_NAME = 'gestisac-pwa-v4-condominios';
 const APP_SHELL = [
   '/',
   '/dashboard',
+  '/condominios',
   '/documentos',
+  '/tickets',
   '/offline.html',
   '/manifest.webmanifest',
   '/icons/gestisac-192.png',

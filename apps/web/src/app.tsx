@@ -1,6 +1,7 @@
 import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 import { LoginPage } from './components/auth/LoginPage';
 import { DashboardPage } from './components/dashboard/DashboardPage';
+import { CondominiumsPage } from './components/pages/CondominiumsPage';
 import { PageOverview } from './components/pages/PageOverview';
 import { AppShell } from './components/shell/AppShell';
 import {
@@ -95,6 +96,12 @@ export const App = component$(() => {
     resources.value = resourceData;
     session.user = dashboardData.user;
     apiStatus.value = 'online';
+  });
+
+  const refreshWorkspace$ = $(async () => {
+    if (session.token) {
+      await loadWorkspace$(session.token);
+    }
   });
 
   const navigate$ = $((path: string) => {
@@ -221,7 +228,6 @@ export const App = component$(() => {
     try {
       await updateActiveCondominium(session.token, name);
       await loadWorkspace$(session.token);
-      await navigate$('/dashboard');
       notice.value = `Condominio ativo alterado para ${name}.`;
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Nao foi possivel alterar o condominio ativo';
@@ -552,6 +558,13 @@ export const App = component$(() => {
           navigate$={navigate$}
           onQuickAction$={runDashboardAction$}
           onModuleCommand$={runModuleCommand$}
+        />
+      ) : page.path === '/condominios' ? (
+        <CondominiumsPage
+          token={session.token}
+          resources={resources.value}
+          isSaving={isSaving.value}
+          onRefresh$={refreshWorkspace$}
         />
       ) : (
         <PageOverview

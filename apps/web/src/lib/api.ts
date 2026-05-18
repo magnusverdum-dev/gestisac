@@ -75,6 +75,314 @@ export type Condominium = {
   residents: number;
   status: string;
   notice: string;
+  internalCode?: string;
+  externalReference?: string;
+  condominiumType?: string;
+  subtype?: string;
+  managementStartDate?: string;
+  managementEndDate?: string;
+  manager?: string;
+  team?: string;
+  managementCompany?: string;
+  shortDescription?: string;
+  administrativeNotes?: string;
+  tags?: string[];
+  archived?: boolean;
+  archivedAt?: string | null;
+  address?: CondominiumAddress;
+  structure?: CondominiumStructure;
+  operationalStatus?: CondominiumOperationalStatus;
+  primaryImageUrl?: string;
+  blocksDetailed?: CondominiumBlock[];
+  floorsDetailed?: CondominiumFloor[];
+  zones?: CondominiumZone[];
+  equipment?: CondominiumEquipment[];
+  contacts?: CondominiumContact[];
+  managedDocuments?: CondominiumManagedDocument[];
+  media?: CondominiumMedia[];
+  internalNotesRegistry?: CondominiumInternalNote[];
+  history?: CondominiumHistoryEvent[];
+  onboardingDraft?: CondominiumOnboardingDraft | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type CondominiumAddress = {
+  street: string;
+  number: string;
+  lot: string;
+  addressBlock: string;
+  postalCode: string;
+  locality: string;
+  parish: string;
+  municipality: string;
+  district: string;
+  country: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  googleMapsUrl: string;
+  appleMapsUrl: string;
+  accessNotes: string;
+  mainEntryPoint: string;
+  technicalEntryPoint: string;
+  garageEntryPoint: string;
+  accessRestrictions: string;
+  visualReference: string;
+};
+
+export type CondominiumStructure = {
+  totalFractions: number;
+  residentialFractions: number;
+  commercialFractions: number;
+  garagesCount: number;
+  storageUnitsCount: number;
+  shopsCount: number;
+  blocksCount: number;
+  entrancesCount: number;
+  floorsAboveGround: number;
+  basementsCount: number;
+  technicalFloorsCount: number;
+  elevatorsCount: number;
+  stairsCount: number;
+  parkingSpacesCount: number;
+  hasGarden: boolean;
+  hasPool: boolean;
+  hasCondominiumRoom: boolean;
+  hasTrashHouse: boolean;
+  hasAccessibleRoof: boolean;
+  hasTechnicalRoof: boolean;
+  hasSolarPanels: boolean;
+  hasCctv: boolean;
+  hasPorterDesk: boolean;
+  hasDoorman: boolean;
+  hasSecurity: boolean;
+  constructionYear?: number | null;
+  lastRenovationYear?: number | null;
+  commonAreaEstimate: string;
+  structuralNotes: string;
+};
+
+export type CondominiumOperationalStatus = {
+  generalStatus: string;
+  alertLevel: string;
+  summary: string;
+  reason: string;
+  updatedBy: string;
+  updatedAt: string;
+};
+
+export type CondominiumBlock = {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  specificAddress: string;
+  mainEntry: string;
+  floorsCount: number;
+  basementsCount: number;
+  fractionsCount: number;
+  elevatorsCount: number;
+  stairsCount: number;
+  garagesCount: number;
+  operationalStatus: string;
+  accessNotes: string;
+  internalNotes: string;
+  archived: boolean;
+};
+
+export type CondominiumFloor = {
+  id: string;
+  blockId: string;
+  name: string;
+  number: string;
+  floorType: string;
+  description: string;
+  fractionsCount: number;
+  operationalStatus: string;
+  notes: string;
+};
+
+export type CondominiumZone = {
+  id: string;
+  blockId: string;
+  floorId: string;
+  name: string;
+  zoneType: string;
+  description: string;
+  operationalStatus: string;
+  alertLevel: string;
+  qrCodeReference: string;
+  publicQrUrl: string;
+  internalLocation: string;
+  accessNotes: string;
+  technicalNotes: string;
+  imageUrl: string;
+  planUrl: string;
+};
+
+export type CondominiumEquipment = {
+  id: string;
+  blockId: string;
+  floorId: string;
+  zoneId: string;
+  name: string;
+  equipmentType: string;
+  brand: string;
+  model: string;
+  serialNumber: string;
+  internalReference: string;
+  supplier: string;
+  maintenanceCompany: string;
+  installationDate: string;
+  lastMaintenanceDate: string;
+  nextMaintenanceDate: string;
+  maintenanceFrequency: string;
+  status: string;
+  criticality: string;
+  warrantyUntil: string;
+  contractReference: string;
+  technicalNotes: string;
+  documentIds: string[];
+  mediaIds: string[];
+};
+
+export type CondominiumContact = {
+  id: string;
+  contactType: string;
+  name: string;
+  company: string;
+  role: string;
+  phone: string;
+  alternatePhone: string;
+  email: string;
+  schedule: string;
+  service: string;
+  isEmergency: boolean;
+  priority: string;
+  favorite: boolean;
+  notes: string;
+  contractReference: string;
+};
+
+export type CondominiumManagedDocument = {
+  id: string;
+  title: string;
+  documentType: string;
+  description: string;
+  fileName: string;
+  fileUrl: string;
+  blockId: string;
+  zoneId: string;
+  equipmentId: string;
+  documentDate: string;
+  expiryDate: string;
+  uploadedBy: string;
+  uploadedAt: string;
+  version: string;
+  status: string;
+  notes: string;
+};
+
+export type CondominiumMedia = {
+  id: string;
+  mediaType: string;
+  title: string;
+  fileName: string;
+  fileUrl: string;
+  blockId: string;
+  floorId: string;
+  zoneId: string;
+  description: string;
+  isPrimary: boolean;
+  createdAt: string;
+};
+
+export type CondominiumInternalNote = {
+  id: string;
+  noteType: string;
+  title: string;
+  content: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  visibility: string;
+  priority: string;
+  pinned: boolean;
+};
+
+export type CondominiumHistoryEvent = {
+  id: string;
+  eventType: string;
+  description: string;
+  userName: string;
+  timestamp: string;
+  source: string;
+  oldData: string;
+  newData: string;
+  entity: string;
+};
+
+export type CondominiumOnboardingDraft = {
+  currentStep: number;
+  completedSteps: number[];
+  isQuickMode: boolean;
+  savedAt: string;
+};
+
+export type CompletenessReport = {
+  percentage: number;
+  complete: boolean;
+  missingItems: string[];
+  categories: Array<{
+    id: string;
+    label: string;
+    complete: boolean;
+    missingItems: string[];
+  }>;
+};
+
+export type CondominiumDetailResponse = {
+  condominium: Condominium;
+  completeness: CompletenessReport;
+};
+
+export type ImportRowInput = {
+  name: string;
+  internalCode: string;
+  condominiumType: string;
+  status: string;
+  street: string;
+  number: string;
+  postalCode: string;
+  locality: string;
+  parish: string;
+  municipality: string;
+  district: string;
+  country: string;
+  totalFractions: number;
+  blocksCount: number;
+  elevatorsCount: number;
+  manager: string;
+  notes: string;
+};
+
+export type ImportPreview = {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  rows: Array<{
+    rowNumber: number;
+    valid: boolean;
+    errors: string[];
+    values: ImportRowInput;
+  }>;
+};
+
+export type ImportReport = {
+  created: number;
+  skipped: number;
+  errors: string[];
+  condominiums: Condominium[];
 };
 
 export type Building = {
@@ -440,6 +748,122 @@ export async function getResources(token: string): Promise<ResourceState> {
     auditLog,
     permissions
   };
+}
+
+export async function getCondominiumDetail(
+  token: string,
+  id: string
+): Promise<CondominiumDetailResponse> {
+  return apiRequest(`/api/condominiums/${id}`, { token });
+}
+
+export async function getCondominiumCompleteness(
+  token: string,
+  id: string
+): Promise<CompletenessReport> {
+  return apiRequest(`/api/condominiums/${id}/completeness`, { token });
+}
+
+export async function getCondominiumHistory(
+  token: string,
+  id: string
+): Promise<CondominiumHistoryEvent[]> {
+  return apiRequest(`/api/condominiums/${id}/history`, { token });
+}
+
+export async function updateCondominiumSection(
+  token: string,
+  id: string,
+  section: 'identification' | 'address' | 'structure' | 'operational-status',
+  payload: Record<string, unknown>
+): Promise<Condominium> {
+  return apiRequest(`/api/condominiums/${id}/${section}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function archiveCondominium(token: string, id: string): Promise<Condominium> {
+  return apiRequest(`/api/condominiums/${id}/archive`, {
+    method: 'POST',
+    token
+  });
+}
+
+export async function saveCondominiumDraft(
+  token: string,
+  id: string,
+  payload: Record<string, unknown>
+): Promise<Condominium> {
+  return apiRequest(`/api/condominiums/${id}/onboarding-draft`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createCondominiumSubresource<T>(
+  token: string,
+  condominiumId: string,
+  resource: 'blocks' | 'floors' | 'zones' | 'equipment' | 'contacts' | 'documents' | 'media' | 'notes',
+  payload: Record<string, unknown>
+): Promise<T> {
+  return apiRequest(`/api/condominiums/${condominiumId}/${resource}`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateCondominiumSubresource<T>(
+  token: string,
+  condominiumId: string,
+  resource: 'blocks' | 'floors' | 'zones' | 'equipment' | 'contacts' | 'documents' | 'media' | 'notes',
+  resourceId: string,
+  payload: Record<string, unknown>
+): Promise<T> {
+  return apiRequest(`/api/condominiums/${condominiumId}/${resource}/${resourceId}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteCondominiumSubresource<T>(
+  token: string,
+  condominiumId: string,
+  resource: 'blocks' | 'floors' | 'zones' | 'equipment' | 'contacts' | 'documents' | 'media' | 'notes',
+  resourceId: string
+): Promise<T> {
+  return apiRequest(`/api/condominiums/${condominiumId}/${resource}/${resourceId}`, {
+    method: 'DELETE',
+    token
+  });
+}
+
+export async function previewCondominiumImport(
+  token: string,
+  csv: string,
+  delimiter = ','
+): Promise<ImportPreview> {
+  return apiRequest('/api/condominiums/import/preview', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ csv, delimiter })
+  });
+}
+
+export async function commitCondominiumImport(
+  token: string,
+  rows: ImportRowInput[],
+  skipExisting = true
+): Promise<ImportReport> {
+  return apiRequest('/api/condominiums/import/commit', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ rows, skipExisting })
+  });
 }
 
 export async function getAccounting(token: string): Promise<AccountingState> {

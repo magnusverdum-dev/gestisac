@@ -26,6 +26,7 @@ const MAX_DOCUMENT_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct CondominiumInput {
     pub name: String,
     pub location: String,
@@ -253,6 +254,7 @@ pub async fn update_active_condominium(
     Ok(Json(requested_name))
 }
 
+#[allow(dead_code)]
 pub async fn condominiums(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -263,6 +265,7 @@ pub async fn condominiums(
     Ok(Json(paginate(&store.condominiums, &params)))
 }
 
+#[allow(dead_code)]
 pub async fn create_condominium(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -272,7 +275,7 @@ pub async fn create_condominium(
     validate_required(&input.name, "Nome do condominio")?;
     validate_required(&input.location, "Localizacao")?;
 
-    let item = Condominium {
+    let mut item = Condominium {
         id: new_id(),
         name: input.name.trim().to_string(),
         location: input.location.trim().to_string(),
@@ -283,7 +286,9 @@ pub async fn create_condominium(
         notice: input
             .notice
             .unwrap_or_else(|| "Sem avisos criticos".to_string()),
+        ..Default::default()
     };
+    item.ensure_profile_defaults();
 
     let mut store = state.store.write().await;
     store.condominiums.push(item.clone());
@@ -300,6 +305,7 @@ pub async fn create_condominium(
     Ok(Json(item))
 }
 
+#[allow(dead_code)]
 pub async fn update_condominium(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -338,6 +344,7 @@ pub async fn update_condominium(
     Ok(Json(response))
 }
 
+#[allow(dead_code)]
 pub async fn delete_condominium(
     State(state): State<AppState>,
     headers: HeaderMap,
