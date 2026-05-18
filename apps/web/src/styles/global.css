@@ -345,7 +345,6 @@ button {
 
 .search-result,
 .notification-item,
-.condominium-panel button,
 .popover-action {
   width: 100%;
   min-height: 48px;
@@ -360,23 +359,19 @@ button {
 
 .search-result + .search-result,
 .notification-item + .notification-item,
-.condominium-panel button + button,
 .popover-action {
   margin-top: 8px;
 }
 
 .search-result:hover,
 .notification-item:hover,
-.condominium-panel button:hover,
-.condominium-panel button.active,
 .popover-action:hover {
   border-color: rgba(244, 210, 122, 0.28);
   background: rgba(217, 164, 65, 0.1);
 }
 
 .search-result strong,
-.notification-item strong,
-.condominium-panel strong {
+.notification-item strong {
   display: block;
   overflow: hidden;
   color: #fff;
@@ -387,7 +382,6 @@ button {
 
 .search-result span,
 .notification-item span,
-.condominium-panel span,
 .empty-popover {
   display: block;
   margin-top: 3px;
@@ -433,7 +427,6 @@ kbd {
 .system-status,
 .urgent-pill,
 .notification,
-.condo-selector,
 .user-pill {
   min-height: 42px;
   border: 1px solid var(--border);
@@ -463,7 +456,6 @@ kbd {
 
 .urgent-pill,
 .notification,
-.condo-selector,
 .user-pill {
   border-radius: 999px;
   cursor: pointer;
@@ -525,17 +517,6 @@ kbd {
   font-weight: 800;
 }
 
-.condo-selector {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  color: #e2e8f0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .user-pill {
   width: 44px;
   height: 44px;
@@ -543,7 +524,6 @@ kbd {
 
 .urgent-pill:hover,
 .notification:hover,
-.condo-selector:hover,
 .user-pill:hover,
 .quick-action:hover,
 .module-card:hover,
@@ -558,11 +538,7 @@ kbd {
   margin: 0 auto;
 }
 
-.hero-row {
-  display: grid;
-  grid-template-columns: minmax(230px, 0.8fr) minmax(380px, 1.1fr) 330px;
-  gap: 16px;
-  align-items: end;
+.dashboard-intro {
   margin-bottom: 18px;
 }
 
@@ -2367,15 +2343,6 @@ kbd {
 }
 
 @media (max-width: 1220px) {
-  .hero-row {
-    grid-template-columns: 1fr;
-  }
-
-  .urgent-notice,
-  .operations-panel {
-    width: 100%;
-  }
-
   .topbar {
     align-items: stretch;
     flex-direction: column;
@@ -2461,12 +2428,8 @@ kbd {
   .dashboard,
   .topbar,
   .topbar-actions,
-  .hero-row,
-  .urgent-notice,
-  .operations-panel,
   .quick-grid,
-  .module-grid,
-  .alert-strip {
+  .module-grid {
     width: 100%;
     max-width: 100%;
     min-width: 0;
@@ -2547,7 +2510,6 @@ kbd {
   }
 
   .urgent-pill,
-  .condo-selector,
   .user-pill {
     width: 100%;
     justify-content: center;
@@ -2561,18 +2523,6 @@ kbd {
   .urgent-pill {
     grid-column: 1 / -1;
     min-width: 0;
-  }
-
-  .condo-selector {
-    min-width: 0;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .condo-selector .mini-building {
-    display: none;
   }
 
   .quick-grid {

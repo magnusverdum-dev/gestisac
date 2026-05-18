@@ -1,5 +1,5 @@
 import { component$, Slot, type PropFunction } from '@builder.io/qwik';
-import type { Condominium, DashboardResponse, GlobalSearchResult } from '../../lib/api';
+import type { DashboardResponse, GlobalSearchResult } from '../../lib/api';
 import { Sidebar } from './Sidebar';
 import { Topbar, type ApiStatus } from './Topbar';
 
@@ -7,10 +7,8 @@ type AppShellProps = {
   currentPath: string;
   apiStatus: ApiStatus;
   dashboard: DashboardResponse;
-  condominiums: Condominium[];
   searchResults: GlobalSearchResult[];
   navigate$: PropFunction<(path: string) => void>;
-  onSelectCondominium$: PropFunction<(name: string) => void>;
   onLogout$: PropFunction<() => void>;
 };
 
@@ -27,14 +25,11 @@ export const AppShell = component$((props: AppShellProps) => {
       <section class="main-stage">
         <Topbar
           apiStatus={props.apiStatus}
-          activeCondominium={props.dashboard.activeCondominium}
           alertCount={props.dashboard.alerts.length}
           alerts={props.dashboard.alerts}
-          condominiums={props.condominiums}
           searchResults={props.searchResults}
           user={props.dashboard.user}
           navigate$={props.navigate$}
-          onSelectCondominium$={props.onSelectCondominium$}
           onLogout$={props.onLogout$}
         />
         <Slot />

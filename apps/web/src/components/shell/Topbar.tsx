@@ -1,25 +1,21 @@
 import { component$, useSignal, type PropFunction } from '@builder.io/qwik';
-import type { AlertItem, Condominium, GlobalSearchResult, PublicUser } from '../../lib/api';
+import type { AlertItem, GlobalSearchResult, PublicUser } from '../../lib/api';
 
 export type ApiStatus = 'online' | 'offline' | 'checking';
 
 type TopbarProps = {
   apiStatus: ApiStatus;
-  activeCondominium: string;
   alertCount: number;
   alerts: AlertItem[];
-  condominiums: Condominium[];
   searchResults: GlobalSearchResult[];
   user: PublicUser;
   navigate$: PropFunction<(path: string) => void>;
-  onSelectCondominium$: PropFunction<(name: string) => void>;
   onLogout$: PropFunction<() => void>;
 };
 
 export const Topbar = component$((props: TopbarProps) => {
   const searchQuery = useSignal('');
   const alertsOpen = useSignal(false);
-  const condominiumsOpen = useSignal(false);
   const statusLabel =
     props.apiStatus === 'online'
       ? 'Sistema ativo'
@@ -46,7 +42,6 @@ export const Topbar = component$((props: TopbarProps) => {
           onInput$={(event) => {
             searchQuery.value = (event.target as HTMLInputElement).value;
             alertsOpen.value = false;
-            condominiumsOpen.value = false;
           }}
         />
         <kbd>Ctrl K</kbd>
@@ -94,7 +89,6 @@ export const Topbar = component$((props: TopbarProps) => {
             type="button"
             onClick$={() => {
               alertsOpen.value = !alertsOpen.value;
-              condominiumsOpen.value = false;
             }}
           >
             <span>{props.alertCount}</span>
@@ -126,38 +120,6 @@ export const Topbar = component$((props: TopbarProps) => {
               >
                 Ver centro operacional
               </button>
-            </div>
-          ) : null}
-        </div>
-        <div class="topbar-menu-anchor">
-          <button
-            class="condo-selector"
-            type="button"
-            onClick$={() => {
-              condominiumsOpen.value = !condominiumsOpen.value;
-              alertsOpen.value = false;
-            }}
-          >
-            <span class="mini-building">B</span>
-            {props.activeCondominium}
-          </button>
-          {condominiumsOpen.value ? (
-            <div class="topbar-popover condominium-panel">
-              <small>Selecionar condominio ativo</small>
-              {props.condominiums.map((condominium) => (
-                <button
-                  class={condominium.name === props.activeCondominium ? 'active' : ''}
-                  key={condominium.id}
-                  type="button"
-                  onClick$={async () => {
-                    condominiumsOpen.value = false;
-                    await props.onSelectCondominium$(condominium.name);
-                  }}
-                >
-                  <strong>{condominium.name}</strong>
-                  <span>{condominium.location} - {condominium.status}</span>
-                </button>
-              ))}
             </div>
           ) : null}
         </div>

@@ -30,7 +30,6 @@ import {
   me,
   refreshSession,
   uploadDocument,
-  updateActiveCondominium,
   updateResource,
   type ApiStatus,
   type CreateResource,
@@ -213,27 +212,6 @@ export const App = component$(() => {
     }
 
     await navigate$(targetPath);
-  });
-
-  const selectCondominium$ = $(async (name: string) => {
-    if (!session.token) {
-      error.value = 'Sessao expirada. Entra novamente.';
-      notice.value = '';
-      return;
-    }
-
-    error.value = '';
-    notice.value = '';
-    isSaving.value = true;
-    try {
-      await updateActiveCondominium(session.token, name);
-      await loadWorkspace$(session.token);
-      notice.value = `Condominio ativo alterado para ${name}.`;
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Nao foi possivel alterar o condominio ativo';
-    } finally {
-      isSaving.value = false;
-    }
   });
 
   const createRecord$ = $(async (resource: ResourceEndpoint, payload: Record<string, string | number>) => {
@@ -544,10 +522,8 @@ export const App = component$(() => {
       currentPath={page.path}
       apiStatus={apiStatus.value}
       dashboard={dashboard.value}
-      condominiums={resources.value.condominiums}
       searchResults={searchResults}
       navigate$={navigate$}
-      onSelectCondominium$={selectCondominium$}
       onLogout$={logout$}
     >
       {error.value ? <div class="app-error glass-panel">{error.value}</div> : null}
