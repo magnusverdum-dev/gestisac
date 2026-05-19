@@ -1,4 +1,4 @@
-import { component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
+﻿import { component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
 import type {
   CreateResource,
   DocumentPreview,
@@ -41,8 +41,6 @@ export const PageOverview = component$((props: PageOverviewProps) => {
   const filtersVisible = useSignal(false);
   const searchQuery = useSignal('');
   const statusFilter = useSignal('Todos');
-  const selectedDocumentTemplate = useSignal(props.page.documentTemplates?.[0]?.id ?? '');
-  const documentFormat = useSignal<'pdf' | 'txt'>('pdf');
   const activeOption = props.page.createOptions?.[activeCreateIndex.value];
   const createConfig = activeOption ??
     (props.page.resource
@@ -230,98 +228,6 @@ export const PageOverview = component$((props: PageOverviewProps) => {
         </form>
       ) : null}
 
-      {props.page.documentTemplates?.length ? (
-        <section class="document-factory glass-panel" aria-label="Gerador de documentos">
-          <header>
-            <div>
-              <small>Gerador documental</small>
-              <h2>Escolhe o documento que queres criar</h2>
-              <p>
-                O ficheiro e gerado pela API com informacao do condominio, condominos,
-                contabilidade, assembleias e manutencao.
-              </p>
-            </div>
-            <div class="format-toggle" aria-label="Formato do documento">
-              <button
-                class={documentFormat.value === 'pdf' ? 'active' : ''}
-                type="button"
-                onClick$={() => {
-                  documentFormat.value = 'pdf';
-                }}
-              >
-                PDF
-              </button>
-              <button
-                class={documentFormat.value === 'txt' ? 'active' : ''}
-                type="button"
-                onClick$={() => {
-                  documentFormat.value = 'txt';
-                }}
-              >
-                Texto
-              </button>
-            </div>
-          </header>
-
-          <div class="document-template-grid">
-            {props.page.documentTemplates.map((template) => (
-              <button
-                class={selectedDocumentTemplate.value === template.id ? 'active' : ''}
-                key={template.id}
-                type="button"
-                onClick$={() => {
-                  selectedDocumentTemplate.value = template.id;
-                }}
-              >
-                <small>{template.category}</small>
-                <strong>{template.label}</strong>
-                <span>{template.description}</span>
-                <em>{template.dataSources.join(' + ')}</em>
-              </button>
-            ))}
-          </div>
-
-          <form
-            class="document-generator-form"
-            preventdefault:submit
-            onSubmit$={async (event) => {
-              const form = event.target as HTMLFormElement;
-              const formData = new FormData(form);
-              await props.onGenerateDocument$({
-                template: selectedDocumentTemplate.value,
-                condominium: String(formData.get('condominium') ?? '').trim(),
-                resident: String(formData.get('resident') ?? '').trim(),
-                fraction: String(formData.get('fraction') ?? '').trim(),
-                notes: String(formData.get('notes') ?? '').trim(),
-                format: documentFormat.value
-              });
-            }}
-          >
-            <label>
-              <span>Condominio</span>
-              <input name="condominium" placeholder="Condomínio Vila Verde" />
-            </label>
-            <label>
-              <span>Condomino</span>
-              <input name="resident" placeholder="Maria Fernandes" />
-            </label>
-            <label>
-              <span>Fracao</span>
-              <input name="fraction" placeholder="A-1" />
-            </label>
-            <label class="document-notes">
-              <span>Notas / contexto</span>
-              <textarea
-                name="notes"
-                placeholder="Ex.: assembleia ordinaria, regularizacao ate 20 de maio, intervencao urgente no elevador..."
-              />
-            </label>
-            <button class="primary-action" type="submit" disabled={props.isSaving}>
-              {props.isSaving ? 'A gerar...' : `Gerar ${documentFormat.value.toUpperCase()}`}
-            </button>
-          </form>
-        </section>
-      ) : null}
 
       <section class="summary-grid" aria-label={`Resumo de ${props.page.title}`}>
         {props.page.stats.map((stat) => (
@@ -396,45 +302,6 @@ export const PageOverview = component$((props: PageOverviewProps) => {
         </section>
       ) : null}
 
-      {props.page.path === '/documentos' && props.documentPreview ? (
-        <section class="document-preview glass-panel" aria-label="Preview do documento">
-          <header>
-            <div>
-              <small>Arquivo documental</small>
-              <h2>{props.documentPreview.document.title}</h2>
-              <span>
-                {props.documentPreview.document.type} - {props.documentPreview.document.condominium}
-              </span>
-            </div>
-            <div class="document-preview-actions">
-              <button type="button" onClick$={() => props.onDownloadDocument$(props.documentPreview!.document.id)}>
-                Download
-              </button>
-              <button type="button" onClick$={props.onCloseDocumentPreview$}>
-                Fechar preview
-              </button>
-            </div>
-          </header>
-          <div class="document-meta-grid">
-            <article>
-              <small>Estado</small>
-              <strong>{props.documentPreview.document.status}</strong>
-            </article>
-            <article>
-              <small>Ficheiro</small>
-              <strong>{props.documentPreview.document.fileName || 'Sem ficheiro'}</strong>
-            </article>
-            <article>
-              <small>Formato</small>
-              <strong>{props.documentPreview.document.mimeType || 'Metadados'}</strong>
-            </article>
-          </div>
-          <pre class="document-preview-content">
-            {props.documentPreview.content ??
-              'Este documento existe no arquivo e pode ser descarregado. Preview textual indisponivel para este formato.'}
-          </pre>
-        </section>
-      ) : null}
 
       <section class="records-panel glass-panel">
         <header>
@@ -512,74 +379,78 @@ export const PageOverview = component$((props: PageOverviewProps) => {
                 <small>{record.status}</small>
                 <div class="record-actions">
                   <button
+                    class="primary-action"
                     type="button"
                     onClick$={() => {
                       detailIndex.value = detailIndex.value === index ? -1 : index;
                     }}
                   >
-                    Detalhes
+                    Abrir
                   </button>
-                  {record.quickActions?.map((quickAction) => (
-                    <button
-                      class={`quick-record-action ${quickAction.tone ?? 'primary'}`}
-                      key={quickAction.label}
-                      type="button"
-                      disabled={props.isSaving}
-                      onClick$={async () => {
-                        if (quickAction.action.type === 'update') {
-                          await props.onUpdate$(
-                            quickAction.action.resource,
-                            quickAction.action.id,
-                            quickAction.action.payload
-                          );
-                        } else if (quickAction.action.type === 'create') {
-                          await props.onCreate$(
-                            quickAction.action.resource,
-                            quickAction.action.payload
-                          );
-                        } else if (quickAction.action.type === 'reportPreview') {
-                          await props.onPreviewReport$(quickAction.action.reportId);
-                        } else if (quickAction.action.type === 'reportExport') {
-                          await props.onExportReport$(quickAction.action.reportId);
-                        } else if (quickAction.action.type === 'documentPreview') {
-                          await props.onPreviewDocument$(quickAction.action.documentId);
-                        } else {
-                          await props.onDownloadDocument$(quickAction.action.documentId);
-                        }
+                  <details class="simple-more-menu">
+                    <summary>Mais</summary>
+                    {record.quickActions?.map((quickAction) => (
+                      <button
+                        class={`quick-record-action ${quickAction.tone ?? 'primary'}`}
+                        key={quickAction.label}
+                        type="button"
+                        disabled={props.isSaving}
+                        onClick$={async () => {
+                          if (quickAction.action.type === 'update') {
+                            await props.onUpdate$(
+                              quickAction.action.resource,
+                              quickAction.action.id,
+                              quickAction.action.payload
+                            );
+                          } else if (quickAction.action.type === 'create') {
+                            await props.onCreate$(
+                              quickAction.action.resource,
+                              quickAction.action.payload
+                            );
+                          } else if (quickAction.action.type === 'reportPreview') {
+                            await props.onPreviewReport$(quickAction.action.reportId);
+                          } else if (quickAction.action.type === 'reportExport') {
+                            await props.onExportReport$(quickAction.action.reportId);
+                          } else if (quickAction.action.type === 'documentPreview') {
+                            await props.onPreviewDocument$(quickAction.action.documentId);
+                          } else {
+                            await props.onDownloadDocument$(quickAction.action.documentId);
+                          }
 
-                        detailIndex.value = -1;
-                        editIndex.value = -1;
-                      }}
-                    >
-                      {quickAction.label}
-                    </button>
-                  ))}
-                  {record.canEdit && record.fields?.length ? (
-                    <button
-                      type="button"
-                      onClick$={() => {
-                        isCreating.value = false;
-                        editIndex.value = editIndex.value === index ? -1 : index;
-                      }}
-                    >
-                      Editar
-                    </button>
-                  ) : null}
-                  {record.canDelete && record.id && record.resource ? (
-                    <button
-                      class="danger-action"
-                      type="button"
-                      onClick$={async () => {
-                        if (window.confirm(`Apagar "${record.title}"?`)) {
-                          await props.onDelete$(record.resource!, record.id!);
                           detailIndex.value = -1;
                           editIndex.value = -1;
-                        }
-                      }}
-                    >
-                      Apagar
-                    </button>
-                  ) : null}
+                        }}
+                      >
+                        {quickAction.label}
+                      </button>
+                    ))}
+                    {record.canEdit && record.fields?.length ? (
+                      <button
+                        type="button"
+                        onClick$={() => {
+                          isCreating.value = false;
+                          editIndex.value = editIndex.value === index ? -1 : index;
+                        }}
+                      >
+                        Editar
+                      </button>
+                    ) : null}
+                    {record.canDelete && record.id && record.resource ? (
+                      <button
+                        class="danger-action"
+                        type="button"
+                        onClick$={async () => {
+                          if (window.confirm(`Apagar "${record.title}"?`)) {
+                            await props.onDelete$(record.resource!, record.id!);
+                            detailIndex.value = -1;
+                            editIndex.value = -1;
+                          }
+                        }}
+                      >
+                        Apagar
+                      </button>
+                    ) : null}
+                  </details>
                 </div>
                 {detailIndex.value === index ? (
                   <div class="record-detail">
@@ -610,3 +481,4 @@ export const PageOverview = component$((props: PageOverviewProps) => {
     </section>
   );
 });
+

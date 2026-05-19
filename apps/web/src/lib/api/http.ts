@@ -1,0 +1,85 @@
+import { canUseBrowserDemoApi, demoApiRequest } from './demo';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') ?? '';
+
+export async function apiRequest<T>(
+  path: string,
+  options: {
+    method?: string;
+    token?: string;
+    body?: BodyInit;
+  } = {}
+): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json'
+  };
+
+  if (options.body) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  if (options.token) {
+    headers.Authorization = `Bearer ${options.token}`;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(resolveApiUrl(path), {
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body
+    });
+  } catch (error) {
+    if (canUseBrowserDemoApi()) {
+      return demoApiRequest<T>(path, options);
+    }
+
+    throw error;
+  }
+
+  if (!response.ok) {
+    if (canUseBrowserDemoApi(response.status)) {
+      return demoApiRequest<T>(path, options);
+    }
+
+    const message = await response
+      .json()
+      .then((body) => body.message || 'Pedido falhou')
+      .catch(() => 'Pedido falhou');
+    throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  if (isHtmlFallbackResponse(response)) {
+    return demoApiRequest<T>(path, options);
+  }
+
+  return response.json().catch((error) => {
+    if (canUseBrowserDemoApi()) {
+      return demoApiRequest<T>(path, options);
+    }
+
+    throw error;
+  });
+}
+
+export function resolveApiUrl(path: string): string {
+  if (!API_BASE_URL) {
+    return path;
+  }
+
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  return `${API_BASE_URL}${path}`;
+}
+
+export function isHtmlFallbackResponse(response: Response): boolean {
+  return !API_BASE_URL &&
+    typeof window !== 'undefined' &&
+    response.headers.get('content-type')?.toLowerCase().includes('text/html') === true;
+}

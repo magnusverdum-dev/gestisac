@@ -1,4 +1,4 @@
-import { $, component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
+﻿import { $, component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
 import {
   archiveCondominium,
   commitCondominiumImport,
@@ -14,6 +14,18 @@ import {
   type ImportPreview,
   type ResourceState
 } from '../../lib/api';
+import { SimpleHubCards, SimpleSectionShell, type SimpleHubSection } from './SimpleHub';
+import {
+  Field,
+  FuturePanel,
+  History,
+  Kpi,
+  Overview,
+  SectionEditor,
+  SubresourcePanel,
+  type FieldConfig,
+  type SubresourceName
+} from './CondominiumsParts';
 
 type CondominiumsPageProps = {
   token: string;
@@ -21,25 +33,6 @@ type CondominiumsPageProps = {
   isSaving: boolean;
   onRefresh$: PropFunction<() => void>;
 };
-
-type FieldKind = 'text' | 'number' | 'textarea' | 'checkbox';
-
-type FieldConfig = {
-  name: string;
-  label: string;
-  kind?: FieldKind;
-  placeholder?: string;
-};
-
-type SubresourceName =
-  | 'blocks'
-  | 'floors'
-  | 'zones'
-  | 'equipment'
-  | 'contacts'
-  | 'documents'
-  | 'media'
-  | 'notes';
 
 const tabs = [
   'overview',
@@ -60,6 +53,8 @@ const tabs = [
 ] as const;
 
 type TabId = (typeof tabs)[number];
+
+type CondoAreaId = 'general' | 'reports' | 'documentation' | 'avarias';
 
 const tabLabels: Record<TabId, string> = {
   overview: 'Visao geral',
@@ -89,21 +84,24 @@ const emptyCompleteness: CompletenessReport = {
 export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
   const selectedId = useSignal(props.resources.condominiums[0]?.id ?? '');
   const activeTab = useSignal<TabId>('overview');
-  const viewMode = useSignal<'cards' | 'table'>('cards');
+  const activeArea = useSignal<CondoAreaId | ''>('');
+  const detailOpen = useSignal(false);
+  const creationOpen = useSignal(false);
+  const importOpen = useSignal(false);
   const search = useSignal('');
   const statusFilter = useSignal('todos');
-  const typeFilter = useSignal('todos');
   const localSaving = useSignal(false);
   const localError = useSignal('');
   const localNotice = useSignal('');
   const detail = useSignal<CondominiumDetailResponse | null>(null);
   const importPreview = useSignal<ImportPreview | null>(null);
 
+  const selectedFromDetail = detail.value?.condominium.id === selectedId.value ? detail.value.condominium : undefined;
   const selected =
-    detail.value?.condominium ??
+    selectedFromDetail ??
     props.resources.condominiums.find((item) => item.id === selectedId.value) ??
     props.resources.condominiums[0];
-  const completeness = detail.value?.completeness ?? localCompleteness(selected);
+  const completeness = selectedFromDetail ? detail.value!.completeness : localCompleteness(selected);
   const filtered = props.resources.condominiums.filter((item) => {
     const haystack = [
       item.name,
@@ -122,26 +120,16 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
     const matchesSearch = !search.value.trim() || haystack.includes(search.value.trim().toLowerCase());
     const matchesStatus =
       statusFilter.value === 'todos' || item.status?.toLowerCase() === statusFilter.value;
-    const matchesType =
-      typeFilter.value === 'todos' || item.condominiumType?.toLowerCase() === typeFilter.value;
-
-    return matchesSearch && matchesStatus && matchesType && !item.archived;
+    return matchesSearch && matchesStatus && !item.archived;
   });
   const activeCount = props.resources.condominiums.filter((item) => !item.archived).length;
-  const fractionCount = props.resources.condominiums.reduce(
-    (total, item) => total + (item.structure?.totalFractions || item.fractions || 0),
-    0
-  );
-  const alertsCount = props.resources.condominiums.filter((item) =>
-    ['critico', 'vermelho', 'com alertas', 'em manutencao'].some((flag) =>
-      `${item.operationalStatus?.generalStatus ?? ''} ${item.operationalStatus?.alertLevel ?? ''}`.toLowerCase().includes(flag)
-    )
-  ).length;
-  const incompleteCount = props.resources.condominiums.filter((item) => localCompleteness(item).percentage < 100).length;
 
   const loadDetail$ = $(async (id: string) => {
     if (!id) {
       detail.value = null;
+      return;
+    }
+    if (detail.value?.condominium.id === id) {
       return;
     }
     localError.value = '';
@@ -166,6 +154,10 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
 
   useTask$(async ({ track }) => {
     const id = track(() => selectedId.value);
+    const shouldLoadDetail = track(() => detailOpen.value || activeArea.value === 'documentation');
+    if (!shouldLoadDetail) {
+      return;
+    }
     await loadDetail$(id);
   });
 
@@ -304,391 +296,528 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
     }
   });
 
+  const relatedTickets = props.resources.tickets.filter((ticket) =>
+    selected?.name ? ticket.condominium === selected.name : true
+  );
+  const relatedDocuments = [
+    ...props.resources.documents
+      .filter((document) => !selected?.name || document.condominium === selected.name)
+      .map((document) => ({
+        id: document.id,
+        title: document.title,
+        meta: `${document.type} - ${document.condominium}`,
+        status: document.status,
+        detail: document.fileName || 'Sem ficheiro associado'
+      })),
+    ...(selected?.managedDocuments ?? []).map((document) => ({
+      id: document.id,
+      title: document.title,
+      meta: `${document.documentType} - ficha do condominio`,
+      status: document.status,
+      detail: document.fileName || document.description || 'Documento de condominio'
+    })),
+    ...(selected?.media ?? []).map((media) => ({
+      id: media.id,
+      title: media.title,
+      meta: `${media.mediaType} - imagem/planta`,
+      status: media.isPrimary ? 'Imagem principal' : 'Arquivo visual',
+      detail: media.fileName || media.description || 'Media associado'
+    }))
+  ];
+  const condoSections: SimpleHubSection[] = [
+    {
+      id: 'general',
+      title: 'Condominios Geral',
+      description: 'Lista simples, abrir ficha e completar informacao essencial.',
+      icon: 'C',
+      tone: 'blue',
+      count: activeCount
+    },
+    {
+      id: 'reports',
+      title: 'Relatorios',
+      description: 'Relatorios e leituras de gestao ligados aos condominios.',
+      icon: 'R',
+      tone: 'gold',
+      count: props.resources.reports.length
+    },
+    {
+      id: 'documentation',
+      title: 'Documentacao',
+      description: 'Atas, seguros, plantas, certificados, imagens e ficheiros.',
+      icon: 'D',
+      tone: 'green',
+      count: relatedDocuments.length
+    },
+    {
+      id: 'avarias',
+      title: 'Avarias',
+      description: 'Resumo de ocorrencias associadas, sem reabrir o modulo tecnico.',
+      icon: 'A',
+      tone: 'red',
+      count: props.resources.tickets.length
+    }
+  ];
+  const activeSection = condoSections.find((section) => section.id === activeArea.value);
+
   return (
-    <section class="condominiums-workspace">
-      <header class="condo-hero glass-panel">
+    <section class="condominiums-workspace simple-workspace">
+      <header class="condo-hero simple-hero glass-panel">
         <div>
           <span class="page-eyebrow">GESTISAC - Condominios</span>
           <h1>Condominios</h1>
-          <p>Entidades vivas com morada, estrutura fisica, contactos, documentos, historico e completude.</p>
+          <p>Escolhe primeiro uma area. Depois mostramos so o que precisas para trabalhar com calma.</p>
         </div>
-        <div class="condo-hero-actions">
-          <button type="button" onClick$={saveDraft$} disabled={!selected || localSaving.value}>
-            Guardar rascunho
+        {activeArea.value ? (
+          <button
+            class="primary-action"
+            type="button"
+            onClick$={() => {
+              activeArea.value = '';
+              detailOpen.value = false;
+            }}
+          >
+            Voltar aos 4 cartoes
           </button>
-          <button class="primary-action" type="button" onClick$={() => (activeTab.value = 'overview')}>
-            Abrir condominio
-          </button>
-        </div>
+        ) : null}
       </header>
 
       {localError.value ? <div class="app-error glass-panel">{localError.value}</div> : null}
       {localNotice.value ? <div class="app-success glass-panel">{localNotice.value}</div> : null}
 
-      <section class="condo-kpis">
-        <Kpi label="Ativos" value={activeCount} detail="Condominios operacionais" />
-        <Kpi label="Fracoes" value={fractionCount} detail="Total conhecido" />
-        <Kpi label="Alertas" value={alertsCount} detail="Estados em atencao" />
-        <Kpi label="Incompletos" value={incompleteCount} detail="Onboarding pendente" />
-      </section>
+      <SimpleHubCards
+        sections={condoSections}
+        activeId={activeArea.value}
+        onSelect$={(id) => {
+          activeArea.value = id as CondoAreaId;
+          detailOpen.value = false;
+        }}
+      />
 
-      <section class="condo-create-import glass-panel">
-        <form
-          preventdefault:submit
-          onSubmit$={async (event) => submitQuickCreate$(event.target as HTMLFormElement)}
+      {!activeArea.value ? (
+        <section class="simple-empty-state glass-panel">
+          <strong>Primeiro escolhe uma area.</strong>
+          <span>O ecra fica mais leve: nada de formularios, importacoes ou abas tecnicas ate serem necessarias.</span>
+        </section>
+      ) : (
+        <SimpleSectionShell
+          title={activeSection?.title ?? 'Condominios'}
+          description={activeSection?.description ?? 'Area de trabalho simples'}
+          sections={condoSections}
+          activeId={activeArea.value}
+          onSelect$={(id) => {
+            activeArea.value = id as CondoAreaId;
+            detailOpen.value = false;
+          }}
         >
-          <strong>Criar condominio rapido</strong>
-          <div class="condo-form-grid compact">
-            <Field name="name" label="Nome" />
-            <Field name="internalCode" label="Codigo interno" />
-            <Field name="location" label="Localidade" />
-            <Field name="fractions" label="Fracoes" kind="number" />
-            <Field name="buildings" label="Blocos" kind="number" value="1" />
-            <Field name="manager" label="Gestor" />
-            <Field name="condominiumType" label="Tipo" value="residencial" />
-            <Field name="status" label="Estado" value="em onboarding" />
-          </div>
-          <button class="primary-action" type="submit" disabled={props.isSaving || localSaving.value}>
-            Criar
-          </button>
-        </form>
-        <form
-          preventdefault:submit
-          onSubmit$={async (event) => previewImport$(event.target as HTMLFormElement)}
-        >
-          <strong>Importar CSV</strong>
-          <textarea
-            name="csv"
-            placeholder="nome,codigo_interno,tipo,estado,localidade,total_fracoes"
-          />
-          <div class="condo-inline-actions">
-            <button type="submit" disabled={localSaving.value}>Validar CSV</button>
-            <button type="button" onClick$={commitImport$} disabled={!importPreview.value || localSaving.value}>
-              Importar validos
-            </button>
-          </div>
-          {importPreview.value ? (
-            <small>{importPreview.value.validRows} validas / {importPreview.value.invalidRows} com erros</small>
-          ) : null}
-        </form>
-      </section>
+          {activeArea.value === 'general' ? (
+            <section class="simple-section-content">
+              <header class="simple-content-header">
+                <div>
+                  <small>Lista principal</small>
+                  <h2>Condominios Geral</h2>
+                  <p>Pesquisa, abre um condominio e so depois entra no detalhe.</p>
+                </div>
+                <div class="simple-header-actions">
+                  <button
+                    class="primary-action"
+                    type="button"
+                    onClick$={() => {
+                      creationOpen.value = !creationOpen.value;
+                      importOpen.value = false;
+                    }}
+                  >
+                    Adicionar condominio
+                  </button>
+                  <details class="simple-more-menu">
+                    <summary>Mais</summary>
+                    <button
+                      type="button"
+                      onClick$={() => {
+                        importOpen.value = !importOpen.value;
+                        creationOpen.value = false;
+                      }}
+                    >
+                      Importar CSV
+                    </button>
+                    <button type="button" onClick$={saveDraft$} disabled={!selected || localSaving.value}>
+                      Guardar rascunho
+                    </button>
+                  </details>
+                </div>
+              </header>
 
-      <div class="condo-layout">
-        <aside class="condo-list-panel glass-panel">
-          <div class="condo-filter-bar">
-            <input
-              value={search.value}
-              placeholder="Pesquisar por nome, codigo, rua, gestor..."
-              onInput$={(event) => (search.value = (event.target as HTMLInputElement).value)}
-            />
-            <select value={statusFilter.value} onChange$={(event) => (statusFilter.value = (event.target as HTMLSelectElement).value)}>
-              <option value="todos">Todos os estados</option>
-              <option value="ativo">Ativo</option>
-              <option value="em onboarding">Onboarding</option>
-              <option value="suspenso">Suspenso</option>
-              <option value="arquivo">Arquivo</option>
-            </select>
-            <select value={typeFilter.value} onChange$={(event) => (typeFilter.value = (event.target as HTMLSelectElement).value)}>
-              <option value="todos">Todos os tipos</option>
-              <option value="residencial">Residencial</option>
-              <option value="comercial">Comercial</option>
-              <option value="misto">Misto</option>
-              <option value="garagens">Garagens</option>
-            </select>
-          </div>
-          <div class="condo-view-toggle">
-            <button class={viewMode.value === 'cards' ? 'active' : ''} type="button" onClick$={() => (viewMode.value = 'cards')}>Cards</button>
-            <button class={viewMode.value === 'table' ? 'active' : ''} type="button" onClick$={() => (viewMode.value = 'table')}>Tabela</button>
-          </div>
-          <div class={viewMode.value === 'cards' ? 'condo-card-list' : 'condo-table-list'}>
-            {filtered.length ? filtered.map((item) => (
-              <button
-                class={item.id === selected?.id ? 'condo-list-card active' : 'condo-list-card'}
-                key={item.id}
-                type="button"
-                onClick$={() => {
-                  selectedId.value = item.id;
-                  activeTab.value = 'overview';
-                }}
-              >
-                <strong>{item.name}</strong>
-                <span>{item.internalCode || 'sem codigo'} - {item.address?.locality || item.location}</span>
-                <small>{item.structure?.totalFractions || item.fractions} fracoes - {item.structure?.blocksCount || item.buildings} blocos - {item.structure?.elevatorsCount || 0} elevadores</small>
-                <small>{item.manager || 'Gestor por definir'} - {item.operationalStatus?.summary || item.notice}</small>
-                <span class="condo-list-flags">
-                  <b>{hasCompleteAddress(item) ? 'Morada completa' : 'Falta morada'}</b>
-                  <b>{hasCompleteStructure(item) ? 'Estrutura completa' : 'Falta estrutura'}</b>
-                  <b>{item.managedDocuments?.length ? 'Docs carregados' : 'Faltam docs'}</b>
-                </span>
-                <em>{localCompleteness(item).percentage}% completo</em>
-                <span class="condo-open-label">Abrir condominio</span>
-              </button>
-            )) : (
-              <article class="condo-empty-state">
-                <strong>Ainda nao ha condominios para estes filtros</strong>
-                <span>Cria o primeiro condominio ou limpa a pesquisa.</span>
-              </article>
-            )}
-          </div>
-        </aside>
+              {creationOpen.value ? (
+                <form
+                  class="simple-form-panel"
+                  preventdefault:submit
+                  onSubmit$={async (event) => submitQuickCreate$(event.target as HTMLFormElement)}
+                >
+                  <strong>Criar condominio rapido</strong>
+                  <div class="condo-form-grid compact">
+                    <Field name="name" label="Nome" />
+                    <Field name="internalCode" label="Codigo interno" />
+                    <Field name="location" label="Localidade" />
+                    <Field name="fractions" label="Fracoes" kind="number" />
+                    <Field name="buildings" label="Blocos" kind="number" value="1" />
+                    <Field name="manager" label="Gestor" />
+                    <Field name="condominiumType" label="Tipo" value="residencial" />
+                    <Field name="status" label="Estado" value="em onboarding" />
+                  </div>
+                  <button class="primary-action" type="submit" disabled={props.isSaving || localSaving.value}>
+                    Criar
+                  </button>
+                </form>
+              ) : null}
 
-        {selected ? (
-          <section class="condo-detail-panel glass-panel">
-            <header class="condo-detail-header">
-              <div class="condo-building-image">
-                {selected.primaryImageUrl ? <img src={selected.primaryImageUrl} alt={selected.name} /> : <span>Sem imagem</span>}
-              </div>
-              <div>
-                <span class={`status-pill ${selected.operationalStatus?.alertLevel || 'verde'}`}>
-                  {selected.operationalStatus?.generalStatus || selected.status}
-                </span>
-                <h2>{selected.name}</h2>
-                <p>{shortAddress(selected)}</p>
-                <small>{selected.internalCode} - {selected.manager || 'Gestor por definir'} - {completeness.percentage}% completo</small>
-              </div>
-              <div class="condo-detail-actions">
-                <a href={selected.address?.googleMapsUrl || '#'} target="_blank" rel="noreferrer">Ver mapa</a>
-                <button type="button" onClick$={() => (activeTab.value = 'documents')}>Carregar documento</button>
-                <button type="button" onClick$={() => (activeTab.value = 'zones')}>Adicionar zona</button>
-                <button type="button" onClick$={() => (activeTab.value = 'equipment')}>Adicionar equipamento</button>
-                <button type="button" onClick$={archiveSelected$} disabled={localSaving.value}>Arquivar</button>
-              </div>
-            </header>
+              {importOpen.value ? (
+                <form
+                  class="simple-form-panel"
+                  preventdefault:submit
+                  onSubmit$={async (event) => previewImport$(event.target as HTMLFormElement)}
+                >
+                  <strong>Importar CSV</strong>
+                  <textarea
+                    name="csv"
+                    placeholder="nome,codigo_interno,tipo,estado,localidade,total_fracoes"
+                  />
+                  <div class="condo-inline-actions">
+                    <button type="submit" disabled={localSaving.value}>Validar CSV</button>
+                    <button type="button" onClick$={commitImport$} disabled={!importPreview.value || localSaving.value}>
+                      Importar validos
+                    </button>
+                  </div>
+                  {importPreview.value ? (
+                    <small>{importPreview.value!.validRows} validas / {importPreview.value!.invalidRows} com erros</small>
+                  ) : null}
+                </form>
+              ) : null}
 
-            <section class="condo-summary-grid">
-              <Kpi label="Fracoes" value={selected.structure?.totalFractions || selected.fractions} detail="Total" />
-              <Kpi label="Blocos" value={selected.blocksDetailed?.length || selected.structure?.blocksCount || selected.buildings} detail="Registados" />
-              <Kpi label="Zonas" value={selected.zones?.length || 0} detail="Locais operacionais" />
-              <Kpi label="Equip." value={selected.equipment?.length || 0} detail="Tecnicos" />
-              <Kpi label="Docs" value={selected.managedDocuments?.length || 0} detail="Associados" />
+              <div class="simple-search-row">
+                <input
+                  value={search.value}
+                  placeholder="Pesquisar por nome, codigo, rua ou gestor..."
+                  onInput$={(event) => (search.value = (event.target as HTMLInputElement).value)}
+                />
+                <select value={statusFilter.value} onChange$={(event) => (statusFilter.value = (event.target as HTMLSelectElement).value)}>
+                  <option value="todos">Todos os estados</option>
+                  <option value="ativo">Ativo</option>
+                  <option value="em onboarding">Onboarding</option>
+                  <option value="suspenso">Suspenso</option>
+                  <option value="arquivo">Arquivo</option>
+                </select>
+              </div>
+
+              <div class="simple-record-list">
+                {filtered.length ? filtered.map((item) => (
+                  <article class={item.id === selected?.id && detailOpen.value ? 'simple-record-card active' : 'simple-record-card'} key={item.id}>
+                    <div>
+                      <strong>{item.name}</strong>
+                      <span>{item.internalCode || 'sem codigo'} - {item.address?.locality || item.location || 'localidade por completar'}</span>
+                    </div>
+                    <p>{item.structure?.totalFractions || item.fractions} fracoes - {item.structure?.blocksCount || item.buildings} blocos - {item.structure?.elevatorsCount || 0} elevadores</p>
+                    <small>{localCompleteness(item).percentage}% completo</small>
+                    <div class="simple-card-actions">
+                      <button
+                        class="primary-action"
+                        type="button"
+                        onClick$={() => {
+                          selectedId.value = item.id;
+                          activeTab.value = 'overview';
+                          detailOpen.value = true;
+                        }}
+                      >
+                        Abrir
+                      </button>
+                      <details class="simple-more-menu">
+                        <summary>Mais</summary>
+                        <button
+                          type="button"
+                          onClick$={() => {
+                            selectedId.value = item.id;
+                            activeTab.value = 'identification';
+                            detailOpen.value = true;
+                          }}
+                        >
+                          Editar ficha
+                        </button>
+                        <button
+                          type="button"
+                          onClick$={() => {
+                            selectedId.value = item.id;
+                            activeArea.value = 'documentation';
+                            detailOpen.value = true;
+                          }}
+                        >
+                          Documentacao
+                        </button>
+                        <button
+                          type="button"
+                          onClick$={() => {
+                            selectedId.value = item.id;
+                            activeArea.value = 'avarias';
+                            detailOpen.value = true;
+                          }}
+                        >
+                          Avarias
+                        </button>
+                      </details>
+                    </div>
+                  </article>
+                )) : (
+                  <article class="simple-empty-state">
+                    <strong>Sem condominios para estes filtros.</strong>
+                    <span>Limpa a pesquisa ou adiciona um novo condominio.</span>
+                  </article>
+                )}
+              </div>
+
+              {selected && detailOpen.value ? (
+                <section class="simple-detail-panel">
+                  <header class="simple-detail-header">
+                    <div class="condo-building-image">
+                      {selected.primaryImageUrl ? <img src={selected.primaryImageUrl} alt={selected.name} /> : <span>Sem imagem</span>}
+                    </div>
+                    <div>
+                      <span class={`status-pill ${selected.operationalStatus?.alertLevel || 'verde'}`}>
+                        {selected.operationalStatus?.generalStatus || selected.status}
+                      </span>
+                      <h2>{selected.name}</h2>
+                      <p>{shortAddress(selected)}</p>
+                      <small>{selected.manager || 'Gestor por definir'} - {completeness.percentage}% completo</small>
+                    </div>
+                    <details class="simple-more-menu">
+                      <summary>Mais</summary>
+                      <a href={selected.address?.googleMapsUrl || '#'} target="_blank" rel="noreferrer">Ver mapa</a>
+                      <button type="button" onClick$={() => (activeTab.value = 'zones')}>Adicionar zona</button>
+                      <button type="button" onClick$={() => (activeTab.value = 'equipment')}>Adicionar equipamento</button>
+                      <button type="button" onClick$={archiveSelected$} disabled={localSaving.value}>Arquivar</button>
+                    </details>
+                  </header>
+
+                  <section class="condo-summary-grid simple-summary-grid">
+                    <Kpi label="Fracoes" value={selected.structure?.totalFractions || selected.fractions} detail="Total" />
+                    <Kpi label="Blocos" value={selected.blocksDetailed?.length || selected.structure?.blocksCount || selected.buildings} detail="Registados" />
+                    <Kpi label="Zonas" value={selected.zones?.length || 0} detail="Locais" />
+                    <Kpi label="Equip." value={selected.equipment?.length || 0} detail="Tecnicos" />
+                  </section>
+
+                  <label class="simple-section-picker">
+                    <span>Escolher detalhe</span>
+                    <select value={activeTab.value} onChange$={(event) => (activeTab.value = (event.target as HTMLSelectElement).value as TabId)}>
+                      {tabs.map((tab) => (
+                        <option key={tab} value={tab}>{tabLabels[tab]}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {activeTab.value === 'overview' ? (
+                    <Overview selected={selected} completeness={completeness} />
+                  ) : null}
+                  {activeTab.value === 'identification' ? (
+                    <SectionEditor
+                      title="Identificacao"
+                      fields={identificationFields}
+                      values={selected}
+                      isSaving={localSaving.value}
+                      onSubmit$={async (form) => submitSection$(form, 'identification', identificationFields)}
+                    />
+                  ) : null}
+                  {activeTab.value === 'address' ? (
+                    <SectionEditor
+                      title="Morada e localizacao"
+                      fields={addressFields}
+                      values={selected.address}
+                      isSaving={localSaving.value}
+                      onSubmit$={async (form) => submitSection$(form, 'address', addressFields)}
+                    />
+                  ) : null}
+                  {activeTab.value === 'structure' ? (
+                    <SectionEditor
+                      title="Estrutura fisica"
+                      fields={structureFields}
+                      values={selected.structure}
+                      isSaving={localSaving.value}
+                      onSubmit$={async (form) => submitSection$(form, 'structure', structureFields)}
+                    />
+                  ) : null}
+                  {activeTab.value === 'status' ? (
+                    <SectionEditor
+                      title="Estado operacional"
+                      fields={statusFields}
+                      values={selected.operationalStatus}
+                      isSaving={localSaving.value}
+                      onSubmit$={async (form) => submitSection$(form, 'operational-status', statusFields)}
+                    />
+                  ) : null}
+                  {activeTab.value === 'history' ? <History events={selected.history ?? []} /> : null}
+                  {activeTab.value === 'future' ? <FuturePanel selected={selected} /> : null}
+                  {subresourceTab(activeTab.value) ? (
+                    <SubresourcePanel
+                      title={tabLabels[activeTab.value]}
+                      resource={subresourceTab(activeTab.value)!}
+                      fields={fieldsForSubresource(activeTab.value)}
+                      rows={rowsForSubresource(selected, activeTab.value)}
+                      isSaving={localSaving.value}
+                      onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)}
+                    />
+                  ) : null}
+                </section>
+              ) : null}
             </section>
+          ) : null}
 
-            <nav class="condo-tabs">
-              {tabs.map((tab) => (
-                <button class={activeTab.value === tab ? 'active' : ''} key={tab} type="button" onClick$={() => (activeTab.value = tab)}>
-                  {tabLabels[tab]}
-                </button>
-              ))}
-            </nav>
+          {activeArea.value === 'reports' ? (
+            <section class="simple-section-content">
+              <header class="simple-content-header">
+                <div>
+                  <small>Relatorios</small>
+                  <h2>Relatorios de condominios</h2>
+                  <p>Area de consulta. A criacao e exportacao continuam no modulo Relatorios.</p>
+                </div>
+              </header>
+              <div class="simple-record-list">
+                {props.resources.reports.length ? props.resources.reports.map((report) => (
+                  <article class="simple-record-card" key={report.id}>
+                    <div>
+                      <strong>{report.title}</strong>
+                      <span>{report.period}</span>
+                    </div>
+                    <p>Relatorio disponivel para consulta no modulo Relatorios.</p>
+                    <small>{report.status}</small>
+                    <div class="simple-card-actions">
+                      <button class="primary-action" type="button">Abrir</button>
+                      <details class="simple-more-menu">
+                        <summary>Mais</summary>
+                        <a href="/relatorios">Ir para Relatorios</a>
+                      </details>
+                    </div>
+                  </article>
+                )) : (
+                  <article class="simple-empty-state">
+                    <strong>Ainda nao existem relatorios.</strong>
+                    <span>Quando forem gerados, aparecem aqui enquadrados por condominio.</span>
+                  </article>
+                )}
+              </div>
+            </section>
+          ) : null}
 
-            {activeTab.value === 'overview' ? (
-              <Overview selected={selected} completeness={completeness} />
-            ) : null}
-            {activeTab.value === 'identification' ? (
-              <SectionEditor
-                title="Identificacao"
-                fields={identificationFields}
-                values={selected}
-                isSaving={localSaving.value}
-                onSubmit$={async (form) => submitSection$(form, 'identification', identificationFields)}
-              />
-            ) : null}
-            {activeTab.value === 'address' ? (
-              <SectionEditor
-                title="Morada e localizacao"
-                fields={addressFields}
-                values={selected.address}
-                isSaving={localSaving.value}
-                onSubmit$={async (form) => submitSection$(form, 'address', addressFields)}
-              />
-            ) : null}
-            {activeTab.value === 'structure' ? (
-              <SectionEditor
-                title="Estrutura fisica"
-                fields={structureFields}
-                values={selected.structure}
-                isSaving={localSaving.value}
-                onSubmit$={async (form) => submitSection$(form, 'structure', structureFields)}
-              />
-            ) : null}
-            {activeTab.value === 'status' ? (
-              <SectionEditor
-                title="Estado operacional"
-                fields={statusFields}
-                values={selected.operationalStatus}
-                isSaving={localSaving.value}
-                onSubmit$={async (form) => submitSection$(form, 'operational-status', statusFields)}
-              />
-            ) : null}
-            {activeTab.value === 'history' ? <History events={selected.history ?? []} /> : null}
-            {activeTab.value === 'future' ? <FuturePanel selected={selected} /> : null}
-            {subresourceTab(activeTab.value) ? (
-              <SubresourcePanel
-                title={tabLabels[activeTab.value]}
-                resource={subresourceTab(activeTab.value)!}
-                fields={fieldsForSubresource(activeTab.value)}
-                rows={rowsForSubresource(selected, activeTab.value)}
-                isSaving={localSaving.value}
-                onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)}
-              />
-            ) : null}
-          </section>
-        ) : (
-          <section class="condo-detail-panel empty glass-panel">
-            <strong>Adicionar primeiro condominio</strong>
-            <span>Quando existir um condominio, a ficha completa aparece aqui.</span>
-          </section>
-        )}
-      </div>
+          {activeArea.value === 'documentation' ? (
+            <section class="simple-section-content">
+              <header class="simple-content-header">
+                <div>
+                  <small>Documentacao</small>
+                  <h2>Documentos e plantas</h2>
+                  <p>Mostramos os documentos ligados ao condominio escolhido, sem misturar com outros fluxos.</p>
+                </div>
+                {selected ? (
+                  <button class="primary-action" type="button" onClick$={() => (activeTab.value = 'documents')}>
+                    Adicionar documento
+                  </button>
+                ) : null}
+              </header>
+              {selected ? (
+                <section class="simple-detail-panel compact">
+                  <strong>{selected.name}</strong>
+                  <span>{shortAddress(selected)}</span>
+                  <label class="simple-section-picker">
+                    <span>Adicionar informacao documental</span>
+                    <select value={activeTab.value} onChange$={(event) => (activeTab.value = (event.target as HTMLSelectElement).value as TabId)}>
+                      <option value="documents">Documentos</option>
+                      <option value="media">Imagens e plantas</option>
+                    </select>
+                  </label>
+                  {activeTab.value === 'media' ? (
+                    <SubresourcePanel
+                      title="Imagens e plantas"
+                      resource="media"
+                      fields={subresourceFields.media}
+                      rows={selected.media ?? []}
+                      isSaving={localSaving.value}
+                      onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)}
+                    />
+                  ) : (
+                    <SubresourcePanel
+                      title="Documentos"
+                      resource="documents"
+                      fields={subresourceFields.documents}
+                      rows={selected.managedDocuments ?? []}
+                      isSaving={localSaving.value}
+                      onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)}
+                    />
+                  )}
+                </section>
+              ) : null}
+              <div class="simple-record-list">
+                {relatedDocuments.length ? relatedDocuments.map((document) => (
+                  <article class="simple-record-card" key={`${document.id}-${document.title}`}>
+                    <div>
+                      <strong>{document.title}</strong>
+                      <span>{document.meta}</span>
+                    </div>
+                    <p>{document.detail}</p>
+                    <small>{document.status}</small>
+                    <div class="simple-card-actions">
+                      <button class="primary-action" type="button">Abrir</button>
+                      <details class="simple-more-menu">
+                        <summary>Mais</summary>
+                        <span>Editar no detalhe do condominio</span>
+                      </details>
+                    </div>
+                  </article>
+                )) : (
+                  <article class="simple-empty-state">
+                    <strong>Sem documentos neste contexto.</strong>
+                    <span>Escolhe um condominio e adiciona documentos ou plantas quando fizer sentido.</span>
+                  </article>
+                )}
+              </div>
+            </section>
+          ) : null}
+
+          {activeArea.value === 'avarias' ? (
+            <section class="simple-section-content">
+              <header class="simple-content-header">
+                <div>
+                  <small>Avarias relacionadas</small>
+                  <h2>Avarias de condominios</h2>
+                  <p>Resumo simples. O trabalho tecnico completo continua no modulo Tickets/Avarias.</p>
+                </div>
+                <a class="primary-action" href="/tickets">Abrir Tickets</a>
+              </header>
+              <div class="simple-record-list">
+                {(detailOpen.value ? relatedTickets : props.resources.tickets).length ? (detailOpen.value ? relatedTickets : props.resources.tickets).map((ticket) => (
+                  <article class="simple-record-card" key={ticket.id}>
+                    <div>
+                      <strong>{ticket.title}</strong>
+                      <span>{ticket.condominium}</span>
+                    </div>
+                    <p>{ticket.status} - {ticket.updatedAt}</p>
+                    <small>{ticket.priority}</small>
+                    <div class="simple-card-actions">
+                      <button class="primary-action" type="button">Abrir</button>
+                      <details class="simple-more-menu">
+                        <summary>Mais</summary>
+                        <a href="/tickets">Gerir no modulo Tickets</a>
+                      </details>
+                    </div>
+                  </article>
+                )) : (
+                  <article class="simple-empty-state">
+                    <strong>Sem avarias neste contexto.</strong>
+                    <span>Quando existirem ocorrencias relacionadas, aparecem aqui.</span>
+                  </article>
+                )}
+              </div>
+            </section>
+          ) : null}
+        </SimpleSectionShell>
+      )}
     </section>
   );
+
 });
-
-type SectionEditorProps = {
-  title: string;
-  fields: FieldConfig[];
-  values?: Record<string, unknown>;
-  isSaving: boolean;
-  onSubmit$: PropFunction<(form: HTMLFormElement) => void>;
-};
-
-const SectionEditor = component$((props: SectionEditorProps) => (
-  <form
-    class="condo-editor"
-    preventdefault:submit
-    onSubmit$={async (event) => props.onSubmit$(event.target as HTMLFormElement)}
-  >
-    <header>
-      <strong>{props.title}</strong>
-      <span>Alteracoes criam historico automatico.</span>
-    </header>
-    <div class="condo-form-grid">
-      {props.fields.map((field) => (
-        <Field
-          key={field.name}
-          name={field.name}
-          label={field.label}
-          kind={field.kind}
-          placeholder={field.placeholder}
-          value={valueFor(props.values, field.name)}
-        />
-      ))}
-    </div>
-    <button class="primary-action" type="submit" disabled={props.isSaving}>
-      Guardar seccao
-    </button>
-  </form>
-));
-
-type SubresourcePanelProps = {
-  title: string;
-  resource: SubresourceName;
-  fields: FieldConfig[];
-  rows: Array<Record<string, unknown>>;
-  isSaving: boolean;
-  onSubmit$: PropFunction<(form: HTMLFormElement, resource: SubresourceName, fields: FieldConfig[]) => void>;
-};
-
-const SubresourcePanel = component$((props: SubresourcePanelProps) => (
-  <section class="condo-subresource">
-    <form
-      class="condo-editor"
-      preventdefault:submit
-      onSubmit$={async (event) => props.onSubmit$(event.target as HTMLFormElement, props.resource, props.fields)}
-    >
-      <header>
-        <strong>Adicionar {props.title.toLowerCase()}</strong>
-        <span>Fica associado a este condominio e entra no historico.</span>
-      </header>
-      <div class="condo-form-grid">
-        {props.fields.map((field) => (
-          <Field key={field.name} name={field.name} label={field.label} kind={field.kind} placeholder={field.placeholder} />
-        ))}
-      </div>
-      <button class="primary-action" type="submit" disabled={props.isSaving}>Adicionar</button>
-    </form>
-    <div class="condo-resource-list">
-      {props.rows.length ? props.rows.map((row) => (
-        <article key={String(row.id)}>
-          <strong>{String(row.name ?? row.title ?? row.contactType ?? 'Registo')}</strong>
-          <span>{Object.entries(row).filter(([key, value]) => key !== 'id' && value).slice(0, 5).map(([, value]) => String(value)).join(' - ')}</span>
-        </article>
-      )) : (
-        <article class="condo-empty-state">
-          <strong>Ainda nao existem registos</strong>
-          <span>Usa o formulario acima para completar esta parte da ficha.</span>
-        </article>
-      )}
-    </div>
-  </section>
-));
-
-const Field = component$((props: FieldConfig & { value?: string }) => (
-  <label class={props.kind === 'textarea' ? 'wide' : ''}>
-    <span>{props.label}</span>
-    {props.kind === 'textarea' ? (
-      <textarea name={props.name} placeholder={props.placeholder} value={props.value} />
-    ) : props.kind === 'checkbox' ? (
-      <input name={props.name} type="checkbox" value="true" checked={props.value === 'true'} />
-    ) : (
-      <input name={props.name} type={props.kind === 'number' ? 'number' : 'text'} placeholder={props.placeholder} value={props.value} />
-    )}
-  </label>
-));
-
-const Kpi = component$((props: { label: string; value: string | number; detail: string }) => (
-  <article class="condo-kpi glass-panel">
-    <span>{props.label}</span>
-    <strong>{props.value}</strong>
-    <small>{props.detail}</small>
-  </article>
-));
-
-const Overview = component$((props: { selected: Condominium; completeness: CompletenessReport }) => (
-  <section class="condo-overview-grid">
-    <article>
-      <strong>Ficha do condominio</strong>
-      <span>{props.completeness.percentage}% completo</span>
-      <progress value={props.completeness.percentage} max="100" />
-      {props.completeness.missingItems.slice(0, 8).map((item) => <small key={item}>{item}</small>)}
-    </article>
-    <article>
-      <strong>Resumo operacional</strong>
-      <span>{props.selected.operationalStatus?.summary || props.selected.notice}</span>
-      <small>Ultima atualizacao: {props.selected.operationalStatus?.updatedAt || props.selected.updatedAt || 'por definir'}</small>
-    </article>
-    <article>
-      <strong>Localizacao</strong>
-      <span>{shortAddress(props.selected)}</span>
-      <small>{props.selected.address?.accessNotes || 'Sem notas de acesso'}</small>
-    </article>
-  </section>
-));
-
-const History = component$((props: { events: Array<Record<string, unknown>> }) => (
-  <section class="condo-timeline">
-    {props.events.length ? props.events.map((event) => (
-      <article key={String(event.id)}>
-        <strong>{String(event.description || event.eventType)}</strong>
-        <span>{String(event.userName || 'Sistema')} - {String(event.timestamp || '')}</span>
-        <small>{String(event.entity || event.source || '')}</small>
-      </article>
-    )) : (
-      <article class="condo-empty-state">
-        <strong>Historico ainda vazio</strong>
-        <span>As proximas alteracoes aparecem aqui automaticamente.</span>
-      </article>
-    )}
-  </section>
-));
-
-const FuturePanel = component$((props: { selected: Condominium }) => (
-  <section class="condo-future-panel">
-    <article>
-      <strong>Mapa</strong>
-      <span>{props.selected.address?.latitude ?? 'lat por definir'}, {props.selected.address?.longitude ?? 'lng por definir'}</span>
-      <a href={props.selected.address?.googleMapsUrl || '#'} target="_blank" rel="noreferrer">Abrir mapa</a>
-    </article>
-    <article>
-      <strong>QR por zona</strong>
-      <span>{props.selected.zones?.filter((zone) => zone.publicQrUrl).length ?? 0} zonas preparadas</span>
-    </article>
-    <article>
-      <strong>Planta 2D / 3D futuro</strong>
-      <span>Campos e associacoes preparados; visualizador avancado fica para fase futura.</span>
-    </article>
-  </section>
-));
 
 const identificationFields: FieldConfig[] = [
   { name: 'name', label: 'Nome' },
@@ -888,17 +1017,6 @@ function payloadFromForm(form: HTMLFormElement, fields: FieldConfig[]): Record<s
   }, {});
 }
 
-function valueFor(values: Record<string, unknown> | undefined, name: string): string {
-  const value = values?.[name];
-  if (Array.isArray(value)) {
-    return value.join(', ');
-  }
-  if (typeof value === 'boolean') {
-    return value ? 'true' : 'false';
-  }
-  return value === undefined || value === null ? '' : String(value);
-}
-
 function text(formData: FormData, name: string): string {
   return String(formData.get(name) ?? '').trim();
 }
@@ -913,14 +1031,6 @@ function shortAddress(item: Condominium): string {
   return [address?.street, address?.number, address?.postalCode, address?.locality]
     .filter(Boolean)
     .join(', ') || item.location || 'Morada por completar';
-}
-
-function hasCompleteAddress(item: Condominium): boolean {
-  return Boolean(item.address?.street && item.address?.postalCode && item.address?.locality);
-}
-
-function hasCompleteStructure(item: Condominium): boolean {
-  return Boolean((item.structure?.totalFractions || item.fractions) && (item.structure?.blocksCount || item.buildings));
 }
 
 function localCompleteness(item?: Condominium): CompletenessReport {

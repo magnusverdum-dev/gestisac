@@ -2,15 +2,16 @@ import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io
 import { LoginPage } from './components/auth/LoginPage';
 import { DashboardPage } from './components/dashboard/DashboardPage';
 import { CondominiumsPage } from './components/pages/CondominiumsPage';
+import { DocumentsPage } from './components/pages/DocumentsPage';
 import { PageOverview } from './components/pages/PageOverview';
 import { AppShell } from './components/shell/AppShell';
 import {
   emptyResources,
   fallbackDashboard,
-  buildGlobalSearchResults,
   buildPages,
   getPageByPath
 } from './data/pages';
+import { buildGlobalSearchResults } from './data/search';
 import {
   SESSION_TOKEN_KEY,
   SESSION_EXPIRES_KEY,
@@ -60,6 +61,8 @@ export const App = component$(() => {
   const apiStatus = useSignal<ApiStatus>('checking');
   const dashboard = useSignal(fallbackDashboard);
   const resources = useSignal(emptyResources);
+  const pageCache = useSignal(buildPages(emptyResources, fallbackDashboard));
+  const searchResultCache = useSignal(buildGlobalSearchResults(emptyResources));
   const error = useSignal('');
   const notice = useSignal('');
   const reportPreview = useSignal<ReportPreview | null>(null);
@@ -93,6 +96,8 @@ export const App = component$(() => {
     ]);
     dashboard.value = dashboardData;
     resources.value = resourceData;
+    pageCache.value = buildPages(resourceData, dashboardData);
+    searchResultCache.value = buildGlobalSearchResults(resourceData);
     session.user = dashboardData.user;
     apiStatus.value = 'online';
   });
@@ -105,6 +110,10 @@ export const App = component$(() => {
 
   const navigate$ = $((path: string) => {
     const normalizedPath = normalizePath(path);
+    const navigationStartedAt =
+      import.meta.env.DEV && typeof performance !== 'undefined'
+        ? performance.now()
+        : 0;
     notice.value = '';
     error.value = '';
     if (normalizedPath !== '/relatorios') {
@@ -115,7 +124,16 @@ export const App = component$(() => {
     }
     currentPath.value = normalizedPath;
     window.history.pushState({}, '', normalizedPath);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    if (navigationStartedAt && typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          console.info(
+            `[gestisac:navigation] ${normalizedPath} ${Math.round(performance.now() - navigationStartedAt)}ms`
+          );
+        });
+      });
+    }
   });
 
   const login$ = $(async (email: string, password: string) => {
@@ -152,6 +170,8 @@ export const App = component$(() => {
     session.user = null;
     dashboard.value = fallbackDashboard;
     resources.value = emptyResources;
+    pageCache.value = buildPages(emptyResources, fallbackDashboard);
+    searchResultCache.value = buildGlobalSearchResults(emptyResources);
     localStorage.removeItem(SESSION_TOKEN_KEY);
     localStorage.removeItem(SESSION_REFRESH_KEY);
     localStorage.removeItem(SESSION_EXPIRES_KEY);
@@ -513,16 +533,14 @@ export const App = component$(() => {
     );
   }
 
-  const pages = buildPages(resources.value, dashboard.value);
-  const page = getPageByPath(pages, currentPath.value);
-  const searchResults = buildGlobalSearchResults(resources.value);
+  const page = getPageByPath(pageCache.value, currentPath.value);
 
   return (
     <AppShell
       currentPath={page.path}
       apiStatus={apiStatus.value}
       dashboard={dashboard.value}
-      searchResults={searchResults}
+      searchResults={searchResultCache.value}
       navigate$={navigate$}
       onLogout$={logout$}
     >
@@ -541,6 +559,27 @@ export const App = component$(() => {
           resources={resources.value}
           isSaving={isSaving.value}
           onRefresh$={refreshWorkspace$}
+        />
+      ) : page.path === '/documentos' ? (
+        <DocumentsPage
+          page={page}
+          isSaving={isSaving.value}
+          isPreviewLoading={isPreviewLoading.value}
+          reportPreview={reportPreview.value}
+          documentPreview={documentPreview.value}
+          createIntentResource={createIntent.path === page.path ? createIntent.resource : ''}
+          createIntentVersion={createIntent.version}
+          onCreate$={createRecord$}
+          onUpdate$={updateRecord$}
+          onDelete$={deleteRecord$}
+          onUploadDocument$={uploadDocument$}
+          onGenerateDocument$={generateDocument$}
+          onPreviewReport$={previewReport$}
+          onExportReport$={exportReport$}
+          onPreviewDocument$={previewDocument$}
+          onDownloadDocument$={downloadDocument$}
+          onCloseReportPreview$={closeReportPreview$}
+          onCloseDocumentPreview$={closeDocumentPreview$}
         />
       ) : (
         <PageOverview
