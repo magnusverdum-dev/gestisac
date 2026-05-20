@@ -510,7 +510,7 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
           ? `${item.fileName} - ${formatBytes(item.sizeBytes)}`
           : 'Sem ficheiro associado',
         fields: documentFields(dashboard.activeCondominium),
-        values: documentPayload(item),
+        values: item,
         quickActions: [
           {
             label: 'Preview',
@@ -646,13 +646,15 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
             title: item.summary,
             meta: `${item.userName} - ${new Date(item.createdAt).toLocaleString('pt-PT')}`,
             status: `${item.module} / ${item.action}`,
-            detail: `Registo ${item.recordId}`
+            detail: `Registo ${item.recordId}`,
+            values: item
           }))
         : resources.permissions.modules.map((item) => ({
             title: item.module,
             meta: `Role: ${resources.permissions.role}`,
             status: item.canWrite ? 'Pode editar' : 'Leitura',
-            detail: item.canDelete ? 'Pode apagar e editar' : 'Sem permissao de apagar'
+            detail: item.canDelete ? 'Pode apagar e editar' : 'Sem permissao de apagar',
+            values: item
           }))
     }
   ];
