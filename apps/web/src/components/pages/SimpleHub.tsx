@@ -9,6 +9,7 @@ export type SimpleHubSection = {
   emptyState?: string;
   primaryAction?: string;
   count?: string | number;
+  quickActions?: string[];
 };
 
 type SimpleHubCardsProps = {
@@ -20,17 +21,44 @@ type SimpleHubCardsProps = {
 export const SimpleHubCards = component$(({ sections, activeId, onSelect$ }: SimpleHubCardsProps) => (
   <section class="simple-hub-grid" aria-label="Areas principais">
     {sections.map((section) => (
-      <button
+      <article
         class={`simple-hub-card ${section.tone ?? 'blue'} ${activeId === section.id ? 'active' : ''}`}
         key={section.id}
-        type="button"
-        onClick$={async () => onSelect$(section.id)}
       >
-        <span class="simple-hub-icon">{section.icon}</span>
-        <strong>{section.title}</strong>
-        <em>{section.count ?? section.primaryAction ?? 'Abrir'}</em>
-        <p>{section.description}</p>
-      </button>
+        <button
+          class="simple-hub-main"
+          type="button"
+          data-section-id={section.id}
+          onClick$={async (event) => {
+            const target = event.target as HTMLElement;
+            const sectionId = target.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId ?? '';
+            await onSelect$(sectionId);
+          }}
+        >
+          <span class="simple-hub-icon">{section.icon}</span>
+          <strong>{section.title}</strong>
+          <em>{section.count ?? section.primaryAction ?? 'Abrir'}</em>
+          <p>{section.description}</p>
+        </button>
+        {section.quickActions?.length ? (
+          <div class="simple-hub-shortcuts" aria-label={`Atalhos de ${section.title}`}>
+            {section.quickActions.map((action) => (
+              <button
+                key={action}
+                type="button"
+                data-section-id={section.id}
+                onClick$={async (event) => {
+                  const target = event.target as HTMLElement;
+                  const sectionId = target.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId ?? '';
+                  await onSelect$(sectionId);
+                }}
+              >
+                {action}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </article>
     ))}
   </section>
 ));

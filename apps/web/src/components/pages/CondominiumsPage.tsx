@@ -14,7 +14,7 @@ import {
   type ImportPreview,
   type ResourceState
 } from '../../lib/api';
-import { SimpleHubCards, SimpleSectionShell, type SimpleHubSection } from './SimpleHub';
+import { SimpleHubCards, type SimpleHubSection } from './SimpleHub';
 import {
   Field,
   FuturePanel,
@@ -54,7 +54,15 @@ const tabs = [
 
 type TabId = (typeof tabs)[number];
 
-type CondoAreaId = 'general' | 'reports' | 'documentation' | 'avarias';
+type CondoAreaId =
+  | 'general'
+  | 'reports'
+  | 'documentation'
+  | 'avarias'
+  | 'inspections'
+  | 'timeline'
+  | 'support'
+  | 'tickets';
 
 const tabLabels: Record<TabId, string> = {
   overview: 'Visao geral',
@@ -154,7 +162,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
 
   useTask$(async ({ track }) => {
     const id = track(() => selectedId.value);
-    const shouldLoadDetail = track(() => detailOpen.value || activeArea.value === 'documentation');
+    const shouldLoadDetail = track(() => detailOpen.value);
     if (!shouldLoadDetail) {
       return;
     }
@@ -328,10 +336,11 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
     {
       id: 'general',
       title: 'Condominios Geral',
-      description: 'Lista simples, abrir ficha e completar informacao essencial.',
+      description: 'Condominios, fracoes e utilizadores ligados por ficha operacional.',
       icon: 'C',
       tone: 'blue',
-      count: activeCount
+      count: activeCount,
+      quickActions: ['Extrato de Conta']
     },
     {
       id: 'reports',
@@ -339,7 +348,8 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       description: 'Relatorios e leituras de gestao ligados aos condominios.',
       icon: 'R',
       tone: 'gold',
-      count: props.resources.reports.length
+      count: props.resources.reports.length,
+      quickActions: ['Contencioso']
     },
     {
       id: 'documentation',
@@ -347,7 +357,8 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       description: 'Atas, seguros, plantas, certificados, imagens e ficheiros.',
       icon: 'D',
       tone: 'green',
-      count: relatedDocuments.length
+      count: relatedDocuments.length,
+      quickActions: ['Extrato de Conta', 'Atalho 2', 'Atalho 3', 'Atalho 4']
     },
     {
       id: 'avarias',
@@ -356,10 +367,60 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       icon: 'A',
       tone: 'red',
       count: props.resources.tickets.length
+    },
+    {
+      id: 'inspections',
+      title: 'Vistorias',
+      description: 'Acompanhamento de verificacoes, pendentes e pontos de estado.',
+      icon: 'V',
+      tone: 'purple',
+      count: props.resources.maintenance.length
+    },
+    {
+      id: 'timeline',
+      title: 'Time Line',
+      description: 'Historico de alteracoes, eventos e momentos do condominio.',
+      icon: 'T',
+      tone: 'blue',
+      count: selected?.history?.length ?? 0
+    },
+    {
+      id: 'support',
+      title: 'Apoio Cliente/Administradores',
+      description: 'Contacto rapido entre utilizadores, administradores e equipa.',
+      icon: 'S',
+      tone: 'green',
+      count: props.resources.residents.length
+    },
+    {
+      id: 'tickets',
+      title: 'Tickets',
+      description: 'Pedidos abertos, seguimento operacional e prioridades.',
+      icon: 'K',
+      tone: 'gold',
+      count: props.resources.tickets.length
     }
   ];
-  const activeSection = condoSections.find((section) => section.id === activeArea.value);
-
+  const accountExtractRows = props.resources.residents.map((user) => {
+    const debts = props.resources.accounting.debts.filter((debt) =>
+      debt.resident === user.name && debt.fraction === user.fraction && debt.condominium === user.condominium
+    );
+    const quotas = props.resources.accounting.quotas.filter((quota) =>
+      quota.resident === user.name && quota.fraction === user.fraction && quota.condominium === user.condominium
+    );
+    const debtTotal = debts.reduce((total, debt) => total + debt.amount, 0);
+    return {
+      id: user.id,
+      name: user.name,
+      condominium: user.condominium,
+      fraction: user.fraction,
+      status: debtTotal > 0 ? 'Com saldo em aberto' : user.status,
+      detail: `${quotas.length} quotas - divida ${debtTotal.toLocaleString('pt-PT', {
+        style: 'currency',
+        currency: 'EUR'
+      })}`
+    };
+  });
   return (
     <section class="condominiums-workspace simple-workspace">
       <header class="condo-hero simple-hero glass-panel">
@@ -377,7 +438,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
               detailOpen.value = false;
             }}
           >
-            Voltar aos 4 cartoes
+            Voltar aos 8 cartoes
           </button>
         ) : null}
       </header>
@@ -385,40 +446,35 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       {localError.value ? <div class="app-error glass-panel">{localError.value}</div> : null}
       {localNotice.value ? <div class="app-success glass-panel">{localNotice.value}</div> : null}
 
-      <SimpleHubCards
-        sections={condoSections}
-        activeId={activeArea.value}
-        onSelect$={(id) => {
-          activeArea.value = id as CondoAreaId;
-          detailOpen.value = false;
-        }}
-      />
-
       {!activeArea.value ? (
-        <section class="simple-empty-state glass-panel">
-          <strong>Primeiro escolhe uma area.</strong>
-          <span>O ecra fica mais leve: nada de formularios, importacoes ou abas tecnicas ate serem necessarias.</span>
-        </section>
-      ) : (
-        <SimpleSectionShell
-          title={activeSection?.title ?? 'Condominios'}
-          description={activeSection?.description ?? 'Area de trabalho simples'}
+        <SimpleHubCards
           sections={condoSections}
           activeId={activeArea.value}
           onSelect$={(id) => {
             activeArea.value = id as CondoAreaId;
             detailOpen.value = false;
           }}
-        >
+        />
+      ) : (
+        <section class="simple-content-panel condo-module-panel glass-panel">
           {activeArea.value === 'general' ? (
             <section class="simple-section-content">
               <header class="simple-content-header">
                 <div>
                   <small>Lista principal</small>
                   <h2>Condominios Geral</h2>
-                  <p>Pesquisa, abre um condominio e so depois entra no detalhe.</p>
+                  <p>Condominios {'>'} Condominio {'>'} Fracoes {'>'} Utilizadores, com extrato ligado a cada fracao.</p>
                 </div>
                 <div class="simple-header-actions">
+                  <button
+                    class="primary-action"
+                    type="button"
+                    onClick$={() => {
+                      search.value = selected?.name ?? '';
+                    }}
+                  >
+                    Extrato de Conta
+                  </button>
                   <button
                     class="primary-action"
                     type="button"
@@ -507,6 +563,23 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   <option value="arquivo">Arquivo</option>
                 </select>
               </div>
+
+              <section class="simple-detail-panel compact">
+                <strong>Extrato de Conta dos utilizadores</strong>
+                <span>Seleciona um condominio e confirma sempre a cadeia Condominio {'>'} Fracao {'>'} Utilizador.</span>
+                <div class="simple-record-list">
+                  {accountExtractRows.map((row) => (
+                    <article class="simple-record-card" key={row.id}>
+                      <div>
+                        <strong>{row.name}</strong>
+                        <span>{row.condominium} - fracao {row.fraction}</span>
+                      </div>
+                      <p>{row.detail}</p>
+                      <small>{row.status}</small>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
               <div class="simple-record-list">
                 {filtered.length ? filtered.map((item) => (
@@ -675,6 +748,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   <h2>Relatorios de condominios</h2>
                   <p>Area de consulta. A criacao e exportacao continuam no modulo Relatorios.</p>
                 </div>
+                <button class="primary-action" type="button">Contencioso</button>
               </header>
               <div class="simple-record-list">
                 {props.resources.reports.length ? props.resources.reports.map((report) => (
@@ -711,11 +785,18 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   <h2>Documentos e plantas</h2>
                   <p>Mostramos os documentos ligados ao condominio escolhido, sem misturar com outros fluxos.</p>
                 </div>
+                <div class="simple-header-actions">
+                  {['Extrato de Conta', 'Atalho 2', 'Atalho 3', 'Atalho 4'].map((action) => (
+                    <button class="secondary-action" type="button" key={action}>
+                      {action}
+                    </button>
+                  ))}
                 {selected ? (
                   <button class="primary-action" type="button" onClick$={() => (activeTab.value = 'documents')}>
                     Adicionar documento
                   </button>
                 ) : null}
+                </div>
               </header>
               {selected ? (
                 <section class="simple-detail-panel compact">
@@ -812,7 +893,125 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
               </div>
             </section>
           ) : null}
-        </SimpleSectionShell>
+          {activeArea.value === 'inspections' ? (
+            <section class="simple-section-content">
+              <header class="simple-content-header">
+                <div>
+                  <small>Vistorias</small>
+                  <h2>Vistorias de condominios</h2>
+                  <p>Verificacoes operacionais ligadas ao condominio, fracoes e zonas comuns.</p>
+                </div>
+              </header>
+              <div class="simple-record-list">
+                {props.resources.maintenance.length ? props.resources.maintenance.map((item) => (
+                  <article class="simple-record-card" key={item.id}>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <span>{item.supplier}</span>
+                    </div>
+                    <p>Vistoria ou manutencao prevista para {item.date}</p>
+                    <small>{item.status}</small>
+                  </article>
+                )) : (
+                  <article class="simple-empty-state">
+                    <strong>Sem vistorias registadas.</strong>
+                    <span>Quando forem planeadas, aparecem aqui por condominio.</span>
+                  </article>
+                )}
+              </div>
+            </section>
+          ) : null}
+
+          {activeArea.value === 'timeline' ? (
+            <section class="simple-section-content">
+              <header class="simple-content-header">
+                <div>
+                  <small>Time Line</small>
+                  <h2>Timeline do condominio</h2>
+                  <p>Eventos recentes ligados ao condominio selecionado e ao seu historico operacional.</p>
+                </div>
+              </header>
+              {selected ? (
+                <section class="simple-detail-panel compact">
+                  <strong>{selected.name}</strong>
+                  <span>{shortAddress(selected)}</span>
+                  <History events={selected.history ?? []} />
+                </section>
+              ) : (
+                <article class="simple-empty-state">
+                  <strong>Sem condominio selecionado.</strong>
+                  <span>Escolhe um condominio em Condominios Geral para ver a timeline.</span>
+                </article>
+              )}
+            </section>
+          ) : null}
+
+          {activeArea.value === 'support' ? (
+            <section class="simple-section-content">
+              <header class="simple-content-header">
+                <div>
+                  <small>Apoio Cliente/Administradores</small>
+                  <h2>Apoio a utilizadores e administradores</h2>
+                  <p>Utilizadores sempre associados a uma fracao, e cada fracao ligada a um condominio.</p>
+                </div>
+              </header>
+              <section class="simple-detail-panel compact">
+                <strong>Arquitetura operacional</strong>
+                <span>Condominios {'>'} Condominio {'>'} Fracoes {'>'} Utilizadores</span>
+              </section>
+              <div class="simple-record-list">
+                {props.resources.residents.length ? props.resources.residents.map((user) => (
+                  <article class="simple-record-card" key={user.id}>
+                    <div>
+                      <strong>{user.name}</strong>
+                      <span>{user.email} - {user.phone}</span>
+                    </div>
+                    <p>{user.condominium} - fracao {user.fraction}</p>
+                    <small>{user.status}</small>
+                  </article>
+                )) : (
+                  <article class="simple-empty-state">
+                    <strong>Sem utilizadores registados.</strong>
+                    <span>Cria utilizadores sempre a partir de uma fracao.</span>
+                  </article>
+                )}
+              </div>
+            </section>
+          ) : null}
+
+          {activeArea.value === 'tickets' ? (
+            <section class="simple-section-content">
+              <header class="simple-content-header">
+                <div>
+                  <small>Tickets</small>
+                  <h2>Tickets de condominios</h2>
+                  <p>Pedidos e seguimento operacional associados aos condominios.</p>
+                </div>
+                <a class="primary-action" href="/tickets">Abrir modulo Tickets</a>
+              </header>
+              <div class="simple-record-list">
+                {props.resources.tickets.length ? props.resources.tickets.map((ticket) => (
+                  <article class="simple-record-card" key={ticket.id}>
+                    <div>
+                      <strong>{ticket.title}</strong>
+                      <span>{ticket.condominium}</span>
+                    </div>
+                    <p>{ticket.detail || ticket.status} - {ticket.updatedAt}</p>
+                    <small>{ticket.priority}</small>
+                    <div class="simple-card-actions">
+                      <a class="primary-action" href="/tickets">Abrir</a>
+                    </div>
+                  </article>
+                )) : (
+                  <article class="simple-empty-state">
+                    <strong>Sem tickets registados.</strong>
+                    <span>Novos pedidos aparecem aqui com prioridade e condominio.</span>
+                  </article>
+                )}
+              </div>
+            </section>
+          ) : null}
+        </section>
       )}
     </section>
   );

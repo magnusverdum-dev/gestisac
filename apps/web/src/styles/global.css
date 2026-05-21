@@ -2933,6 +2933,8 @@ kbd {
 
 .simple-hub-card {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
   min-height: 178px;
   padding: 18px;
   text-align: left;
@@ -2948,6 +2950,17 @@ kbd {
     transform 180ms var(--ease),
     border-color 180ms var(--ease),
     background 180ms var(--ease);
+}
+
+.simple-hub-main {
+  display: grid;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
 .simple-hub-card:hover,
@@ -3011,6 +3024,7 @@ kbd {
 }
 
 .simple-hub-card p,
+.simple-hub-main p,
 .simple-empty-state span,
 .simple-side-menu span,
 .simple-record-card span,
@@ -3019,6 +3033,34 @@ kbd {
 .simple-detail-header small,
 .simple-content-header p {
   color: #cbd5e1;
+}
+
+.simple-hub-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.simple-hub-shortcuts button {
+  min-height: 24px;
+  padding: 3px 8px;
+  color: #fde68a;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid rgba(244, 210, 122, 0.42);
+  border-radius: 999px;
+  background: rgba(217, 164, 65, 0.1);
+  cursor: pointer;
+}
+
+.simple-hub-shortcuts button:hover {
+  color: #061126;
+  background: #f4d27a;
+}
+
+.condo-module-panel {
+  min-height: 420px;
 }
 
 .simple-section-layout {
