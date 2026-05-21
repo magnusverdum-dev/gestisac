@@ -1,4 +1,4 @@
-import { component$, type PropFunction } from '@builder.io/qwik';
+import { component$, useSignal, type PropFunction } from '@builder.io/qwik';
 import { navPages } from '../../data/pages';
 import type { PublicUser } from '../../lib/api';
 
@@ -9,6 +9,8 @@ type SidebarProps = {
 };
 
 export const Sidebar = component$((props: SidebarProps) => {
+  const mobileMenuOpen = useSignal(false);
+
   return (
     <aside class="sidebar" aria-label="Navegacao principal">
       <div class="brand">
@@ -23,7 +25,21 @@ export const Sidebar = component$((props: SidebarProps) => {
         </div>
       </div>
 
-      <nav class="nav-list">
+      <button
+        class="mobile-nav-toggle"
+        type="button"
+        aria-label={mobileMenuOpen.value ? 'Fechar menu' : 'Abrir menu'}
+        aria-expanded={mobileMenuOpen.value}
+        onClick$={() => {
+          mobileMenuOpen.value = !mobileMenuOpen.value;
+        }}
+      >
+        <span />
+        <span />
+        <span />
+      </button>
+
+      <nav class={mobileMenuOpen.value ? 'nav-list mobile-open' : 'nav-list'}>
         {navPages.map((page) => (
           <a
             class={props.currentPath === page.path ? 'nav-item active' : 'nav-item'}
@@ -31,6 +47,7 @@ export const Sidebar = component$((props: SidebarProps) => {
             key={page.path}
             onClick$={(event) => {
               event.preventDefault();
+              mobileMenuOpen.value = false;
               props.navigate$(page.path);
             }}
           >
