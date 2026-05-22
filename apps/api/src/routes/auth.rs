@@ -1,7 +1,10 @@
 use crate::{
     error::ApiError,
     models::store::{PublicUser, Session},
-    state::{hash_password, is_modern_password_hash, verify_password, AppState},
+    state::{
+        hash_password, is_modern_password_hash, protect_session_secret, session_secret_matches,
+        verify_password, AppState,
+    },
 };
 use axum::{
     extract::State,
@@ -9,8 +12,8 @@ use axum::{
     Json,
 };
 use chrono::{Duration, Utc};
+use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,8 +85,8 @@ pub async fn login(
             .map_err(|_| ApiError::internal("Nao foi possivel proteger a password"))?;
     }
 
-    let token = Uuid::new_v4().to_string();
-    let refresh_token = Uuid::new_v4().to_string();
+    let token = new_session_secret();
+    let refresh_token = new_session_secret();
     let now = Utc::now();
     let expires_at = now + Duration::hours(2);
     let refresh_expires_at = now + Duration::days(30);
@@ -93,8 +96,8 @@ pub async fn login(
         user.active_condominium.clone()
     };
     store.sessions.push(Session {
-        token: token.clone(),
-        refresh_token: refresh_token.clone(),
+        token: protect_session_secret(&token),
+        refresh_token: protect_session_secret(&refresh_token),
         user_id: user.id.clone(),
         tenant_id: user.tenant_id.clone(),
         active_condominium: active_condominium.clone(),
@@ -134,7 +137,7 @@ pub async fn refresh(
     let session_index = store
         .sessions
         .iter()
-        .position(|session| session.refresh_token == input.refresh_token)
+        .position(|session| session_secret_matches(&session.refresh_token, &input.refresh_token))
         .ok_or_else(|| ApiError::unauthorized("Refresh token invalido ou expirado"))?;
     let current_session = store.sessions[session_index].clone();
     let user = store
@@ -144,13 +147,13 @@ pub async fn refresh(
         .cloned()
         .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
 
-    let token = Uuid::new_v4().to_string();
-    let refresh_token = Uuid::new_v4().to_string();
+    let token = new_session_secret();
+    let refresh_token = new_session_secret();
     let expires_at = now + Duration::hours(2);
     let refresh_expires_at = now + Duration::days(30);
     store.sessions[session_index] = Session {
-        token: token.clone(),
-        refresh_token: refresh_token.clone(),
+        token: protect_session_secret(&token),
+        refresh_token: protect_session_secret(&refresh_token),
         user_id: user.id.clone(),
         tenant_id: current_session.tenant_id,
         active_condominium: current_session.active_condominium,
@@ -182,7 +185,9 @@ pub async fn logout(
     let token = bearer_token(&headers)?;
 
     let mut store = state.store.write().await;
-    store.sessions.retain(|session| session.token != token);
+    store
+        .sessions
+        .retain(|session| !session_secret_matches(&session.token, &token));
     drop(store);
     persist(&state).await?;
 
@@ -247,7 +252,7 @@ pub async fn current_context(
     let session = store
         .sessions
         .iter()
-        .find(|session| session.token == token)
+        .find(|session| session_secret_matches(&session.token, &token))
         .ok_or_else(|| ApiError::unauthorized("Sessao invalida ou expirada"))?;
     if session.expires_at <= Utc::now() {
         return Err(ApiError::unauthorized("Sessao expirada"));
@@ -259,7 +264,7 @@ pub async fn current_context(
     user.active_condominium = session.active_condominium.clone();
 
     Ok(AuthContext {
-        token,
+        token: session.token.clone(),
         tenant_id: session.tenant_id.clone(),
         active_condominium: session.active_condominium.clone(),
         user,
@@ -325,9 +330,31 @@ fn bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
         .ok_or_else(|| ApiError::unauthorized("Authorization bearer token invalido"))
 }
 
+fn new_session_secret() -> String {
+    let mut bytes = [0_u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 async fn persist(state: &AppState) -> Result<(), ApiError> {
     state
         .save()
         .await
         .map_err(|_| ApiError::internal("Nao foi possivel persistir os dados"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_secrets_are_high_entropy_hex_strings() {
+        let first = new_session_secret();
+        let second = new_session_secret();
+
+        assert_eq!(first.len(), 64);
+        assert_eq!(second.len(), 64);
+        assert_ne!(first, second);
+        assert!(first.chars().all(|character| character.is_ascii_hexdigit()));
+    }
 }

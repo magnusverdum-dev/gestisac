@@ -26,6 +26,8 @@ pub struct AppStore {
     pub documents: Vec<Document>,
     pub reports: Vec<Report>,
     pub maintenance: Vec<MaintenanceItem>,
+    #[serde(default, rename = "calendarEvents")]
+    pub calendar_events: Vec<CalendarEvent>,
     pub assemblies: Vec<Assembly>,
     pub payments: Vec<PaymentSummary>,
     #[serde(default)]
@@ -722,10 +724,39 @@ pub struct Resident {
 pub struct Ticket {
     pub id: String,
     pub title: String,
+    #[serde(default)]
     pub condominium: String,
+    #[serde(default)]
     pub priority: String,
+    #[serde(default)]
     pub status: String,
+    #[serde(default)]
     pub detail: String,
+    #[serde(default)]
+    pub requester_name: String,
+    #[serde(default)]
+    pub requester_email: String,
+    #[serde(default)]
+    pub channel: String,
+    #[serde(default, rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub assignee: String,
+    #[serde(default)]
+    pub due_at: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub resolved_at: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub linked_maintenance_id: String,
+    #[serde(default)]
+    pub linked_calendar_event_id: String,
+    #[serde(default)]
     pub updated_at: String,
 }
 
@@ -774,9 +805,69 @@ pub struct Report {
 pub struct MaintenanceItem {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub condominium: String,
+    #[serde(default)]
     pub supplier: String,
+    #[serde(default)]
     pub status: String,
+    #[serde(default)]
     pub date: String,
+    #[serde(default)]
+    pub equipment_id: String,
+    #[serde(default)]
+    pub zone_id: String,
+    #[serde(default)]
+    pub ticket_id: String,
+    #[serde(default)]
+    pub calendar_event_id: String,
+    #[serde(default, rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub priority: String,
+    #[serde(default)]
+    pub scheduled_start: String,
+    #[serde(default)]
+    pub scheduled_end: String,
+    #[serde(default)]
+    pub completed_at: String,
+    #[serde(default)]
+    pub cost_estimate: String,
+    #[serde(default)]
+    pub notes: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEvent {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub event_type: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub start_at: String,
+    #[serde(default)]
+    pub end_at: String,
+    #[serde(default)]
+    pub condominium: String,
+    #[serde(default)]
+    pub linked_entity_type: String,
+    #[serde(default)]
+    pub linked_entity_id: String,
+    #[serde(default)]
+    pub attendees: Vec<String>,
+    #[serde(default)]
+    pub location: String,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1043,13 +1134,46 @@ impl AppStore {
             tickets: demo
                 .tickets
                 .iter()
-                .map(|item| Ticket {
+                .enumerate()
+                .map(|(index, item)| Ticket {
                     id: Uuid::new_v4().to_string(),
                     title: item.title.clone(),
                     condominium: item.condominium.clone(),
-                    priority: item.priority.clone(),
-                    status: item.status.clone(),
+                    priority: normalize_demo_priority(&item.priority),
+                    status: normalize_demo_ticket_status(&item.status),
                     detail: item.status.clone(),
+                    requester_name: if index == 0 {
+                        "Carlos Almeida".to_string()
+                    } else {
+                        "Maria Fernandes".to_string()
+                    },
+                    requester_email: if index == 0 {
+                        "carlos.almeida@example.pt".to_string()
+                    } else {
+                        "maria.fernandes@example.pt".to_string()
+                    },
+                    channel: "Portal".to_string(),
+                    kind: if item.title.to_lowercase().contains("avaria") {
+                        "Avaria".to_string()
+                    } else {
+                        "Pedido".to_string()
+                    },
+                    category: if item.title.to_lowercase().contains("elevador") {
+                        "Elevadores".to_string()
+                    } else {
+                        "Infraestrutura".to_string()
+                    },
+                    assignee: demo.user.name.clone(),
+                    due_at: "2026-05-22T18:00:00Z".to_string(),
+                    created_at: item.updated_at.clone(),
+                    resolved_at: if item.status.to_lowercase().contains("resolvido") {
+                        item.updated_at.clone()
+                    } else {
+                        String::new()
+                    },
+                    tags: vec!["operacional".to_string(), "condominio".to_string()],
+                    linked_maintenance_id: String::new(),
+                    linked_calendar_event_id: String::new(),
                     updated_at: item.updated_at.clone(),
                 })
                 .collect(),
@@ -1096,11 +1220,33 @@ impl AppStore {
                 .map(|item| MaintenanceItem {
                     id: Uuid::new_v4().to_string(),
                     title: item.title.clone(),
+                    condominium: demo.active_condominium.clone(),
                     supplier: item.supplier.clone(),
-                    status: item.status.clone(),
+                    status: normalize_demo_maintenance_status(&item.status),
                     date: item.date.clone(),
+                    equipment_id: "elevador-bloco-b".to_string(),
+                    zone_id: "bloco-b".to_string(),
+                    ticket_id: String::new(),
+                    calendar_event_id: String::new(),
+                    kind: if item.title.to_lowercase().contains("repar") {
+                        "Corretiva".to_string()
+                    } else {
+                        "Preventiva".to_string()
+                    },
+                    priority: if item.status.to_lowercase().contains("urg") {
+                        "Urgente".to_string()
+                    } else {
+                        "Normal".to_string()
+                    },
+                    scheduled_start: format!("{}T09:30:00Z", item.date),
+                    scheduled_end: format!("{}T11:00:00Z", item.date),
+                    completed_at: String::new(),
+                    cost_estimate: "420.00".to_string(),
+                    notes: "Intervencao operacional ligada a ocorrencias do condominio."
+                        .to_string(),
                 })
                 .collect(),
+            calendar_events: default_calendar_events(&demo.active_condominium),
             assemblies: demo
                 .assemblies
                 .iter()
@@ -1182,6 +1328,9 @@ impl AppStore {
         }
         if self.reserve_funds.is_empty() {
             self.reserve_funds = default_reserve_funds(&demo.active_condominium);
+        }
+        if self.calendar_events.is_empty() {
+            self.calendar_events = default_calendar_events(&demo.active_condominium);
         }
     }
 
@@ -1265,27 +1414,27 @@ impl AppStore {
             ],
             quick_actions: vec![
                 QuickAction {
-                    title: "Novo Ticket".to_string(),
-                    description: "Abrir ocorrencia".to_string(),
-                    icon: "+".to_string(),
+                    title: "Extrato de Conta".to_string(),
+                    description: "Resumo por fracao".to_string(),
+                    icon: "E".to_string(),
                     tone: "blue".to_string(),
                 },
                 QuickAction {
-                    title: "Emitir Recibo".to_string(),
-                    description: "Gerar recibo".to_string(),
-                    icon: "R".to_string(),
+                    title: "Avarias".to_string(),
+                    description: "Ocorrencias do condominio".to_string(),
+                    icon: "A".to_string(),
                     tone: "green".to_string(),
                 },
                 QuickAction {
-                    title: "Novo Condominio".to_string(),
-                    description: "Adicionar predio".to_string(),
-                    icon: "B".to_string(),
+                    title: "Email".to_string(),
+                    description: "Comunicacoes rapidas".to_string(),
+                    icon: "@".to_string(),
                     tone: "purple".to_string(),
                 },
                 QuickAction {
-                    title: "Gerar Relatorio".to_string(),
-                    description: "Exportar dados".to_string(),
-                    icon: "Q".to_string(),
+                    title: "Calendario".to_string(),
+                    description: "Agenda operacional".to_string(),
+                    icon: "C".to_string(),
                     tone: "gold".to_string(),
                 },
             ],
@@ -1413,7 +1562,7 @@ impl AppStore {
             },
             DashboardModule {
                 id: "administration".to_string(),
-                title: "Administracao".to_string(),
+                title: "Vistorias".to_string(),
                 subtitle: "Operacoes e manutencao".to_string(),
                 tone: "purple".to_string(),
                 cta: "Gerir administracao".to_string(),
@@ -1440,7 +1589,7 @@ impl AppStore {
             },
             DashboardModule {
                 id: "reports".to_string(),
-                title: "Relatorios".to_string(),
+                title: "Tickets".to_string(),
                 subtitle: "Analises e documentos".to_string(),
                 tone: "gold".to_string(),
                 cta: "Gerar relatorio".to_string(),
@@ -1508,7 +1657,7 @@ fn now_utc() -> DateTime<Utc> {
 
 fn is_critical_priority(priority: &str) -> bool {
     let normalized = priority.to_lowercase();
-    normalized.contains("crit") || normalized.contains("tic")
+    normalized.contains("crit") || normalized.contains("tic") || normalized.contains("urg")
 }
 
 fn format_currency(value: Decimal) -> String {
@@ -1739,6 +1888,111 @@ fn default_reserve_funds(condominium: &str) -> Vec<ReserveFund> {
         monthly_change: Decimal::new(42_000, 2),
         status: "Estavel".to_string(),
     }]
+}
+
+fn default_calendar_events(condominium: &str) -> Vec<CalendarEvent> {
+    let now = Utc::now().to_rfc3339();
+
+    vec![
+        CalendarEvent {
+            id: Uuid::new_v4().to_string(),
+            title: "Vistoria aos elevadores".to_string(),
+            description: "Verificacao tecnica do elevador do Bloco B.".to_string(),
+            event_type: "Vistoria".to_string(),
+            status: "Agendado".to_string(),
+            start_at: "2026-05-24T10:00:00Z".to_string(),
+            end_at: "2026-05-24T11:00:00Z".to_string(),
+            condominium: condominium.to_string(),
+            linked_entity_type: "maintenance".to_string(),
+            linked_entity_id: String::new(),
+            attendees: vec![
+                "administracao@gestisac.pt".to_string(),
+                "assistencia@elevatec.pt".to_string(),
+            ],
+            location: "Bloco B".to_string(),
+            notes: "Confirmar acesso a casa das maquinas antes da chegada do tecnico.".to_string(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        },
+        CalendarEvent {
+            id: Uuid::new_v4().to_string(),
+            title: "Reuniao de administracao".to_string(),
+            description: "Ponto de situacao de quotas, avarias e documentacao.".to_string(),
+            event_type: "Reuniao".to_string(),
+            status: "Planeado".to_string(),
+            start_at: "2026-05-24T19:00:00Z".to_string(),
+            end_at: "2026-05-24T20:00:00Z".to_string(),
+            condominium: condominium.to_string(),
+            linked_entity_type: "assembly".to_string(),
+            linked_entity_id: String::new(),
+            attendees: vec!["administracao@gestisac.pt".to_string()],
+            location: "Sala do condominio".to_string(),
+            notes: "Preparar resumo de tickets e manutencoes abertas.".to_string(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        },
+        CalendarEvent {
+            id: Uuid::new_v4().to_string(),
+            title: "Email aos moradores".to_string(),
+            description: "Comunicacao planeada sobre manutencao do elevador.".to_string(),
+            event_type: "Email".to_string(),
+            status: "Rascunho".to_string(),
+            start_at: "2026-05-23T09:30:00Z".to_string(),
+            end_at: "2026-05-23T09:45:00Z".to_string(),
+            condominium: condominium.to_string(),
+            linked_entity_type: "ticket".to_string(),
+            linked_entity_id: String::new(),
+            attendees: vec![
+                "moradores@vilaverde.example.pt".to_string(),
+                "administracao@gestisac.pt".to_string(),
+            ],
+            location: "Email planeado".to_string(),
+            notes: "Registo de planeamento. Sem envio automatico nesta fase.".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        },
+    ]
+}
+
+fn normalize_demo_priority(priority: &str) -> String {
+    let normalized = priority.to_lowercase();
+    if normalized.contains("crit") || normalized.contains("tic") || normalized.contains("urg") {
+        "Urgente".to_string()
+    } else if normalized.contains("import") || normalized.contains("alta") {
+        "Alta".to_string()
+    } else if normalized.contains("baix") {
+        "Baixa".to_string()
+    } else {
+        "Normal".to_string()
+    }
+}
+
+fn normalize_demo_ticket_status(status: &str) -> String {
+    let normalized = status.to_lowercase();
+    if normalized.contains("resol") || normalized.contains("fech") {
+        "Resolvido".to_string()
+    } else if normalized.contains("fornecedor") || normalized.contains("curso") {
+        "Em curso".to_string()
+    } else if normalized.contains("analise") || normalized.contains("pend") {
+        "Pendente".to_string()
+    } else {
+        "Aberto".to_string()
+    }
+}
+
+fn normalize_demo_maintenance_status(status: &str) -> String {
+    let normalized = status.to_lowercase();
+    if normalized.contains("concl") || normalized.contains("resol") {
+        "Concluida".to_string()
+    } else if normalized.contains("curso") {
+        "Em curso".to_string()
+    } else if normalized.contains("fornecedor") {
+        "A aguardar fornecedor".to_string()
+    } else if normalized.contains("agend") || normalized.contains("urg") {
+        "Agendada".to_string()
+    } else {
+        "Planeada".to_string()
+    }
 }
 
 #[cfg(test)]

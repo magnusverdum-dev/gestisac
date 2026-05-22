@@ -8,9 +8,17 @@ type ModuleCardProps = {
   onModuleCommand$: PropFunction<(moduleId: string, command: string) => void>;
 };
 
+const condominiumShortcuts = [
+  { label: 'Geral', path: '/condominios?area=general' },
+  { label: 'Vistorias', path: '/condominios?area=inspections' },
+  { label: 'Time Line', path: '/condominios?area=timeline' },
+  { label: 'Avarias', path: '/condominios?area=avarias' }
+] as const;
+
 export const ModuleCard = component$((props: ModuleCardProps) => {
   const module = props.module;
   const menuOpen = useSignal(false);
+  const shortcuts = module.id === 'condominiums' ? condominiumShortcuts : [];
 
   return (
     <article class={`module-card ${module.tone}`}>
@@ -64,6 +72,21 @@ export const ModuleCard = component$((props: ModuleCardProps) => {
             </div>
           ))}
         </div>
+
+        {shortcuts.length ? (
+          <div class="module-shortcuts" role="group" aria-label={`Atalhos de ${module.title}`}>
+            {shortcuts.map((shortcut) => (
+              <button
+                class="module-shortcut"
+                key={`${module.id}-${shortcut.path}`}
+                type="button"
+                onClick$={() => props.navigate$(shortcut.path)}
+              >
+                {shortcut.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <button class="module-cta" type="button" onClick$={() => props.navigate$(module.path)}>
           {module.cta}

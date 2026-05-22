@@ -1065,6 +1065,36 @@ kbd {
   color: #bbf7d0;
 }
 
+.module-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.module-shortcut {
+  min-height: 28px;
+  padding: 0 10px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(3, 7, 18, 0.4);
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--ease),
+    background 180ms var(--ease),
+    color 180ms var(--ease);
+}
+
+.module-shortcut:hover {
+  color: #fff;
+  border-color: rgba(75, 163, 255, 0.9);
+  background: rgba(12, 28, 56, 0.72);
+}
+
 .module-cta {
   display: inline-flex;
   align-items: center;
@@ -3751,5 +3781,691 @@ kbd {
 
   .condo-building-image {
     max-width: 160px;
+  }
+}
+
+/* Operational calendar, CMT and maintenance modules */
+.summary-card.blue {
+  border-color: rgba(75, 163, 255, 0.24);
+}
+
+.summary-card.purple {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(124, 58, 237, 0.18), transparent 13rem),
+    rgba(7, 18, 40, 0.68);
+  border-color: rgba(124, 58, 237, 0.26);
+}
+
+.summary-card.red {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(244, 63, 94, 0.16), transparent 13rem),
+    rgba(7, 18, 40, 0.68);
+  border-color: rgba(244, 63, 94, 0.26);
+}
+
+.calendar-header {
+  gap: 14px;
+}
+
+.calendar-shell,
+.ops-workspace {
+  overflow: hidden;
+  padding: 0;
+}
+
+.calendar-toolbar {
+  align-items: flex-start;
+}
+
+.calendar-filters {
+  flex-wrap: wrap;
+  min-width: min(760px, 100%);
+}
+
+.calendar-filters select,
+.ops-form-grid input,
+.ops-form-grid select,
+.ops-form-grid textarea,
+.condo-context-picker select {
+  min-height: 42px;
+  padding: 0 12px;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(5, 13, 30, 0.76);
+  outline: none;
+}
+
+.ops-form-grid textarea {
+  min-height: 110px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.calendar-view-switch {
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(3, 7, 18, 0.16);
+}
+
+.calendar-view-switch button {
+  min-height: 34px;
+  padding: 0 13px;
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.calendar-view-switch button.active,
+.calendar-view-switch button:hover {
+  color: #061126;
+  border-color: rgba(244, 210, 122, 0.58);
+  background: #f4d27a;
+}
+
+.calendar-layout,
+.ops-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  padding: 18px;
+}
+
+.calendar-main-panel,
+.calendar-side-panel,
+.ops-list-column,
+.ops-detail-panel {
+  min-width: 0;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.month-grid > strong {
+  padding: 0 6px 6px;
+  color: #94a3b8;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.calendar-day {
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  background: rgba(3, 7, 18, 0.28);
+}
+
+.calendar-day.muted {
+  opacity: 0.46;
+}
+
+.calendar-day > span {
+  color: #e2e8f0;
+  font-weight: 850;
+}
+
+.calendar-event-chip {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 6px 8px;
+  overflow: hidden;
+  color: #e0f2fe;
+  font-size: 11px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid rgba(75, 163, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(47, 125, 246, 0.14);
+  cursor: pointer;
+}
+
+.calendar-event-chip.gold,
+.event-dot.gold { border-color: rgba(244, 210, 122, 0.38); background: rgba(217, 164, 65, 0.2); }
+.calendar-event-chip.green,
+.event-dot.green { border-color: rgba(34, 197, 94, 0.32); background: rgba(34, 197, 94, 0.18); }
+.calendar-event-chip.purple,
+.event-dot.purple { border-color: rgba(167, 139, 250, 0.34); background: rgba(124, 58, 237, 0.18); }
+.calendar-event-chip.red,
+.event-dot.red { border-color: rgba(244, 63, 94, 0.34); background: rgba(244, 63, 94, 0.18); }
+
+.calendar-week-list,
+.calendar-list-stack,
+.calendar-mini-list,
+.ops-history {
+  display: grid;
+  gap: 10px;
+}
+
+.calendar-list-stack.padded {
+  padding: 2px;
+}
+
+.calendar-week-day {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(3, 7, 18, 0.24);
+}
+
+.calendar-week-day > div:first-child span,
+.calendar-empty-note,
+.calendar-detail-list dt,
+.detail-kv-grid span,
+.linked-strip span,
+.ops-history span {
+  color: #94a3b8;
+}
+
+.calendar-list-item,
+.calendar-mini-list button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 56px;
+  padding: 11px 12px;
+  text-align: left;
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.calendar-list-item.active,
+.calendar-list-item:hover,
+.calendar-mini-list button:hover {
+  border-color: rgba(75, 163, 255, 0.34);
+  background: rgba(47, 125, 246, 0.13);
+}
+
+.event-dot {
+  width: 11px;
+  height: 11px;
+  border: 1px solid rgba(75, 163, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(47, 125, 246, 0.28);
+}
+
+.calendar-mini-list button {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.calendar-mini-list small {
+  grid-column: 2;
+  color: #94a3b8;
+}
+
+.calendar-detail-card p {
+  margin: 0;
+  color: #cbd5e1;
+}
+
+.calendar-detail-list,
+.detail-kv-grid,
+.linked-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.calendar-detail-list div,
+.detail-kv-grid article,
+.linked-strip article,
+.ops-history article {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.calendar-detail-list dt,
+.calendar-detail-list dd {
+  margin: 0;
+}
+
+.calendar-detail-list dd,
+.detail-kv-grid strong,
+.linked-strip strong {
+  display: block;
+  margin-top: 5px;
+  color: #f8fafc;
+}
+
+.calendar-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.calendar-badges span,
+.calendar-email-note {
+  padding: 7px 10px;
+  color: #fde68a;
+  font-size: 12px;
+  border: 1px solid rgba(217, 164, 65, 0.22);
+  border-radius: 999px;
+  background: rgba(217, 164, 65, 0.08);
+}
+
+.calendar-form-panel {
+  padding: 18px;
+}
+
+.ops-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ops-form-grid label {
+  display: grid;
+  gap: 7px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ops-form-grid label.wide {
+  grid-column: 1 / -1;
+}
+
+.ops-list-column {
+  display: grid;
+  gap: 10px;
+}
+
+.ops-ticket-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(3, 7, 18, 0.26);
+}
+
+.ops-ticket-card.active {
+  border-color: rgba(75, 163, 255, 0.36);
+  background: rgba(47, 125, 246, 0.12);
+}
+
+.ops-ticket-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ops-ticket-main strong,
+.ops-ticket-main span,
+.ops-ticket-main p,
+.ticket-card-meta small,
+.calendar-list-item strong,
+.calendar-list-item span,
+.calendar-list-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-ticket-main p {
+  margin: 5px 0 0;
+  color: #94a3b8;
+}
+
+.priority-rail {
+  width: 5px;
+  height: 56px;
+  border-radius: 999px;
+  background: #4ba3ff;
+}
+
+.priority-rail.red { background: #f43f5e; }
+.priority-rail.gold { background: #f4d27a; }
+.priority-rail.green { background: #22c55e; }
+.priority-rail.purple { background: #a78bfa; }
+
+.ticket-card-meta {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.status-chip {
+  padding: 6px 9px;
+  border: 1px solid rgba(75, 163, 255, 0.22);
+  border-radius: 999px;
+  color: #dbeafe;
+  background: rgba(47, 125, 246, 0.12);
+}
+
+.status-chip.green { color: #bbf7d0; border-color: rgba(34, 197, 94, 0.28); background: rgba(34, 197, 94, 0.1); }
+.status-chip.gold { color: #fde68a; border-color: rgba(217, 164, 65, 0.28); background: rgba(217, 164, 65, 0.1); }
+.status-chip.red { color: #fecdd3; border-color: rgba(244, 63, 94, 0.28); background: rgba(244, 63, 94, 0.1); }
+.status-chip.purple { color: #ddd6fe; border-color: rgba(124, 58, 237, 0.28); background: rgba(124, 58, 237, 0.1); }
+
+.ops-detail-panel .simple-detail-panel {
+  position: sticky;
+  top: 92px;
+}
+
+.ops-history article p {
+  margin: 4px 0;
+  color: #e2e8f0;
+}
+
+.ops-history article small,
+.detail-kv-grid small {
+  color: #94a3b8;
+}
+
+.condo-hero-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.condo-context-picker {
+  display: grid;
+  gap: 7px;
+  min-width: min(360px, 100%);
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1180px) {
+  .calendar-layout,
+  .ops-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-detail-panel .simple-detail-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .calendar-toolbar,
+  .calendar-header,
+  .condo-hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .calendar-filters,
+  .ops-toolbar,
+  .ops-search {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .month-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .month-grid > strong {
+    display: none;
+  }
+
+  .calendar-week-day,
+  .calendar-list-item,
+  .ops-ticket-main,
+  .ops-ticket-card,
+  .calendar-detail-list,
+  .detail-kv-grid,
+  .linked-strip,
+  .ops-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-card-meta {
+    justify-items: start;
+  }
+}
+
+button.summary-card,
+.entity-action,
+.entity-cell-link,
+.linked-strip-card,
+.detail-link-card,
+.entity-relation-card,
+.entity-related-row,
+.condo-timeline-row {
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  border: 0;
+  cursor: pointer;
+}
+
+button.summary-card {
+  width: 100%;
+}
+
+button.summary-card:hover,
+button.summary-card:focus-visible,
+.summary-card.active {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.32);
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 28px 78px rgba(0, 0, 0, 0.32),
+    0 0 0 3px rgba(75, 163, 255, 0.12);
+}
+
+.entity-cell-link {
+  width: 100%;
+  padding: 0;
+  background: transparent;
+}
+
+.entity-cell-link:hover strong,
+.entity-inline-link:hover,
+.entity-inline-link:focus-visible {
+  color: #93c5fd;
+}
+
+.detail-link-card,
+.linked-strip-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.detail-link-card:disabled,
+.linked-strip-card:disabled,
+.entity-relation-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.entity-inline-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  color: #bfdbfe;
+  border: 1px solid rgba(147, 197, 253, 0.18);
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.entity-inline-link.compact {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.entity-detail-page {
+  display: grid;
+  gap: 18px;
+}
+
+.entity-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  padding: 26px;
+  border-radius: 26px;
+}
+
+.entity-hero h1 {
+  margin: 8px 0;
+  font-size: clamp(32px, 5vw, 54px);
+}
+
+.entity-hero p,
+.entity-story p {
+  margin: 0;
+  color: #dbeafe;
+}
+
+.entity-detail-grid,
+.entity-link-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.entity-info-card,
+.entity-relation-card,
+.entity-related-list,
+.entity-story {
+  padding: 16px;
+  border-radius: 20px;
+}
+
+.entity-info-card span,
+.entity-relation-card small,
+.entity-related-list > strong {
+  color: #93a4bd;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.entity-info-card strong,
+.entity-relation-card strong {
+  display: block;
+  margin-top: 10px;
+  color: #fff;
+  font-size: 20px;
+}
+
+.entity-info-card small,
+.entity-relation-card em,
+.empty-relation {
+  display: block;
+  margin-top: 8px;
+  color: #cbd5e1;
+  font-style: normal;
+}
+
+.entity-relation-card {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(7, 18, 40, 0.55);
+}
+
+.entity-relation-card:hover,
+.entity-relation-card:focus-visible,
+.entity-related-row:hover,
+.entity-related-row:focus-visible,
+.simple-record-card:is(button):hover,
+.simple-record-card:is(button):focus-visible,
+.condo-timeline-row:hover,
+.condo-timeline-row:focus-visible {
+  border-color: rgba(75, 163, 255, 0.42);
+  outline: none;
+  background: rgba(47, 125, 246, 0.14);
+}
+
+.relation-icon {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: #fde68a;
+  border: 1px solid rgba(217, 164, 65, 0.24);
+  border-radius: 12px;
+  background: rgba(217, 164, 65, 0.1);
+}
+
+.entity-related-list {
+  display: grid;
+  gap: 10px;
+}
+
+.entity-related-row,
+.condo-timeline-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.entity-related-row span,
+.condo-timeline-row strong {
+  color: #fff;
+  font-weight: 800;
+}
+
+.entity-related-row small,
+.condo-timeline-row span,
+.condo-timeline-row small {
+  color: #cbd5e1;
+}
+
+@media (max-width: 980px) {
+  .entity-detail-grid,
+  .entity-link-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .entity-hero {
+    display: grid;
+  }
+}
+
+@media (max-width: 640px) {
+  .entity-detail-grid,
+  .entity-link-grid {
+    grid-template-columns: 1fr;
   }
 }

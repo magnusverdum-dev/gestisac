@@ -3,8 +3,8 @@ use crate::{
     models::{
         api::{paginate, Paginated, PaginationParams},
         store::{
-            AppStore, Assembly, AuditLogEntry, Building, Condominium, Document, Fraction,
-            MaintenanceItem, Report, Resident, Supplier, Ticket,
+            AppStore, Assembly, AuditLogEntry, Building, CalendarEvent, Condominium, Document,
+            Fraction, MaintenanceItem, Report, Resident, Supplier, Ticket,
         },
     },
     routes::auth::{current_context, current_user, require_delete, require_write},
@@ -74,10 +74,38 @@ pub struct ResidentInput {
 #[serde(rename_all = "camelCase")]
 pub struct TicketInput {
     pub title: String,
-    pub condominium: String,
+    #[serde(default)]
+    pub condominium: Option<String>,
+    #[serde(default)]
     pub priority: Option<String>,
+    #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
     pub detail: Option<String>,
+    #[serde(default)]
+    pub requester_name: Option<String>,
+    #[serde(default)]
+    pub requester_email: Option<String>,
+    #[serde(default)]
+    pub channel: Option<String>,
+    #[serde(default, rename = "type")]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub assignee: Option<String>,
+    #[serde(default)]
+    pub due_at: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub resolved_at: Option<String>,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
+    #[serde(default)]
+    pub linked_maintenance_id: Option<String>,
+    #[serde(default)]
+    pub linked_calendar_event_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,9 +205,85 @@ pub struct ReportRow {
 #[serde(rename_all = "camelCase")]
 pub struct MaintenanceInput {
     pub title: String,
-    pub supplier: String,
+    #[serde(default)]
+    pub condominium: Option<String>,
+    #[serde(default)]
+    pub supplier: Option<String>,
+    #[serde(default)]
     pub status: Option<String>,
-    pub date: String,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub equipment_id: Option<String>,
+    #[serde(default)]
+    pub zone_id: Option<String>,
+    #[serde(default)]
+    pub ticket_id: Option<String>,
+    #[serde(default)]
+    pub calendar_event_id: Option<String>,
+    #[serde(default, rename = "type")]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub priority: Option<String>,
+    #[serde(default)]
+    pub scheduled_start: Option<String>,
+    #[serde(default)]
+    pub scheduled_end: Option<String>,
+    #[serde(default)]
+    pub completed_at: Option<String>,
+    #[serde(default)]
+    pub cost_estimate: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEventInput {
+    pub title: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub event_type: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub start_at: Option<String>,
+    #[serde(default)]
+    pub end_at: Option<String>,
+    #[serde(default)]
+    pub condominium: Option<String>,
+    #[serde(default)]
+    pub linked_entity_type: Option<String>,
+    #[serde(default)]
+    pub linked_entity_id: Option<String>,
+    #[serde(default)]
+    pub attendees: Option<Vec<String>>,
+    #[serde(default)]
+    pub location: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEventQuery {
+    #[serde(default)]
+    pub page: Option<usize>,
+    #[serde(default)]
+    pub page_size: Option<usize>,
+    #[serde(default)]
+    pub search: Option<String>,
+    #[serde(default)]
+    pub condominium: Option<String>,
+    #[serde(default)]
+    pub event_type: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub from: Option<String>,
+    #[serde(default)]
+    pub to: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -741,18 +845,33 @@ pub async fn create_ticket(
 ) -> Result<Json<Ticket>, ApiError> {
     let user = require_write(&headers, &state, "operations").await?;
     validate_required(&input.title, "Titulo")?;
-    validate_required(&input.condominium, "Condominio")?;
+    let now = Utc::now().to_rfc3339();
+    let condominium = trimmed_optional(input.condominium).unwrap_or_else(|| "Geral".to_string());
 
     let item = Ticket {
         id: new_id(),
         title: input.title.trim().to_string(),
-        condominium: input.condominium.trim().to_string(),
-        priority: input.priority.unwrap_or_else(|| "Normal".to_string()),
-        status: input.status.unwrap_or_else(|| "Aberto".to_string()),
+        condominium,
+        priority: trimmed_optional(input.priority).unwrap_or_else(|| "Normal".to_string()),
+        status: trimmed_optional(input.status).unwrap_or_else(|| "Novo".to_string()),
         detail: input
             .detail
+            .and_then(non_empty_string)
             .unwrap_or_else(|| "Ocorrencia registada".to_string()),
-        updated_at: "Agora".to_string(),
+        requester_name: trimmed_optional(input.requester_name).unwrap_or_default(),
+        requester_email: trimmed_optional(input.requester_email).unwrap_or_default(),
+        channel: trimmed_optional(input.channel).unwrap_or_else(|| "Portal".to_string()),
+        kind: trimmed_optional(input.kind).unwrap_or_else(|| "Pedido".to_string()),
+        category: trimmed_optional(input.category).unwrap_or_else(|| "Operacional".to_string()),
+        assignee: trimmed_optional(input.assignee).unwrap_or_default(),
+        due_at: trimmed_optional(input.due_at).unwrap_or_default(),
+        created_at: trimmed_optional(input.created_at).unwrap_or_else(|| now.clone()),
+        resolved_at: trimmed_optional(input.resolved_at).unwrap_or_default(),
+        tags: clean_tags(input.tags.unwrap_or_default()),
+        linked_maintenance_id: trimmed_optional(input.linked_maintenance_id).unwrap_or_default(),
+        linked_calendar_event_id: trimmed_optional(input.linked_calendar_event_id)
+            .unwrap_or_default(),
+        updated_at: now,
     };
 
     let mut store = state.store.write().await;
@@ -777,6 +896,7 @@ pub async fn update_ticket(
     Json(input): Json<TicketInput>,
 ) -> Result<Json<Ticket>, ApiError> {
     let user = require_write(&headers, &state, "operations").await?;
+    validate_required(&input.title, "Titulo")?;
     let mut store = state.store.write().await;
     let item = store
         .tickets
@@ -785,11 +905,35 @@ pub async fn update_ticket(
         .ok_or_else(|| ApiError::not_found("Ticket nao encontrado"))?;
 
     item.title = input.title.trim().to_string();
-    item.condominium = input.condominium.trim().to_string();
-    item.priority = input.priority.unwrap_or_else(|| item.priority.clone());
-    item.status = input.status.unwrap_or_else(|| item.status.clone());
-    item.detail = input.detail.unwrap_or_else(|| item.detail.clone());
-    item.updated_at = "Agora".to_string();
+    if let Some(condominium) = trimmed_optional(input.condominium) {
+        item.condominium = condominium;
+    }
+    item.priority = trimmed_optional(input.priority).unwrap_or_else(|| item.priority.clone());
+    item.status = trimmed_optional(input.status).unwrap_or_else(|| item.status.clone());
+    item.detail = input
+        .detail
+        .and_then(non_empty_string)
+        .unwrap_or_else(|| item.detail.clone());
+    item.requester_name =
+        trimmed_optional(input.requester_name).unwrap_or_else(|| item.requester_name.clone());
+    item.requester_email =
+        trimmed_optional(input.requester_email).unwrap_or_else(|| item.requester_email.clone());
+    item.channel = trimmed_optional(input.channel).unwrap_or_else(|| item.channel.clone());
+    item.kind = trimmed_optional(input.kind).unwrap_or_else(|| item.kind.clone());
+    item.category = trimmed_optional(input.category).unwrap_or_else(|| item.category.clone());
+    item.assignee = trimmed_optional(input.assignee).unwrap_or_else(|| item.assignee.clone());
+    item.due_at = trimmed_optional(input.due_at).unwrap_or_else(|| item.due_at.clone());
+    item.created_at = trimmed_optional(input.created_at).unwrap_or_else(|| item.created_at.clone());
+    item.resolved_at =
+        trimmed_optional(input.resolved_at).unwrap_or_else(|| item.resolved_at.clone());
+    if let Some(tags) = input.tags {
+        item.tags = clean_tags(tags);
+    }
+    item.linked_maintenance_id = trimmed_optional(input.linked_maintenance_id)
+        .unwrap_or_else(|| item.linked_maintenance_id.clone());
+    item.linked_calendar_event_id = trimmed_optional(input.linked_calendar_event_id)
+        .unwrap_or_else(|| item.linked_calendar_event_id.clone());
+    item.updated_at = Utc::now().to_rfc3339();
     let response = item.clone();
     store.add_audit(
         &user,
@@ -1665,15 +1809,30 @@ pub async fn create_maintenance(
 ) -> Result<Json<MaintenanceItem>, ApiError> {
     let user = require_write(&headers, &state, "operations").await?;
     validate_required(&input.title, "Titulo")?;
-    validate_required(&input.supplier, "Fornecedor")?;
-    validate_required(&input.date, "Data")?;
+    let scheduled_start = trimmed_optional(input.scheduled_start);
+    let date = trimmed_optional(input.date)
+        .or_else(|| scheduled_start.as_deref().map(date_part))
+        .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
 
     let item = MaintenanceItem {
         id: new_id(),
         title: input.title.trim().to_string(),
-        supplier: input.supplier.trim().to_string(),
-        status: input.status.unwrap_or_else(|| "Agendado".to_string()),
-        date: input.date.trim().to_string(),
+        condominium: trimmed_optional(input.condominium).unwrap_or_else(|| "Geral".to_string()),
+        supplier: trimmed_optional(input.supplier)
+            .unwrap_or_else(|| "Fornecedor por definir".to_string()),
+        status: trimmed_optional(input.status).unwrap_or_else(|| "Planeada".to_string()),
+        date,
+        equipment_id: trimmed_optional(input.equipment_id).unwrap_or_default(),
+        zone_id: trimmed_optional(input.zone_id).unwrap_or_default(),
+        ticket_id: trimmed_optional(input.ticket_id).unwrap_or_default(),
+        calendar_event_id: trimmed_optional(input.calendar_event_id).unwrap_or_default(),
+        kind: trimmed_optional(input.kind).unwrap_or_else(|| "Preventiva".to_string()),
+        priority: trimmed_optional(input.priority).unwrap_or_else(|| "Normal".to_string()),
+        scheduled_start: scheduled_start.unwrap_or_default(),
+        scheduled_end: trimmed_optional(input.scheduled_end).unwrap_or_default(),
+        completed_at: trimmed_optional(input.completed_at).unwrap_or_default(),
+        cost_estimate: trimmed_optional(input.cost_estimate).unwrap_or_default(),
+        notes: trimmed_optional(input.notes).unwrap_or_default(),
     };
 
     let mut store = state.store.write().await;
@@ -1699,8 +1858,7 @@ pub async fn update_maintenance(
 ) -> Result<Json<MaintenanceItem>, ApiError> {
     let user = require_write(&headers, &state, "operations").await?;
     validate_required(&input.title, "Titulo")?;
-    validate_required(&input.supplier, "Fornecedor")?;
-    validate_required(&input.date, "Data")?;
+    let scheduled_start = trimmed_optional(input.scheduled_start);
 
     let mut store = state.store.write().await;
     let item = store
@@ -1710,9 +1868,29 @@ pub async fn update_maintenance(
         .ok_or_else(|| ApiError::not_found("Manutencao nao encontrada"))?;
 
     item.title = input.title.trim().to_string();
-    item.supplier = input.supplier.trim().to_string();
-    item.status = input.status.unwrap_or_else(|| item.status.clone());
-    item.date = input.date.trim().to_string();
+    item.condominium =
+        trimmed_optional(input.condominium).unwrap_or_else(|| item.condominium.clone());
+    item.supplier = trimmed_optional(input.supplier).unwrap_or_else(|| item.supplier.clone());
+    item.status = trimmed_optional(input.status).unwrap_or_else(|| item.status.clone());
+    item.date = trimmed_optional(input.date)
+        .or_else(|| scheduled_start.as_deref().map(date_part))
+        .unwrap_or_else(|| item.date.clone());
+    item.equipment_id =
+        trimmed_optional(input.equipment_id).unwrap_or_else(|| item.equipment_id.clone());
+    item.zone_id = trimmed_optional(input.zone_id).unwrap_or_else(|| item.zone_id.clone());
+    item.ticket_id = trimmed_optional(input.ticket_id).unwrap_or_else(|| item.ticket_id.clone());
+    item.calendar_event_id =
+        trimmed_optional(input.calendar_event_id).unwrap_or_else(|| item.calendar_event_id.clone());
+    item.kind = trimmed_optional(input.kind).unwrap_or_else(|| item.kind.clone());
+    item.priority = trimmed_optional(input.priority).unwrap_or_else(|| item.priority.clone());
+    item.scheduled_start = scheduled_start.unwrap_or_else(|| item.scheduled_start.clone());
+    item.scheduled_end =
+        trimmed_optional(input.scheduled_end).unwrap_or_else(|| item.scheduled_end.clone());
+    item.completed_at =
+        trimmed_optional(input.completed_at).unwrap_or_else(|| item.completed_at.clone());
+    item.cost_estimate =
+        trimmed_optional(input.cost_estimate).unwrap_or_else(|| item.cost_estimate.clone());
+    item.notes = trimmed_optional(input.notes).unwrap_or_else(|| item.notes.clone());
     let response = item.clone();
     store.add_audit(
         &user,
@@ -1759,6 +1937,153 @@ pub async fn delete_maintenance(
     Ok(Json(response))
 }
 
+pub async fn calendar_events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<CalendarEventQuery>,
+) -> Result<Json<Paginated<CalendarEvent>>, ApiError> {
+    require_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let filtered = store
+        .calendar_events
+        .iter()
+        .filter(|event| matches_calendar_filter(event, &query))
+        .cloned()
+        .collect::<Vec<_>>();
+    let params = PaginationParams {
+        page: query.page.unwrap_or(1),
+        page_size: query.page_size.unwrap_or(50),
+        search: query.search.unwrap_or_default(),
+    };
+
+    Ok(Json(paginate(&filtered, &params)))
+}
+
+pub async fn create_calendar_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<CalendarEventInput>,
+) -> Result<Json<CalendarEvent>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    validate_required(&input.title, "Titulo")?;
+    let start_at = trimmed_optional(input.start_at).unwrap_or_else(|| Utc::now().to_rfc3339());
+    let now = Utc::now().to_rfc3339();
+
+    let item = CalendarEvent {
+        id: new_id(),
+        title: input.title.trim().to_string(),
+        description: trimmed_optional(input.description).unwrap_or_default(),
+        event_type: trimmed_optional(input.event_type).unwrap_or_else(|| "Outro".to_string()),
+        status: trimmed_optional(input.status).unwrap_or_else(|| "Planeado".to_string()),
+        end_at: trimmed_optional(input.end_at).unwrap_or_else(|| start_at.clone()),
+        start_at,
+        condominium: trimmed_optional(input.condominium).unwrap_or_else(|| "Geral".to_string()),
+        linked_entity_type: trimmed_optional(input.linked_entity_type).unwrap_or_default(),
+        linked_entity_id: trimmed_optional(input.linked_entity_id).unwrap_or_default(),
+        attendees: clean_tags(input.attendees.unwrap_or_default()),
+        location: trimmed_optional(input.location).unwrap_or_default(),
+        notes: trimmed_optional(input.notes).unwrap_or_default(),
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    let mut store = state.store.write().await;
+    store.calendar_events.insert(0, item.clone());
+    store.add_audit(
+        &user,
+        "operations",
+        "create",
+        &item.id,
+        format!("Evento {} criado", item.title),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(item))
+}
+
+pub async fn update_calendar_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<CalendarEventInput>,
+) -> Result<Json<CalendarEvent>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    validate_required(&input.title, "Titulo")?;
+
+    let mut store = state.store.write().await;
+    let item = store
+        .calendar_events
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Evento de calendario nao encontrado"))?;
+
+    item.title = input.title.trim().to_string();
+    item.description =
+        trimmed_optional(input.description).unwrap_or_else(|| item.description.clone());
+    item.event_type = trimmed_optional(input.event_type).unwrap_or_else(|| item.event_type.clone());
+    item.status = trimmed_optional(input.status).unwrap_or_else(|| item.status.clone());
+    item.start_at = trimmed_optional(input.start_at).unwrap_or_else(|| item.start_at.clone());
+    item.end_at = trimmed_optional(input.end_at).unwrap_or_else(|| item.end_at.clone());
+    item.condominium =
+        trimmed_optional(input.condominium).unwrap_or_else(|| item.condominium.clone());
+    item.linked_entity_type = trimmed_optional(input.linked_entity_type)
+        .unwrap_or_else(|| item.linked_entity_type.clone());
+    item.linked_entity_id =
+        trimmed_optional(input.linked_entity_id).unwrap_or_else(|| item.linked_entity_id.clone());
+    if let Some(attendees) = input.attendees {
+        item.attendees = clean_tags(attendees);
+    }
+    item.location = trimmed_optional(input.location).unwrap_or_else(|| item.location.clone());
+    item.notes = trimmed_optional(input.notes).unwrap_or_else(|| item.notes.clone());
+    item.updated_at = Utc::now().to_rfc3339();
+
+    let response = item.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "update",
+        &response.id,
+        format!("Evento {} atualizado", response.title),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn delete_calendar_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<CalendarEvent>>, ApiError> {
+    let user = require_delete(&headers, &state, "operations").await?;
+    let mut store = state.store.write().await;
+    let original_len = store.calendar_events.len();
+    let deleted_name = store
+        .calendar_events
+        .iter()
+        .find(|item| item.id == id)
+        .map(|item| item.title.clone())
+        .unwrap_or_else(|| "Evento".to_string());
+    store.calendar_events.retain(|item| item.id != id);
+    if store.calendar_events.len() == original_len {
+        return Err(ApiError::not_found("Evento de calendario nao encontrado"));
+    }
+    store.add_audit(
+        &user,
+        "operations",
+        "delete",
+        &id,
+        format!("{deleted_name} apagado"),
+    );
+    let response = store.calendar_events.clone();
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
 pub async fn audit_log(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1779,6 +2104,69 @@ fn validate_required(value: &str, label: &str) -> Result<(), ApiError> {
     }
 
     Ok(())
+}
+
+fn non_empty_string(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn trimmed_optional(value: Option<String>) -> Option<String> {
+    value.and_then(non_empty_string)
+}
+
+fn clean_tags(values: Vec<String>) -> Vec<String> {
+    values
+        .into_iter()
+        .filter_map(non_empty_string)
+        .collect::<Vec<_>>()
+}
+
+fn date_part(value: &str) -> String {
+    value.split('T').next().unwrap_or(value).to_string()
+}
+
+fn matches_calendar_filter(event: &CalendarEvent, query: &CalendarEventQuery) -> bool {
+    matches_optional_filter(&event.condominium, query.condominium.as_deref(), true)
+        && matches_optional_filter(&event.event_type, query.event_type.as_deref(), false)
+        && matches_optional_filter(&event.status, query.status.as_deref(), false)
+        && matches_start_after(event, query.from.as_deref())
+        && matches_start_before(event, query.to.as_deref())
+}
+
+fn matches_optional_filter(value: &str, expected: Option<&str>, accepts_general: bool) -> bool {
+    let Some(expected) = expected
+        .map(str::trim)
+        .filter(|expected| !expected.is_empty())
+    else {
+        return true;
+    };
+
+    if accepts_general && expected.eq_ignore_ascii_case("Geral") {
+        return true;
+    }
+
+    value.eq_ignore_ascii_case(expected)
+}
+
+fn matches_start_after(event: &CalendarEvent, from: Option<&str>) -> bool {
+    let Some(from) = from.map(str::trim).filter(|value| !value.is_empty()) else {
+        return true;
+    };
+
+    event.start_at.as_str() >= from
+}
+
+fn matches_start_before(event: &CalendarEvent, to: Option<&str>) -> bool {
+    let Some(to) = to.map(str::trim).filter(|value| !value.is_empty()) else {
+        return true;
+    };
+
+    event.start_at.as_str() <= to
 }
 
 async fn persist(state: &AppState) -> Result<(), ApiError> {
@@ -2663,7 +3051,7 @@ fn recommended_report_actions(store: &crate::models::store::AppStore) -> Vec<Str
 
 fn is_critical_priority(priority: &str) -> bool {
     let normalized = priority.to_lowercase();
-    normalized.contains("crit") || normalized.contains("tic")
+    normalized.contains("crit") || normalized.contains("tic") || normalized.contains("urg")
 }
 
 fn is_closed_status(status: &str) -> bool {

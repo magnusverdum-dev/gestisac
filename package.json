@@ -11,6 +11,12 @@
     "packages/config",
     "packages/types"
   ],
+  "pnpm": {
+    "overrides": {
+      "esbuild": "0.25.12",
+      "vite": "6.4.2"
+    }
+  },
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,green \"pnpm run dev:web\" \"pnpm run dev:api\"",
     "dev:web": "pnpm --dir apps/web dev",

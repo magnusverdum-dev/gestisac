@@ -7,6 +7,7 @@ export type {
   Assembly,
   AuditLogEntry,
   Building,
+  CalendarEvent,
   CompletenessReport,
   Condominium,
   CondominiumAddress,

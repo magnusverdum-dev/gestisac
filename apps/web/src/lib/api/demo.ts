@@ -6,6 +6,7 @@ import type {
   AlertItem,
   DashboardResponse,
   GlobalSearchResult,
+  CalendarEvent,
   Condominium,
   CondominiumAddress,
   CondominiumStructure,
@@ -203,7 +204,8 @@ function readDemoStore(): DemoStore {
   const stored = localStorage.getItem(DEMO_STORE_KEY);
   if (stored) {
     try {
-      return JSON.parse(stored) as DemoStore;
+      const parsed = JSON.parse(stored) as DemoStore;
+      return ensureDemoStoreDefaults(parsed);
     } catch {
       localStorage.removeItem(DEMO_STORE_KEY);
     }
@@ -219,13 +221,55 @@ function saveDemoStore(store: DemoStore): void {
   localStorage.setItem(DEMO_STORE_KEY, JSON.stringify(store));
 }
 
-function parseJsonBody(body: BodyInit | undefined): Record<string, string | number> {
+function ensureDemoStoreDefaults(store: DemoStore): DemoStore {
+  if (!Array.isArray(store.calendarEvents)) {
+    store.calendarEvents = demoCalendarEvents();
+  }
+
+  store.tickets = store.tickets.map((ticket) => ({
+    ...ticket,
+    priority: ticket.priority || 'Normal',
+    status: ticket.status || 'Aberto',
+    requesterName: ticket.requesterName || '',
+    requesterEmail: ticket.requesterEmail || '',
+    channel: ticket.channel || 'Portal',
+    type: ticket.type || 'Pedido',
+    category: ticket.category || 'Operacional',
+    assignee: ticket.assignee || '',
+    dueAt: ticket.dueAt || '',
+    createdAt: ticket.createdAt || ticket.updatedAt || new Date().toISOString(),
+    resolvedAt: ticket.resolvedAt || '',
+    tags: ticket.tags || [],
+    linkedMaintenanceId: ticket.linkedMaintenanceId || '',
+    linkedCalendarEventId: ticket.linkedCalendarEventId || ''
+  }));
+
+  store.maintenance = store.maintenance.map((item) => ({
+    ...item,
+    condominium: item.condominium || store.activeCondominium,
+    type: item.type || 'Preventiva',
+    priority: item.priority || 'Normal',
+    scheduledStart: item.scheduledStart || '',
+    scheduledEnd: item.scheduledEnd || '',
+    completedAt: item.completedAt || '',
+    costEstimate: item.costEstimate || '',
+    notes: item.notes || '',
+    equipmentId: item.equipmentId || '',
+    zoneId: item.zoneId || '',
+    ticketId: item.ticketId || '',
+    calendarEventId: item.calendarEventId || ''
+  }));
+
+  return store;
+}
+
+function parseJsonBody(body: BodyInit | undefined): Record<string, unknown> {
   if (typeof body !== 'string') {
     return {};
   }
 
   try {
-    return JSON.parse(body) as Record<string, string | number>;
+    return JSON.parse(body) as Record<string, unknown>;
   } catch {
     return {};
   }
@@ -458,18 +502,42 @@ function createDemoStore(): DemoStore {
         id: 'ticket-001',
         title: 'Avaria no elevador do Bloco B',
         condominium: 'Condominio Vila Verde',
-        priority: 'Critico',
-        status: 'Fornecedor contactado',
+        priority: 'Urgente',
+        status: 'Em curso',
         detail: 'Elevador parado desde as 08:20. Tecnico agendado para hoje.',
+        requesterName: 'Carlos Almeida',
+        requesterEmail: 'carlos.almeida@example.pt',
+        channel: 'Portal',
+        type: 'Avaria',
+        category: 'Elevadores',
+        assignee: 'Joao Silva',
+        dueAt: '2026-05-22T18:00',
+        createdAt: '2026-05-15T08:20:00.000Z',
+        resolvedAt: '',
+        tags: ['elevador', 'bloco-b', 'urgente'],
+        linkedMaintenanceId: 'maint-001',
+        linkedCalendarEventId: 'cal-001',
         updatedAt: '2026-05-15 10:30'
       },
       {
         id: 'ticket-002',
         title: 'Infiltracao na garagem',
         condominium: 'Condominio Vila Verde',
-        priority: 'Importante',
-        status: 'Em analise',
+        priority: 'Alta',
+        status: 'Pendente',
         detail: 'Pedido de vistoria aberto para a garagem -1.',
+        requesterName: 'Maria Fernandes',
+        requesterEmail: 'maria.fernandes@example.pt',
+        channel: 'Email',
+        type: 'Pedido',
+        category: 'Infiltracoes',
+        assignee: 'Equipa tecnica',
+        dueAt: '2026-05-25T17:30',
+        createdAt: '2026-05-14T16:10:00.000Z',
+        resolvedAt: '',
+        tags: ['garagem', 'vistoria'],
+        linkedMaintenanceId: '',
+        linkedCalendarEventId: 'cal-003',
         updatedAt: '2026-05-14 16:10'
       }
     ],
@@ -515,11 +583,24 @@ function createDemoStore(): DemoStore {
       {
         id: 'maint-001',
         title: 'Reparacao do elevador Bloco B',
+        condominium: 'Condominio Vila Verde',
         supplier: 'Elevatec Lisboa',
-        status: 'Urgente',
-        date: '2026-05-15'
+        status: 'Agendada',
+        date: '2026-05-24',
+        equipmentId: 'elevador-bloco-b',
+        zoneId: 'bloco-b',
+        ticketId: 'ticket-001',
+        calendarEventId: 'cal-001',
+        type: 'Corretiva',
+        priority: 'Urgente',
+        scheduledStart: '2026-05-24T10:00',
+        scheduledEnd: '2026-05-24T11:00',
+        completedAt: '',
+        costEstimate: '420.00',
+        notes: 'Verificar quadro de comando e preparar aviso aos moradores.'
       }
     ],
+    calendarEvents: demoCalendarEvents(),
     assemblies: [
       {
         id: 'assembly-001',
@@ -546,6 +627,81 @@ function createDemoStore(): DemoStore {
   };
 }
 
+function demoCalendarEvents(): CalendarEvent[] {
+  const now = new Date().toISOString();
+
+  return [
+    {
+      id: 'cal-001',
+      title: 'Vistoria aos elevadores',
+      description: 'Verificacao tecnica do elevador do Bloco B.',
+      eventType: 'Vistoria',
+      status: 'Agendado',
+      startAt: '2026-05-24T10:00',
+      endAt: '2026-05-24T11:00',
+      condominium: 'Condominio Vila Verde',
+      linkedEntityType: 'maintenance',
+      linkedEntityId: 'maint-001',
+      attendees: ['assistencia@elevatec.pt', 'administracao@gestisac.pt'],
+      location: 'Bloco B',
+      notes: 'Confirmar acesso tecnico antes da chegada da equipa.',
+      createdAt: now,
+      updatedAt: now
+    },
+    {
+      id: 'cal-002',
+      title: 'Reuniao de administracao',
+      description: 'Resumo de quotas, tickets e manutencao semanal.',
+      eventType: 'Reuniao',
+      status: 'Planeado',
+      startAt: '2026-05-24T19:00',
+      endAt: '2026-05-24T20:00',
+      condominium: 'Condominio Vila Verde',
+      linkedEntityType: 'assembly',
+      linkedEntityId: 'assembly-001',
+      attendees: ['administracao@gestisac.pt'],
+      location: 'Sala do condominio',
+      notes: 'Levar mapa de dividas e ocorrencias em aberto.',
+      createdAt: now,
+      updatedAt: now
+    },
+    {
+      id: 'cal-003',
+      title: 'Email aos moradores',
+      description: 'Aviso planeado sobre a vistoria e acesso a garagem.',
+      eventType: 'Email',
+      status: 'Rascunho',
+      startAt: '2026-05-23T09:30',
+      endAt: '2026-05-23T09:45',
+      condominium: 'Condominio Vila Verde',
+      linkedEntityType: 'ticket',
+      linkedEntityId: 'ticket-002',
+      attendees: ['moradores@vilaverde.example.pt'],
+      location: 'Email planeado',
+      notes: 'Sem envio real nesta fase. Apenas planeamento/registo.',
+      createdAt: now,
+      updatedAt: now
+    },
+    {
+      id: 'cal-004',
+      title: 'Limpeza tecnica',
+      description: 'Plano preventivo mensal em areas comuns.',
+      eventType: 'Manutencao',
+      status: 'Planeado',
+      startAt: '2026-05-27T08:30',
+      endAt: '2026-05-27T10:30',
+      condominium: 'Condominio Atlantico',
+      linkedEntityType: 'maintenance',
+      linkedEntityId: '',
+      attendees: ['geral@limpezascentral.pt'],
+      location: 'Areas comuns',
+      notes: 'Confirmar fornecedor 24h antes.',
+      createdAt: now,
+      updatedAt: now
+    }
+  ];
+}
+
 function demoCollectionForPath(
   store: DemoStore,
   pathname: string
@@ -560,6 +716,7 @@ function demoCollectionForPath(
     documents: store.documents as unknown as Array<Record<string, unknown>>,
     reports: store.reports as unknown as Array<Record<string, unknown>>,
     maintenance: store.maintenance as unknown as Array<Record<string, unknown>>,
+    'calendar-events': store.calendarEvents as unknown as Array<Record<string, unknown>>,
     assemblies: store.assemblies as unknown as Array<Record<string, unknown>>,
     'audit-log': store.auditLog as unknown as Array<Record<string, unknown>>,
     'accounting/quotas': store.accounting.quotas as unknown as Array<Record<string, unknown>>,
@@ -641,10 +798,10 @@ function buildDemoDashboard(store: DemoStore): DashboardResponse {
       { label: `${store.tickets.length} tickets registados`, tone: 'gold' }
     ],
     quickActions: [
-      { title: 'Novo Ticket', description: 'Abrir ocorrencia', icon: '+', tone: 'blue' },
-      { title: 'Emitir Recibo', description: 'Gerar recibo', icon: 'EUR', tone: 'green' },
-      { title: 'Novo Condominio', description: 'Adicionar predio', icon: 'B', tone: 'purple' },
-      { title: 'Gerar Relatorio', description: 'Exportar dados', icon: 'R', tone: 'gold' }
+      { title: 'Extrato de Conta', description: 'Resumo por fracao', icon: 'E', tone: 'blue' },
+      { title: 'Avarias', description: 'Ocorrencias do condominio', icon: 'A', tone: 'green' },
+      { title: 'Email', description: 'Comunicacoes rapidas', icon: '@', tone: 'purple' },
+      { title: 'Calendario', description: 'Agenda operacional', icon: 'C', tone: 'gold' }
     ],
     dashboardModules: [
       {
@@ -679,7 +836,7 @@ function buildDemoDashboard(store: DemoStore): DashboardResponse {
       },
       {
         id: 'administration',
-        title: 'Administracao',
+        title: 'Vistorias',
         subtitle: 'Tickets, manutencao e fornecedores',
         tone: 'purple',
         cta: 'Gerir administracao',
@@ -694,7 +851,7 @@ function buildDemoDashboard(store: DemoStore): DashboardResponse {
       },
       {
         id: 'reports',
-        title: 'Relatorios',
+        title: 'Tickets',
         subtitle: 'Documentos, atas e analytics',
         tone: 'gold',
         cta: 'Gerar relatorio',
@@ -792,7 +949,7 @@ export async function demoUploadDocument(payload: FormData): Promise<DocumentIte
 
 function createDemoGeneratedDocument(
   store: DemoStore,
-  payload: Record<string, string | number>
+  payload: Record<string, unknown>
 ): DocumentItem {
   const template = String(payload.template || 'documento');
   const templateLabel = demoDocumentTemplates().find((item) => item.id === template)?.label ?? 'Documento gerado';

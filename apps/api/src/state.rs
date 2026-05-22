@@ -1,4 +1,7 @@
-use crate::models::{demo::DemoData, store::AppStore};
+use crate::{
+    config::ApiConfig,
+    models::{demo::DemoData, store::AppStore},
+};
 use anyhow::Context;
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -6,55 +9,12 @@ use argon2::{
 };
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 const DEMO_DATA: &str = include_str!("../../../mock/demo-data.json");
 const DEFAULT_ADMIN_PASSWORD: &str = "Gestisac2026!";
-
-#[derive(Debug, Clone)]
-pub struct ApiConfig {
-    pub host: IpAddr,
-    pub port: u16,
-    pub data_path: PathBuf,
-    pub document_storage_path: PathBuf,
-}
-
-impl ApiConfig {
-    pub fn from_env() -> Self {
-        let host = std::env::var("GESTISAC_API_HOST")
-            .ok()
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
-
-        let port = std::env::var("GESTISAC_API_PORT")
-            .ok()
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(3000);
-
-        let data_path = std::env::var("GESTISAC_DATA_PATH")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/store.json"));
-        let document_storage_path = std::env::var("GESTISAC_DOCUMENT_STORAGE_PATH")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/documents"));
-
-        Self {
-            host,
-            port,
-            data_path,
-            document_storage_path,
-        }
-    }
-
-    pub fn bind_addr(&self) -> SocketAddr {
-        SocketAddr::new(self.host, self.port)
-    }
-}
+const SESSION_SECRET_PREFIX: &str = "sha256:";
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -64,7 +24,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn load() -> anyhow::Result<Self> {
-        let config = ApiConfig::from_env();
+        let config = ApiConfig::from_env()?;
         let demo: DemoData = serde_json::from_str(DEMO_DATA)?;
         let mut store = if config.data_path.exists() {
             let contents = std::fs::read_to_string(&config.data_path).with_context(|| {
@@ -85,6 +45,7 @@ impl AppState {
         };
         store.ensure_demo_defaults(&demo);
         migrate_legacy_password_hashes(&mut store)?;
+        protect_session_secrets(&mut store);
 
         Ok(Self {
             config,
@@ -141,6 +102,20 @@ pub fn is_modern_password_hash(password_hash: &str) -> bool {
     password_hash.starts_with("$argon2")
 }
 
+pub fn protect_session_secret(secret: &str) -> String {
+    if secret.starts_with(SESSION_SECRET_PREFIX) {
+        return secret.to_string();
+    }
+
+    let mut hasher = Sha256::new();
+    hasher.update(secret.as_bytes());
+    format!("{SESSION_SECRET_PREFIX}{:x}", hasher.finalize())
+}
+
+pub fn session_secret_matches(stored_secret: &str, presented_secret: &str) -> bool {
+    stored_secret == presented_secret || stored_secret == protect_session_secret(presented_secret)
+}
+
 fn migrate_legacy_password_hashes(store: &mut AppStore) -> anyhow::Result<()> {
     for user in &mut store.users {
         if !is_modern_password_hash(&user.password_hash)
@@ -151,6 +126,13 @@ fn migrate_legacy_password_hashes(store: &mut AppStore) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn protect_session_secrets(store: &mut AppStore) {
+    for session in &mut store.sessions {
+        session.token = protect_session_secret(&session.token);
+        session.refresh_token = protect_session_secret(&session.refresh_token);
+    }
 }
 
 fn legacy_sha256_password(password: &str) -> String {
@@ -179,5 +161,17 @@ mod tests {
 
         assert!(verify_password("Gestisac2026!", &legacy_hash));
         assert!(!verify_password("wrong-password", &legacy_hash));
+    }
+
+    #[test]
+    fn session_secrets_are_hashed_and_still_match_raw_values() {
+        let raw = "raw-session-token";
+        let protected = protect_session_secret(raw);
+
+        assert_ne!(protected, raw);
+        assert!(protected.starts_with(SESSION_SECRET_PREFIX));
+        assert!(session_secret_matches(&protected, raw));
+        assert!(session_secret_matches(raw, raw));
+        assert!(!session_secret_matches(&protected, "other-token"));
     }
 }

@@ -14,6 +14,8 @@ import {
   type ImportPreview,
   type ResourceState
 } from '../../lib/api';
+import { entityPath, personPath } from '../../lib/entity-navigation';
+import { EntityAction } from '../common/EntityAction';
 import { SimpleHubCards, type SimpleHubSection } from './SimpleHub';
 import {
   Field,
@@ -30,8 +32,10 @@ import {
 type CondominiumsPageProps = {
   token: string;
   resources: ResourceState;
+  focusArea: CondoAreaId | '';
   isSaving: boolean;
   onRefresh$: PropFunction<() => void>;
+  navigate$: PropFunction<(path: string) => void>;
 };
 
 const tabs = [
@@ -54,7 +58,7 @@ const tabs = [
 
 type TabId = (typeof tabs)[number];
 
-type CondoAreaId =
+export type CondoAreaId =
   | 'general'
   | 'reports'
   | 'documentation'
@@ -91,6 +95,7 @@ const emptyCompleteness: CompletenessReport = {
 
 export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
   const selectedId = useSignal(props.resources.condominiums[0]?.id ?? '');
+  const contextId = useSignal('all');
   const activeTab = useSignal<TabId>('overview');
   const activeArea = useSignal<CondoAreaId | ''>('');
   const detailOpen = useSignal(false);
@@ -109,6 +114,12 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
     selectedFromDetail ??
     props.resources.condominiums.find((item) => item.id === selectedId.value) ??
     props.resources.condominiums[0];
+  const contextCondominium =
+    contextId.value === 'all'
+      ? undefined
+      : props.resources.condominiums.find((item) => item.id === contextId.value);
+  const contextName = contextCondominium?.name ?? '';
+  const isGlobalContext = contextId.value === 'all';
   const completeness = selectedFromDetail ? detail.value!.completeness : localCompleteness(selected);
   const filtered = props.resources.condominiums.filter((item) => {
     const haystack = [
@@ -131,6 +142,24 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
     return matchesSearch && matchesStatus && !item.archived;
   });
   const activeCount = props.resources.condominiums.filter((item) => !item.archived).length;
+  const relatedTickets = props.resources.tickets.filter((ticket) =>
+    contextName ? ticket.condominium === contextName : true
+  );
+  const relatedMaintenance = props.resources.maintenance.filter((item) =>
+    contextName ? item.condominium === contextName : true
+  );
+  const relatedResidents = props.resources.residents.filter((resident) =>
+    contextName ? resident.condominium === contextName : true
+  );
+  const relatedCalendarEvents = props.resources.calendarEvents.filter((event) =>
+    contextName ? event.condominium === contextName : true
+  );
+
+  useTask$(({ track }) => {
+    const requestedArea = track(() => props.focusArea);
+    activeArea.value = requestedArea;
+    detailOpen.value = false;
+  });
 
   const loadDetail$ = $(async (id: string) => {
     if (!id) {
@@ -304,32 +333,32 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
     }
   });
 
-  const relatedTickets = props.resources.tickets.filter((ticket) =>
-    selected?.name ? ticket.condominium === selected.name : true
-  );
   const relatedDocuments = [
     ...props.resources.documents
-      .filter((document) => !selected?.name || document.condominium === selected.name)
+      .filter((document) => !contextName || document.condominium === contextName)
       .map((document) => ({
-        id: document.id,
-        title: document.title,
-        meta: `${document.type} - ${document.condominium}`,
-        status: document.status,
-        detail: document.fileName || 'Sem ficheiro associado'
-      })),
-    ...(selected?.managedDocuments ?? []).map((document) => ({
+      id: document.id,
+      title: document.title,
+      meta: `${document.type} - ${document.condominium}`,
+      status: document.status,
+      detail: document.fileName || 'Sem ficheiro associado',
+      path: entityPath('document', document.id)
+    })),
+    ...(!isGlobalContext && selected?.managedDocuments ? selected.managedDocuments : []).map((document) => ({
       id: document.id,
       title: document.title,
       meta: `${document.documentType} - ficha do condominio`,
       status: document.status,
-      detail: document.fileName || document.description || 'Documento de condominio'
+      detail: document.fileName || document.description || 'Documento de condominio',
+      path: selected ? entityPath('condominium', selected.id) : ''
     })),
-    ...(selected?.media ?? []).map((media) => ({
+    ...(!isGlobalContext && selected?.media ? selected.media : []).map((media) => ({
       id: media.id,
       title: media.title,
       meta: `${media.mediaType} - imagem/planta`,
       status: media.isPrimary ? 'Imagem principal' : 'Arquivo visual',
-      detail: media.fileName || media.description || 'Media associado'
+      detail: media.fileName || media.description || 'Media associado',
+      path: selected ? entityPath('condominium', selected.id) : ''
     }))
   ];
   const condoSections: SimpleHubSection[] = [
@@ -339,7 +368,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       description: 'Condominios, fracoes e utilizadores ligados por ficha operacional.',
       icon: 'C',
       tone: 'blue',
-      count: activeCount,
+      count: isGlobalContext ? activeCount : 1,
       quickActions: ['Extrato de Conta']
     },
     {
@@ -366,7 +395,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       description: 'Resumo de ocorrencias associadas, sem reabrir o modulo tecnico.',
       icon: 'A',
       tone: 'red',
-      count: props.resources.tickets.length
+      count: relatedTickets.length
     },
     {
       id: 'inspections',
@@ -374,7 +403,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       description: 'Acompanhamento de verificacoes, pendentes e pontos de estado.',
       icon: 'V',
       tone: 'purple',
-      count: props.resources.maintenance.length
+      count: relatedMaintenance.length
     },
     {
       id: 'timeline',
@@ -382,7 +411,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       description: 'Historico de alteracoes, eventos e momentos do condominio.',
       icon: 'T',
       tone: 'blue',
-      count: selected?.history?.length ?? 0
+      count: isGlobalContext ? relatedCalendarEvents.length : selected?.history?.length ?? relatedCalendarEvents.length
     },
     {
       id: 'support',
@@ -390,7 +419,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       description: 'Contacto rapido entre utilizadores, administradores e equipa.',
       icon: 'S',
       tone: 'green',
-      count: props.resources.residents.length
+      count: relatedResidents.length
     },
     {
       id: 'tickets',
@@ -398,10 +427,10 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       description: 'Pedidos abertos, seguimento operacional e prioridades.',
       icon: 'K',
       tone: 'gold',
-      count: props.resources.tickets.length
+      count: relatedTickets.length
     }
   ];
-  const accountExtractRows = props.resources.residents.map((user) => {
+  const accountExtractRows = relatedResidents.map((user) => {
     const debts = props.resources.accounting.debts.filter((debt) =>
       debt.resident === user.name && debt.fraction === user.fraction && debt.condominium === user.condominium
     );
@@ -418,7 +447,8 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       detail: `${quotas.length} quotas - divida ${debtTotal.toLocaleString('pt-PT', {
         style: 'currency',
         currency: 'EUR'
-      })}`
+      })}`,
+      path: personPath(props.resources, user.name, user.email)
     };
   });
   return (
@@ -427,20 +457,42 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
         <div>
           <span class="page-eyebrow">GESTISAC - Condominios</span>
           <h1>Condominios</h1>
-          <p>Escolhe primeiro uma area. Depois mostramos so o que precisas para trabalhar com calma.</p>
+          <p>
+            Escolhe primeiro uma area. O contexto atual e {isGlobalContext ? 'Geral, com todos os condominios' : contextName}.
+          </p>
         </div>
-        {activeArea.value ? (
-          <button
-            class="primary-action"
-            type="button"
-            onClick$={() => {
-              activeArea.value = '';
-              detailOpen.value = false;
-            }}
-          >
-            Voltar aos 8 cartoes
-          </button>
-        ) : null}
+        <div class="condo-hero-controls">
+          <label class="condo-context-picker">
+            <span>Contexto</span>
+            <select
+              value={contextId.value}
+              onChange$={(event) => {
+                const value = (event.target as HTMLSelectElement).value;
+                contextId.value = value;
+                if (value !== 'all') {
+                  selectedId.value = value;
+                }
+              }}
+            >
+              <option value="all">Geral - todos os condominios</option>
+              {props.resources.condominiums.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+          {activeArea.value ? (
+            <button
+              class="primary-action"
+              type="button"
+              onClick$={() => {
+                activeArea.value = '';
+                detailOpen.value = false;
+              }}
+            >
+              Voltar aos 8 cartoes
+            </button>
+          ) : null}
+        </div>
       </header>
 
       {localError.value ? <div class="app-error glass-panel">{localError.value}</div> : null}
@@ -470,7 +522,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                     class="primary-action"
                     type="button"
                     onClick$={() => {
-                      search.value = selected?.name ?? '';
+                      search.value = contextName;
                     }}
                   >
                     Extrato de Conta
@@ -569,14 +621,14 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                 <span>Seleciona um condominio e confirma sempre a cadeia Condominio {'>'} Fracao {'>'} Utilizador.</span>
                 <div class="simple-record-list">
                   {accountExtractRows.map((row) => (
-                    <article class="simple-record-card" key={row.id}>
+                    <EntityAction class="simple-record-card" key={row.id} path={row.path} navigate$={props.navigate$}>
                       <div>
                         <strong>{row.name}</strong>
                         <span>{row.condominium} - fracao {row.fraction}</span>
                       </div>
                       <p>{row.detail}</p>
                       <small>{row.status}</small>
-                    </article>
+                    </EntityAction>
                   ))}
                 </div>
               </section>
@@ -594,11 +646,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                       <button
                         class="primary-action"
                         type="button"
-                        onClick$={() => {
-                          selectedId.value = item.id;
-                          activeTab.value = 'overview';
-                          detailOpen.value = true;
-                        }}
+                        onClick$={() => props.navigate$(entityPath('condominium', item.id))}
                       >
                         Abrir
                       </button>
@@ -608,6 +656,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                           type="button"
                           onClick$={() => {
                             selectedId.value = item.id;
+                            contextId.value = item.id;
                             activeTab.value = 'identification';
                             detailOpen.value = true;
                           }}
@@ -618,6 +667,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                           type="button"
                           onClick$={() => {
                             selectedId.value = item.id;
+                            contextId.value = item.id;
                             activeArea.value = 'documentation';
                             detailOpen.value = true;
                           }}
@@ -628,6 +678,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                           type="button"
                           onClick$={() => {
                             selectedId.value = item.id;
+                            contextId.value = item.id;
                             activeArea.value = 'avarias';
                             detailOpen.value = true;
                           }}
@@ -760,10 +811,10 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                     <p>Relatorio disponivel para consulta no modulo Relatorios.</p>
                     <small>{report.status}</small>
                     <div class="simple-card-actions">
-                      <button class="primary-action" type="button">Abrir</button>
+                      <button class="primary-action" type="button" onClick$={() => props.navigate$(entityPath('report', report.id))}>Abrir</button>
                       <details class="simple-more-menu">
                         <summary>Mais</summary>
-                        <a href="/relatorios">Ir para Relatorios</a>
+                        <button type="button" onClick$={() => props.navigate$('/relatorios')}>Ir para Relatorios</button>
                       </details>
                     </div>
                   </article>
@@ -840,7 +891,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                     <p>{document.detail}</p>
                     <small>{document.status}</small>
                     <div class="simple-card-actions">
-                      <button class="primary-action" type="button">Abrir</button>
+                      <button class="primary-action" type="button" onClick$={() => props.navigate$(document.path)}>Abrir</button>
                       <details class="simple-more-menu">
                         <summary>Mais</summary>
                         <span>Editar no detalhe do condominio</span>
@@ -865,10 +916,10 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   <h2>Avarias de condominios</h2>
                   <p>Resumo simples. O trabalho tecnico completo continua no modulo Tickets/Avarias.</p>
                 </div>
-                <a class="primary-action" href="/tickets">Abrir Tickets</a>
+                <button class="primary-action" type="button" onClick$={() => props.navigate$('/tickets')}>Abrir Tickets</button>
               </header>
               <div class="simple-record-list">
-                {(detailOpen.value ? relatedTickets : props.resources.tickets).length ? (detailOpen.value ? relatedTickets : props.resources.tickets).map((ticket) => (
+                {relatedTickets.length ? relatedTickets.map((ticket) => (
                   <article class="simple-record-card" key={ticket.id}>
                     <div>
                       <strong>{ticket.title}</strong>
@@ -877,10 +928,10 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                     <p>{ticket.status} - {ticket.updatedAt}</p>
                     <small>{ticket.priority}</small>
                     <div class="simple-card-actions">
-                      <button class="primary-action" type="button">Abrir</button>
+                      <button class="primary-action" type="button" onClick$={() => props.navigate$(entityPath('ticket', ticket.id))}>Abrir</button>
                       <details class="simple-more-menu">
                         <summary>Mais</summary>
-                        <a href="/tickets">Gerir no modulo Tickets</a>
+                        <button type="button" onClick$={() => props.navigate$('/tickets')}>Gerir no modulo Tickets</button>
                       </details>
                     </div>
                   </article>
@@ -903,15 +954,15 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                 </div>
               </header>
               <div class="simple-record-list">
-                {props.resources.maintenance.length ? props.resources.maintenance.map((item) => (
-                  <article class="simple-record-card" key={item.id}>
+                {relatedMaintenance.length ? relatedMaintenance.map((item) => (
+                  <EntityAction class="simple-record-card" key={item.id} path={entityPath('maintenance', item.id)} navigate$={props.navigate$}>
                     <div>
                       <strong>{item.title}</strong>
                       <span>{item.supplier}</span>
                     </div>
                     <p>Vistoria ou manutencao prevista para {item.date}</p>
                     <small>{item.status}</small>
-                  </article>
+                  </EntityAction>
                 )) : (
                   <article class="simple-empty-state">
                     <strong>Sem vistorias registadas.</strong>
@@ -931,11 +982,41 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   <p>Eventos recentes ligados ao condominio selecionado e ao seu historico operacional.</p>
                 </div>
               </header>
-              {selected ? (
+              {isGlobalContext ? (
+                <div class="simple-record-list">
+                  {relatedCalendarEvents.length ? relatedCalendarEvents.map((event) => (
+                    <article class="simple-record-card" key={event.id}>
+                      <div>
+                        <strong>{event.title}</strong>
+                        <span>{event.condominium} - {event.eventType}</span>
+                      </div>
+                      <p>{event.startAt} - {event.status}</p>
+                      <small>{event.linkedEntityType || 'Evento'}</small>
+                      <div class="simple-card-actions">
+                        <button class="primary-action" type="button" onClick$={() => props.navigate$(entityPath('calendarEvent', event.id))}>Abrir</button>
+                      </div>
+                    </article>
+                  )) : (
+                    <article class="simple-empty-state">
+                      <strong>Sem eventos globais.</strong>
+                      <span>O calendario vai preencher esta timeline operacional.</span>
+                    </article>
+                  )}
+                </div>
+              ) : selected ? (
                 <section class="simple-detail-panel compact">
                   <strong>{selected.name}</strong>
                   <span>{shortAddress(selected)}</span>
                   <History events={selected.history ?? []} />
+                  <div class="condo-timeline">
+                    {relatedCalendarEvents.map((event) => (
+                      <EntityAction class="condo-timeline-row" key={event.id} path={entityPath('calendarEvent', event.id)} navigate$={props.navigate$}>
+                        <strong>{event.title}</strong>
+                        <span>{event.eventType} - {event.status}</span>
+                        <small>{event.startAt}</small>
+                      </EntityAction>
+                    ))}
+                  </div>
                 </section>
               ) : (
                 <article class="simple-empty-state">
@@ -960,15 +1041,15 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                 <span>Condominios {'>'} Condominio {'>'} Fracoes {'>'} Utilizadores</span>
               </section>
               <div class="simple-record-list">
-                {props.resources.residents.length ? props.resources.residents.map((user) => (
-                  <article class="simple-record-card" key={user.id}>
+                {relatedResidents.length ? relatedResidents.map((user) => (
+                  <EntityAction class="simple-record-card" key={user.id} path={personPath(props.resources, user.name, user.email)} navigate$={props.navigate$}>
                     <div>
                       <strong>{user.name}</strong>
                       <span>{user.email} - {user.phone}</span>
                     </div>
                     <p>{user.condominium} - fracao {user.fraction}</p>
                     <small>{user.status}</small>
-                  </article>
+                  </EntityAction>
                 )) : (
                   <article class="simple-empty-state">
                     <strong>Sem utilizadores registados.</strong>
@@ -987,10 +1068,10 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   <h2>Tickets de condominios</h2>
                   <p>Pedidos e seguimento operacional associados aos condominios.</p>
                 </div>
-                <a class="primary-action" href="/tickets">Abrir modulo Tickets</a>
+                <button class="primary-action" type="button" onClick$={() => props.navigate$('/tickets')}>Abrir modulo Tickets</button>
               </header>
               <div class="simple-record-list">
-                {props.resources.tickets.length ? props.resources.tickets.map((ticket) => (
+                {relatedTickets.length ? relatedTickets.map((ticket) => (
                   <article class="simple-record-card" key={ticket.id}>
                     <div>
                       <strong>{ticket.title}</strong>
@@ -999,7 +1080,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                     <p>{ticket.detail || ticket.status} - {ticket.updatedAt}</p>
                     <small>{ticket.priority}</small>
                     <div class="simple-card-actions">
-                      <a class="primary-action" href="/tickets">Abrir</a>
+                      <button class="primary-action" type="button" onClick$={() => props.navigate$(entityPath('ticket', ticket.id))}>Abrir</button>
                     </div>
                   </article>
                 )) : (

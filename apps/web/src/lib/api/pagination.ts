@@ -24,7 +24,7 @@ export async function getResourcePage<T>(
 export async function createResource(
   token: string,
   resource: ResourceEndpoint,
-  payload: Record<string, string | number>
+  payload: Record<string, unknown>
 ): Promise<unknown> {
   return apiRequest(`/api/${resource}`, {
     method: 'POST',
@@ -37,7 +37,7 @@ export async function updateResource(
   token: string,
   resource: ResourceEndpoint,
   id: string,
-  payload: Record<string, string | number>
+  payload: Record<string, unknown>
 ): Promise<unknown> {
   return apiRequest(`/api/${resource}/${id}`, {
     method: 'PUT',

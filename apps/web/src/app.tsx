@@ -1,9 +1,13 @@
 import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 import { LoginPage } from './components/auth/LoginPage';
 import { DashboardPage } from './components/dashboard/DashboardPage';
-import { CondominiumsPage } from './components/pages/CondominiumsPage';
+import { CalendarPage } from './components/pages/CalendarPage';
+import { CondominiumsPage, type CondoAreaId } from './components/pages/CondominiumsPage';
 import { DocumentsPage } from './components/pages/DocumentsPage';
+import { EntityDetailPage } from './components/pages/EntityDetailPage';
+import { MaintenancePage } from './components/pages/MaintenancePage';
 import { PageOverview } from './components/pages/PageOverview';
+import { TicketsPage } from './components/pages/TicketsPage';
 import { AppShell } from './components/shell/AppShell';
 import {
   emptyResources,
@@ -40,8 +44,27 @@ import {
   type ResourceEndpoint,
   type PublicUser
 } from './lib/api';
+import { matchEntityRoute } from './lib/entity-navigation';
 
-const normalizePath = (path: string) => (path === '/' ? '/dashboard' : path);
+const normalizePath = (path: string) => {
+  const basePath = path === '/' ? '/dashboard' : path;
+  const [withoutHash = '/dashboard'] = basePath.split('#', 1);
+  const [pathname = '/dashboard'] = withoutHash.split('?', 1);
+  return pathname || '/dashboard';
+};
+
+const dashboardShortcutAreas: CondoAreaId[] = ['general', 'inspections', 'timeline', 'avarias'];
+
+const readCondominiumShortcutArea = (path: string): CondoAreaId | '' => {
+  const queryStart = path.indexOf('?');
+  if (queryStart === -1) {
+    return '';
+  }
+  const queryPart = path.slice(queryStart + 1).split('#', 1)[0] ?? '';
+  const params = new URLSearchParams(queryPart);
+  const area = params.get('area');
+  return area && dashboardShortcutAreas.includes(area as CondoAreaId) ? (area as CondoAreaId) : '';
+};
 
 const triggerBrowserDownload = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
@@ -58,6 +81,7 @@ const triggerBrowserDownload = (blob: Blob, filename: string) => {
 
 export const App = component$(() => {
   const currentPath = useSignal('/dashboard');
+  const condominiumShortcutArea = useSignal<CondoAreaId | ''>('');
   const apiStatus = useSignal<ApiStatus>('checking');
   const dashboard = useSignal(fallbackDashboard);
   const resources = useSignal(emptyResources);
@@ -109,7 +133,10 @@ export const App = component$(() => {
   });
 
   const navigate$ = $((path: string) => {
-    const normalizedPath = normalizePath(path);
+    const targetPath = path === '/' ? '/dashboard' : path;
+    const normalizedPath = normalizePath(targetPath);
+    condominiumShortcutArea.value =
+      normalizedPath === '/condominios' ? readCondominiumShortcutArea(targetPath) : '';
     const navigationStartedAt =
       import.meta.env.DEV && typeof performance !== 'undefined'
         ? performance.now()
@@ -123,7 +150,7 @@ export const App = component$(() => {
       documentPreview.value = null;
     }
     currentPath.value = normalizedPath;
-    window.history.pushState({}, '', normalizedPath);
+    window.history.pushState({}, '', targetPath);
     window.scrollTo({ top: 0, behavior: 'auto' });
     if (navigationStartedAt && typeof requestAnimationFrame !== 'undefined') {
       requestAnimationFrame(() => {
@@ -208,6 +235,26 @@ export const App = component$(() => {
       return;
     }
 
+    if (title === 'Extrato de Conta') {
+      await navigate$('/condominios?area=general');
+      return;
+    }
+
+    if (title === 'Avarias') {
+      await navigate$('/condominios?area=avarias');
+      return;
+    }
+
+    if (title === 'Email') {
+      await navigate$('/condominios?area=support');
+      return;
+    }
+
+    if (title === 'Calendario') {
+      await navigate$('/calendario');
+      return;
+    }
+
     await navigate$('/dashboard');
   });
 
@@ -216,7 +263,8 @@ export const App = component$(() => {
       condominiums: '/condominios',
       accounting: '/contabilidade',
       administration: '/administracao',
-      reports: '/relatorios'
+      reports: '/relatorios',
+      calendar: '/calendario'
     };
     const createByModule: Record<string, CreateResource> = {
       condominiums: 'condominiums',
@@ -234,7 +282,7 @@ export const App = component$(() => {
     await navigate$(targetPath);
   });
 
-  const createRecord$ = $(async (resource: ResourceEndpoint, payload: Record<string, string | number>) => {
+  const createRecord$ = $(async (resource: ResourceEndpoint, payload: Record<string, unknown>) => {
     if (!session.token) {
       error.value = 'Sessao expirada. Entra novamente.';
       notice.value = '';
@@ -258,7 +306,7 @@ export const App = component$(() => {
   const updateRecord$ = $(async (
     resource: ResourceEndpoint,
     id: string,
-    payload: Record<string, string | number>
+    payload: Record<string, unknown>
   ) => {
     if (!session.token) {
       error.value = 'Sessao expirada. Entra novamente.';
@@ -440,7 +488,11 @@ export const App = component$(() => {
 
   useVisibleTask$(({ cleanup }) => {
     const syncPath = () => {
-      currentPath.value = normalizePath(window.location.pathname);
+      const rawPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      const normalizedPath = normalizePath(rawPath);
+      currentPath.value = normalizedPath;
+      condominiumShortcutArea.value =
+        normalizedPath === '/condominios' ? readCondominiumShortcutArea(rawPath) : '';
     };
 
     syncPath();
@@ -533,7 +585,8 @@ export const App = component$(() => {
     );
   }
 
-  const page = getPageByPath(pageCache.value, currentPath.value);
+  const route = matchEntityRoute(currentPath.value);
+  const page = getPageByPath(pageCache.value, route.basePath);
 
   return (
     <AppShell
@@ -546,7 +599,13 @@ export const App = component$(() => {
     >
       {error.value ? <div class="app-error glass-panel">{error.value}</div> : null}
       {notice.value ? <div class="app-success glass-panel">{notice.value}</div> : null}
-      {page.path === '/dashboard' ? (
+      {route.kind === 'detail' ? (
+        <EntityDetailPage
+          route={route}
+          resources={resources.value}
+          navigate$={navigate$}
+        />
+      ) : page.path === '/dashboard' ? (
         <DashboardPage
           dashboard={dashboard.value}
           navigate$={navigate$}
@@ -557,8 +616,43 @@ export const App = component$(() => {
         <CondominiumsPage
           token={session.token}
           resources={resources.value}
+          focusArea={condominiumShortcutArea.value}
           isSaving={isSaving.value}
           onRefresh$={refreshWorkspace$}
+          navigate$={navigate$}
+        />
+      ) : page.path === '/calendario' ? (
+        <CalendarPage
+          resources={resources.value}
+          isSaving={isSaving.value}
+          initialType={route.kind === 'calendarType' ? route.eventType : ''}
+          navigate$={navigate$}
+          onCreate$={createRecord$}
+          onUpdate$={updateRecord$}
+          onDelete$={deleteRecord$}
+        />
+      ) : page.path === '/tickets' ? (
+        <TicketsPage
+          resources={resources.value}
+          isSaving={isSaving.value}
+          createIntentVersion={createIntent.path === page.path ? createIntent.version : 0}
+          initialStatusGroup={route.kind === 'ticketStatus' ? route.group : ''}
+          initialPriority={route.kind === 'ticketPriority' ? route.priority : ''}
+          navigate$={navigate$}
+          onCreate$={createRecord$}
+          onUpdate$={updateRecord$}
+          onDelete$={deleteRecord$}
+        />
+      ) : page.path === '/manutencao' ? (
+        <MaintenancePage
+          resources={resources.value}
+          isSaving={isSaving.value}
+          createIntentVersion={createIntent.path === page.path ? createIntent.version : 0}
+          initialStatus={route.kind === 'maintenanceStatus' ? route.status : ''}
+          navigate$={navigate$}
+          onCreate$={createRecord$}
+          onUpdate$={updateRecord$}
+          onDelete$={deleteRecord$}
         />
       ) : page.path === '/documentos' ? (
         <DocumentsPage
@@ -569,6 +663,7 @@ export const App = component$(() => {
           documentPreview={documentPreview.value}
           createIntentResource={createIntent.path === page.path ? createIntent.resource : ''}
           createIntentVersion={createIntent.version}
+          navigate$={navigate$}
           onCreate$={createRecord$}
           onUpdate$={updateRecord$}
           onDelete$={deleteRecord$}
@@ -590,6 +685,7 @@ export const App = component$(() => {
           documentPreview={documentPreview.value}
           createIntentResource={createIntent.path === page.path ? createIntent.resource : ''}
           createIntentVersion={createIntent.version}
+          navigate$={navigate$}
           onCreate$={createRecord$}
           onUpdate$={updateRecord$}
           onDelete$={deleteRecord$}

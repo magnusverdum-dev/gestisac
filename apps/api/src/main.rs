@@ -1,10 +1,11 @@
+mod config;
 mod error;
 mod models;
 mod routes;
 mod state;
 
 use state::AppState;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -19,8 +20,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = AppState::load()?;
     let bind_addr = state.config.bind_addr();
+    let cors = state.config.cors_layer()?;
     let app = routes::router(state)
-        .layer(CorsLayer::permissive())
+        .layer(cors)
         .layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;

@@ -17,6 +17,8 @@ import type {
   ResourceEndpoint
 } from '../../lib/api';
 import type { DemoPage } from '../../data/pages';
+import { pathForRecord } from '../../lib/entity-navigation';
+import { EntityAction } from '../common/EntityAction';
 import {
   OPERATIONAL_PAGE_SIZE,
   recordVisualFor,
@@ -33,11 +35,12 @@ type PageOverviewProps = {
   documentPreview: DocumentPreview | null;
   createIntentResource: CreateResource | '';
   createIntentVersion: number;
-  onCreate$: PropFunction<(resource: ResourceEndpoint, payload: Record<string, string | number>) => void>;
+  navigate$: PropFunction<(path: string) => void>;
+  onCreate$: PropFunction<(resource: ResourceEndpoint, payload: Record<string, unknown>) => void>;
   onUpdate$: PropFunction<(
     resource: ResourceEndpoint,
     id: string,
-    payload: Record<string, string | number>
+    payload: Record<string, unknown>
   ) => void>;
   onDelete$: PropFunction<(resource: ResourceEndpoint, id: string) => void>;
   onUploadDocument$: PropFunction<(payload: FormData) => void>;
@@ -57,6 +60,7 @@ export const PageOverview = component$((props: PageOverviewProps) => {
   const editKey = useSignal('');
   const filtersVisible = useSignal(false);
   const searchQuery = useSignal('');
+  const summaryFilter = useSignal('');
   const selectedRows = useSignal<string[]>([]);
   const statusFilter = useSignal('Todos');
   const visibleLimit = useSignal(OPERATIONAL_PAGE_SIZE);
@@ -74,8 +78,9 @@ export const PageOverview = component$((props: PageOverviewProps) => {
   const filteredRecords = props.page.records.filter((record) => {
     const matchesStatus = statusFilter.value === 'Todos' || record.status === statusFilter.value;
     const matchesSearch = !normalizedSearch || searchableRecordText(record).includes(normalizedSearch);
+    const matchesSummary = !summaryFilter.value || recordMatchesSummaryStat(props.page.path, record, summaryFilter.value);
 
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesSearch && matchesSummary;
   });
   const visibleRecords = filteredRecords.slice(0, visibleLimit.value);
   const hasMoreRecords = filteredRecords.length > visibleRecords.length;
@@ -135,11 +140,20 @@ export const PageOverview = component$((props: PageOverviewProps) => {
 
       <section class="summary-grid" aria-label={`Resumo de ${props.page.title}`}>
         {props.page.stats.map((stat) => (
-          <article class={`summary-card ${stat.tone ?? 'blue'}`} key={stat.label}>
+          <button
+            class={`summary-card ${stat.tone ?? 'blue'} ${summaryFilter.value === stat.label ? 'active' : ''}`}
+            key={stat.label}
+            type="button"
+            onClick$={() => {
+              summaryFilter.value = summaryFilter.value === stat.label ? '' : stat.label;
+              visibleLimit.value = OPERATIONAL_PAGE_SIZE;
+              detailKey.value = '';
+            }}
+          >
             <small>{stat.label}</small>
             <strong>{stat.value}</strong>
             <span>{stat.detail}</span>
-          </article>
+          </button>
         ))}
       </section>
 
@@ -150,7 +164,7 @@ export const PageOverview = component$((props: PageOverviewProps) => {
           onSubmit$={async (event) => {
             const form = event.target as HTMLFormElement;
             const formData = new FormData(form);
-            const payload: Record<string, string | number> = {};
+            const payload: Record<string, unknown> = {};
             const hasFileField = createConfig.fields.some((field) => field.type === 'file');
 
             if (hasFileField && createConfig.resource === 'documents') {
@@ -224,7 +238,7 @@ export const PageOverview = component$((props: PageOverviewProps) => {
           onSubmit$={async (event) => {
             const form = event.target as HTMLFormElement;
             const formData = new FormData(form);
-            const payload: Record<string, string | number> = {};
+            const payload: Record<string, unknown> = {};
 
             editRecord.fields?.forEach((field) => {
               const value = String(formData.get(field.name) ?? '').trim();
@@ -428,6 +442,7 @@ export const PageOverview = component$((props: PageOverviewProps) => {
                   const rowKey = rowKeyFor(record);
                   const isExpanded = detailKey.value === rowKey;
                   const isSelected = selectedRows.value.includes(rowKey);
+                  const recordPath = pathForRecord(record.resource, record.id, props.page.path, record.values);
 
                   return (
                     <>
@@ -446,10 +461,10 @@ export const PageOverview = component$((props: PageOverviewProps) => {
                           />
                         </td>
                         <td>
-                          <div class="ops-primary-cell">
+                          <EntityAction class="ops-primary-cell entity-cell-link" path={recordPath} navigate$={props.navigate$}>
                             <strong>{record.title}</strong>
                             <span>{record.meta}</span>
-                          </div>
+                          </EntityAction>
                         </td>
                         <td>
                           <div class={`ops-visual ${visual.tone}`}>
@@ -488,6 +503,10 @@ export const PageOverview = component$((props: PageOverviewProps) => {
                               title="Abrir detalhe"
                               aria-label={`Abrir detalhe de ${record.title}`}
                               onClick$={() => {
+                                if (recordPath !== props.page.path) {
+                                  props.navigate$(recordPath);
+                                  return;
+                                }
                                 detailKey.value = detailKey.value === rowKey ? '' : rowKey;
                               }}
                             >
@@ -617,3 +636,19 @@ export const PageOverview = component$((props: PageOverviewProps) => {
     </section>
   );
 });
+
+function recordMatchesSummaryStat(pagePath: string, record: DemoPage['records'][number], label: string): boolean {
+  const text = searchableRecordText(record);
+  const normalized = label.toLowerCase();
+
+  if (normalized.includes('pend')) return text.includes('pend') || text.includes('atras') || text.includes('vencer');
+  if (normalized.includes('ativo')) return text.includes('ativo') || text.includes('confirm') || text.includes('paga');
+  if (normalized.includes('resol') || normalized.includes('conclu')) return text.includes('resol') || text.includes('conclu');
+  if (normalized.includes('document')) return pagePath === '/documentos' || text.includes('document');
+  if (normalized.includes('fornecedor')) return pagePath === '/fornecedores' || text.includes('fornecedor');
+  if (normalized.includes('relatorio')) return pagePath === '/relatorios' || text.includes('relatorio');
+  if (normalized.includes('quota')) return text.includes('quota');
+  if (normalized.includes('saldo') || normalized.includes('total')) return true;
+
+  return text.includes(normalized.split(' ')[0] ?? '');
+}

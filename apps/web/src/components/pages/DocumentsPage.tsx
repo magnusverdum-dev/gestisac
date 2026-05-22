@@ -19,6 +19,8 @@ import type {
   ResourceEndpoint
 } from '../../lib/api';
 import type { DemoPage } from '../../data/pages';
+import { pathForRecord } from '../../lib/entity-navigation';
+import { EntityAction } from '../common/EntityAction';
 import {
   OPERATIONAL_PAGE_SIZE,
   matchesDocumentContext,
@@ -36,11 +38,12 @@ type DocumentsPageProps = {
   documentPreview: DocumentPreview | null;
   createIntentResource: CreateResource | '';
   createIntentVersion: number;
-  onCreate$: PropFunction<(resource: ResourceEndpoint, payload: Record<string, string | number>) => void>;
+  navigate$: PropFunction<(path: string) => void>;
+  onCreate$: PropFunction<(resource: ResourceEndpoint, payload: Record<string, unknown>) => void>;
   onUpdate$: PropFunction<(
     resource: ResourceEndpoint,
     id: string,
-    payload: Record<string, string | number>
+    payload: Record<string, unknown>
   ) => void>;
   onDelete$: PropFunction<(resource: ResourceEndpoint, id: string) => void>;
   onUploadDocument$: PropFunction<(payload: FormData) => void>;
@@ -152,11 +155,20 @@ export const DocumentsPage = component$((props: DocumentsPageProps) => {
 
       <section class="summary-grid" aria-label="Resumo de documentos">
         {props.page.stats.map((stat) => (
-          <article class={`summary-card ${stat.tone ?? 'blue'}`} key={stat.label}>
+          <button
+            class={`summary-card ${stat.tone ?? 'blue'}`}
+            key={stat.label}
+            type="button"
+            onClick$={() => {
+              activeDocumentContext.value = 'todos';
+              visibleLimit.value = OPERATIONAL_PAGE_SIZE;
+              detailKey.value = '';
+            }}
+          >
             <small>{stat.label}</small>
             <strong>{stat.value}</strong>
             <span>{stat.detail}</span>
-          </article>
+          </button>
         ))}
       </section>
 
@@ -167,7 +179,7 @@ export const DocumentsPage = component$((props: DocumentsPageProps) => {
           onSubmit$={async (event) => {
             const form = event.target as HTMLFormElement;
             const formData = new FormData(form);
-            const payload: Record<string, string | number> = {};
+            const payload: Record<string, unknown> = {};
             const hasFileField = createConfig.fields.some((field) => field.type === 'file');
 
             if (hasFileField && createConfig.resource === 'documents') {
@@ -225,7 +237,7 @@ export const DocumentsPage = component$((props: DocumentsPageProps) => {
           onSubmit$={async (event) => {
             const form = event.target as HTMLFormElement;
             const formData = new FormData(form);
-            const payload: Record<string, string | number> = {};
+            const payload: Record<string, unknown> = {};
 
             editRecord.fields?.forEach((field) => {
               const value = String(formData.get(field.name) ?? '').trim();
@@ -500,6 +512,7 @@ export const DocumentsPage = component$((props: DocumentsPageProps) => {
                   const rowKey = rowKeyFor(record);
                   const isExpanded = detailKey.value === rowKey;
                   const isSelected = selectedRows.value.includes(rowKey);
+                  const recordPath = pathForRecord(record.resource, record.id, '/documentos', record.values);
 
                   return (
                     <>
@@ -518,10 +531,10 @@ export const DocumentsPage = component$((props: DocumentsPageProps) => {
                           />
                         </td>
                         <td>
-                          <div class="ops-primary-cell">
+                          <EntityAction class="ops-primary-cell entity-cell-link" path={recordPath} navigate$={props.navigate$}>
                             <strong>{record.title}</strong>
                             <span>{record.meta}</span>
-                          </div>
+                          </EntityAction>
                         </td>
                         <td>
                           <div class={`ops-visual ${visual.tone}`}>
@@ -549,6 +562,10 @@ export const DocumentsPage = component$((props: DocumentsPageProps) => {
                               title="Abrir detalhe"
                               aria-label={`Abrir detalhe de ${record.title}`}
                               onClick$={() => {
+                                if (recordPath !== '/documentos') {
+                                  props.navigate$(recordPath);
+                                  return;
+                                }
                                 detailKey.value = detailKey.value === rowKey ? '' : rowKey;
                               }}
                             >

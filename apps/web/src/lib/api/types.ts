@@ -422,6 +422,18 @@ export type Ticket = {
   priority: string;
   status: string;
   detail: string;
+  requesterName?: string;
+  requesterEmail?: string;
+  channel?: string;
+  type?: string;
+  category?: string;
+  assignee?: string;
+  dueAt?: string;
+  createdAt?: string;
+  resolvedAt?: string;
+  tags?: string[];
+  linkedMaintenanceId?: string;
+  linkedCalendarEventId?: string;
   updatedAt: string;
 };
 
@@ -502,9 +514,39 @@ export type ReportPreview = {
 export type MaintenanceItem = {
   id: string;
   title: string;
+  condominium?: string;
   supplier: string;
   status: string;
   date: string;
+  equipmentId?: string;
+  zoneId?: string;
+  ticketId?: string;
+  calendarEventId?: string;
+  type?: string;
+  priority?: string;
+  scheduledStart?: string;
+  scheduledEnd?: string;
+  completedAt?: string;
+  costEstimate?: string;
+  notes?: string;
+};
+
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  description: string;
+  eventType: string;
+  status: string;
+  startAt: string;
+  endAt: string;
+  condominium: string;
+  linkedEntityType: string;
+  linkedEntityId: string;
+  attendees: string[];
+  location: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Assembly = {
@@ -627,6 +669,7 @@ export type ResourceState = {
   documents: DocumentItem[];
   reports: Report[];
   maintenance: MaintenanceItem[];
+  calendarEvents: CalendarEvent[];
   assemblies: Assembly[];
   accounting: AccountingState;
   auditLog: AuditLogEntry[];
@@ -659,6 +702,7 @@ export type CreateResource =
   | 'reports'
   | 'assemblies'
   | 'maintenance'
+  | 'calendar-events'
   | 'accounting/quotas'
   | 'accounting/payments'
   | 'accounting/debts'

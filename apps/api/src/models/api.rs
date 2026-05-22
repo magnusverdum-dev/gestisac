@@ -1,9 +1,12 @@
+use crate::config::PersistenceStatus;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HealthResponse {
     pub service: &'static str,
     pub status: &'static str,
+    pub persistence: PersistenceStatus,
 }
 
 #[derive(Debug, Serialize)]

@@ -34,12 +34,12 @@ export type RecordQuickAction = {
         type: 'update';
         resource: ResourceEndpoint;
         id: string;
-        payload: Record<string, string | number>;
+        payload: Record<string, unknown>;
       }
     | {
         type: 'create';
         resource: CreateResource;
-        payload: Record<string, string | number>;
+        payload: Record<string, unknown>;
       }
     | {
         type: 'reportPreview';
@@ -101,6 +101,7 @@ export const emptyResources: ResourceState = {
   documents: [],
   reports: [],
   maintenance: [],
+  calendarEvents: [],
   assemblies: [],
   accounting: {
     summary: {
@@ -156,6 +157,7 @@ export const navPages: Array<Pick<DemoPage, 'path' | 'navLabel' | 'icon'>> = [
   { path: '/contabilidade', navLabel: 'Contabilidade', icon: 'EUR' },
   { path: '/relatorios', navLabel: 'Relatorios', icon: 'R' },
   { path: '/assembleias', navLabel: 'Assembleias', icon: 'M' },
+  { path: '/calendario', navLabel: 'Calendario', icon: 'C' },
   { path: '/tickets', navLabel: 'Tickets', icon: 'T' },
   { path: '/documentos', navLabel: 'Documentos', icon: 'F' },
   { path: '/manutencao', navLabel: 'Manutencao', icon: 'W' },
@@ -452,6 +454,43 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
       }))
     },
     {
+      path: '/calendario',
+      navLabel: 'Calendario',
+      icon: 'C',
+      title: 'Calendario',
+      description: 'Agenda operacional ligada a vistorias, reunioes, emails, tickets e manutencao.',
+      action: 'Adicionar evento',
+      resource: 'calendar-events',
+      createFields: calendarEventFields(dashboard.activeCondominium),
+      stats: [
+        { label: 'Eventos', value: String(resources.calendarEvents.length), detail: 'Agenda operacional', tone: 'blue' },
+        {
+          label: 'Vistorias',
+          value: String(resources.calendarEvents.filter((item) => item.eventType === 'Vistoria').length),
+          detail: 'Ligadas a manutencao',
+          tone: 'gold'
+        },
+        {
+          label: 'Emails',
+          value: String(resources.calendarEvents.filter((item) => item.eventType === 'Email').length),
+          detail: 'Planeados, sem envio automatico',
+          tone: 'green'
+        }
+      ],
+      records: resources.calendarEvents.map((item) => ({
+        id: item.id,
+        resource: 'calendar-events' as ResourceEndpoint,
+        title: item.title,
+        meta: `${item.condominium || 'Geral'} - ${item.eventType}`,
+        status: item.status,
+        detail: item.startAt,
+        fields: calendarEventFields(dashboard.activeCondominium),
+        values: item,
+        canEdit: canManageOperations,
+        canDelete: canDeleteOperations
+      }))
+    },
+    {
       path: '/tickets',
       navLabel: 'Tickets',
       icon: 'T',
@@ -667,8 +706,15 @@ function ticketFields(): CreateField[] {
   return [
     { name: 'title', label: 'Titulo', placeholder: 'Avaria no elevador' },
     { name: 'condominium', label: 'Condominio', placeholder: 'Condominio Vila Verde' },
+    { name: 'requesterName', label: 'Requerente', placeholder: 'Carlos Almeida' },
+    { name: 'requesterEmail', label: 'Email', placeholder: 'morador@example.pt' },
+    { name: 'channel', label: 'Canal', placeholder: 'Portal' },
+    { name: 'type', label: 'Tipo', placeholder: 'Avaria' },
+    { name: 'category', label: 'Categoria', placeholder: 'Elevadores' },
     { name: 'priority', label: 'Prioridade', placeholder: 'Normal' },
     { name: 'status', label: 'Estado', placeholder: 'Aberto' },
+    { name: 'assignee', label: 'Responsavel', placeholder: 'Joao Silva' },
+    { name: 'dueAt', label: 'Prazo', placeholder: '2026-05-22T18:00' },
     { name: 'detail', label: 'Detalhe', placeholder: 'Descricao curta da ocorrencia' }
   ];
 }
@@ -1135,9 +1181,32 @@ function documentTemplateOptions(): DocumentTemplateOption[] {
 function maintenanceFields(): CreateField[] {
   return [
     { name: 'title', label: 'Titulo', placeholder: 'Inspecao do elevador' },
+    { name: 'condominium', label: 'Condominio', placeholder: 'Condominio Vila Verde' },
     { name: 'supplier', label: 'Fornecedor', placeholder: 'Elevatec Lisboa' },
-    { name: 'date', label: 'Data', placeholder: '18 maio' },
-    { name: 'status', label: 'Estado', placeholder: 'Agendado' }
+    { name: 'type', label: 'Tipo', placeholder: 'Preventiva' },
+    { name: 'priority', label: 'Prioridade', placeholder: 'Normal' },
+    { name: 'date', label: 'Data', placeholder: '2026-05-24' },
+    { name: 'scheduledStart', label: 'Inicio', placeholder: '2026-05-24T10:00' },
+    { name: 'scheduledEnd', label: 'Fim', placeholder: '2026-05-24T11:00' },
+    { name: 'status', label: 'Estado', placeholder: 'Planeada' },
+    { name: 'costEstimate', label: 'Custo estimado', placeholder: '420.00' },
+    { name: 'notes', label: 'Notas', placeholder: 'Notas da intervencao' }
+  ];
+}
+
+function calendarEventFields(activeCondominium: string): CreateField[] {
+  return [
+    { name: 'title', label: 'Titulo', placeholder: 'Vistoria aos elevadores' },
+    { name: 'condominium', label: 'Condominio', placeholder: activeCondominium },
+    { name: 'eventType', label: 'Tipo', placeholder: 'Vistoria' },
+    { name: 'status', label: 'Estado', placeholder: 'Planeado' },
+    { name: 'startAt', label: 'Inicio', placeholder: '2026-05-24T10:00' },
+    { name: 'endAt', label: 'Fim', placeholder: '2026-05-24T11:00' },
+    { name: 'linkedEntityType', label: 'Ligacao', placeholder: 'ticket' },
+    { name: 'linkedEntityId', label: 'ID ligado', placeholder: 'ticket-001' },
+    { name: 'location', label: 'Local', placeholder: 'Bloco B' },
+    { name: 'description', label: 'Descricao', placeholder: 'Resumo do evento' },
+    { name: 'notes', label: 'Notas', placeholder: 'Notas internas' }
   ];
 }
 
@@ -1265,7 +1334,7 @@ function documentPayload(
     status: string;
   },
   status = item.status
-): Record<string, string | number> {
+): Record<string, unknown> {
   return {
     title: item.title,
     type: item.type,
