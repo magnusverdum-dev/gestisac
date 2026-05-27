@@ -3904,6 +3904,280 @@ kbd {
   }
 }
 
+.condo-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(4, 12, 30, 0.68);
+  backdrop-filter: blur(12px);
+}
+
+.condo-wizard-modal {
+  width: min(1040px, 100%);
+  max-height: min(860px, 92vh);
+  overflow: auto;
+  padding: 18px;
+  border-radius: 18px;
+}
+
+.condo-wizard-header,
+.condo-wizard-footer,
+.condo-wizard-rail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.condo-wizard-header,
+.condo-wizard-footer {
+  justify-content: space-between;
+}
+
+.condo-wizard-header h2 {
+  margin: 4px 0;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+}
+
+.condo-wizard-header p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.condo-wizard-rail {
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.condo-wizard-rail button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(184, 202, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-muted);
+  font-weight: 800;
+}
+
+.condo-wizard-rail button.active {
+  background: #0f766e;
+  color: #ecfeff;
+}
+
+.condo-wizard-body,
+.condo-wizard-stack,
+.condo-filtered-panel,
+.condo-upload-panel,
+.condo-marker-form,
+.condo-inline-field {
+  display: grid;
+  gap: 14px;
+}
+
+.condo-upload-panel,
+.condo-import-mapping {
+  padding: 16px;
+  border: 1px solid rgba(184, 202, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(4, 12, 30, 0.52);
+}
+
+.condo-upload-panel input[type='file'] {
+  color: var(--text-muted);
+}
+
+.condo-import-mapping {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.condo-import-mapping strong,
+.condo-upload-panel strong {
+  grid-column: 1 / -1;
+  color: var(--text-primary);
+}
+
+.condo-alert-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.condo-alert-card {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid rgba(184, 202, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(4, 12, 30, 0.52);
+}
+
+.condo-alert-card.critical {
+  border-color: rgba(255, 92, 125, 0.42);
+}
+
+.condo-alert-card.warning {
+  border-color: rgba(255, 216, 107, 0.44);
+}
+
+.condo-map-panel iframe,
+.condo-three-canvas {
+  width: 100%;
+  min-height: 220px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(226, 232, 240, 0.9);
+}
+
+.condo-qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+}
+
+.condo-qr-grid a {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.condo-qr-grid img {
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  border: 1px solid rgba(184, 202, 255, 0.18);
+  background: #fff;
+}
+
+.condo-plan-canvas {
+  position: relative;
+  overflow: hidden;
+  min-height: 240px;
+  border-radius: 14px;
+  background: rgba(226, 232, 240, 0.88);
+}
+
+.condo-plan-canvas img {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 240px;
+  object-fit: cover;
+}
+
+.condo-plan-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 32px;
+  height: 32px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #0f766e;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+.condo-subresource article button {
+  width: fit-content;
+  border: 1px solid rgba(184, 202, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+  padding: 8px 10px;
+}
+
+.condo-detail-skeleton {
+  overflow: hidden;
+}
+
+.condo-skeleton-block,
+.condo-skeleton-line,
+.condo-skeleton-card,
+.condo-skeleton-panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: rgba(184, 202, 255, 0.1);
+}
+
+.condo-skeleton-block::after,
+.condo-skeleton-line::after,
+.condo-skeleton-card::after,
+.condo-skeleton-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  animation: condo-skeleton-sheen 1.25s ease-in-out infinite;
+}
+
+.condo-skeleton-block.image {
+  width: 128px;
+  min-width: 128px;
+  height: 96px;
+}
+
+.condo-skeleton-line {
+  display: block;
+  height: 12px;
+  margin: 8px 0;
+}
+
+.condo-skeleton-line.short {
+  width: 96px;
+}
+
+.condo-skeleton-line.medium {
+  width: min(260px, 58vw);
+}
+
+.condo-skeleton-line.title {
+  width: min(360px, 70vw);
+  height: 22px;
+}
+
+.condo-skeleton-line.wide {
+  width: 100%;
+}
+
+.condo-skeleton-card {
+  min-height: 104px;
+  padding: 18px;
+}
+
+.condo-skeleton-panel {
+  min-height: 190px;
+  padding: 18px;
+}
+
+@keyframes condo-skeleton-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 720px) {
+  .condo-modal-backdrop {
+    place-items: stretch;
+    padding: 10px;
+  }
+
+  .condo-wizard-header,
+  .condo-wizard-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 /* Operational calendar, CMT and maintenance modules */
 .summary-card.blue {
   border-color: rgba(75, 163, 255, 0.24);

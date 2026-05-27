@@ -1,9 +1,15 @@
-import { apiRequest } from './http';
+import { canUseBrowserDemoApi } from './demo';
+import { apiRequest, isHtmlFallbackResponse, resolveApiUrl } from './http';
 import type {
+  CondominiumAlert,
   CompletenessReport,
   Condominium,
   CondominiumDetailResponse,
   CondominiumHistoryEvent,
+  CondominiumManagedDocument,
+  CondominiumMedia,
+  CondominiumPlanMarker,
+  ImportFilePreview,
   ImportPreview,
   ImportReport,
   ImportRowInput
@@ -17,6 +23,7 @@ export type CondominiumSubresource =
   | 'contacts'
   | 'documents'
   | 'media'
+  | 'plan-markers'
   | 'notes';
 
 export async function getCondominiumDetail(
@@ -38,6 +45,13 @@ export async function getCondominiumHistory(
   id: string
 ): Promise<CondominiumHistoryEvent[]> {
   return apiRequest(`/api/condominiums/${id}/history`, { token });
+}
+
+export async function getCondominiumAlerts(
+  token: string,
+  id: string
+): Promise<CondominiumAlert[]> {
+  return apiRequest(`/api/condominiums/${id}/alerts`, { token });
 }
 
 export async function updateCondominiumSection(
@@ -123,6 +137,50 @@ export async function previewCondominiumImport(
   });
 }
 
+export async function previewCondominiumImportFile(
+  token: string,
+  payload: FormData
+): Promise<ImportFilePreview> {
+  const response = await fetch(resolveApiUrl('/api/condominiums/import/preview-file'), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: payload
+  });
+
+  if (!response.ok) {
+    if (canUseBrowserDemoApi(response.status)) {
+      throw new Error('Preview por ficheiro indisponivel no modo demo');
+    }
+
+    const message = await response
+      .json()
+      .then((body) => body.message || 'Nao foi possivel validar ficheiro')
+      .catch(() => 'Nao foi possivel validar ficheiro');
+    throw new Error(message);
+  }
+
+  if (isHtmlFallbackResponse(response)) {
+    throw new Error('Preview por ficheiro requer API Rust ativa');
+  }
+
+  return response.json();
+}
+
+export async function previewCondominiumImportMapped(
+  token: string,
+  rows: Array<Record<string, string>>,
+  mapping: Record<string, string>
+): Promise<ImportPreview> {
+  return apiRequest('/api/condominiums/import/preview-mapped', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ rows, mapping })
+  });
+}
+
 export async function commitCondominiumImport(
   token: string,
   rows: ImportRowInput[],
@@ -133,4 +191,104 @@ export async function commitCondominiumImport(
     token,
     body: JSON.stringify({ rows, skipExisting })
   });
+}
+
+export async function uploadCondominiumDocument(
+  token: string,
+  condominiumId: string,
+  payload: FormData
+): Promise<CondominiumManagedDocument> {
+  return uploadCondominiumAsset(token, `/api/condominiums/${condominiumId}/documents/upload`, payload, 'Upload de documento falhou');
+}
+
+export async function uploadCondominiumMedia(
+  token: string,
+  condominiumId: string,
+  payload: FormData
+): Promise<CondominiumMedia> {
+  return uploadCondominiumAsset(token, `/api/condominiums/${condominiumId}/media/upload`, payload, 'Upload de media falhou');
+}
+
+export async function downloadCondominiumDocument(
+  token: string,
+  condominiumId: string,
+  resourceId: string
+): Promise<{ blob: Blob; filename: string }> {
+  return downloadCondominiumAsset(token, `/api/condominiums/${condominiumId}/documents/${resourceId}/download`, 'gestisac-documento');
+}
+
+export async function downloadCondominiumMedia(
+  token: string,
+  condominiumId: string,
+  resourceId: string
+): Promise<{ blob: Blob; filename: string }> {
+  return downloadCondominiumAsset(token, `/api/condominiums/${condominiumId}/media/${resourceId}/download`, 'gestisac-media');
+}
+
+export async function createCondominiumPlanMarker(
+  token: string,
+  condominiumId: string,
+  payload: Record<string, unknown>
+): Promise<CondominiumPlanMarker> {
+  return createCondominiumSubresource(token, condominiumId, 'plan-markers', payload);
+}
+
+async function uploadCondominiumAsset<T>(
+  token: string,
+  path: string,
+  payload: FormData,
+  fallbackMessage: string
+): Promise<T> {
+  const response = await fetch(resolveApiUrl(path), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: payload
+  });
+
+  if (!response.ok) {
+    if (canUseBrowserDemoApi(response.status)) {
+      throw new Error('Upload dedicado requer API Rust ativa');
+    }
+
+    const message = await response
+      .json()
+      .then((body) => body.message || fallbackMessage)
+      .catch(() => fallbackMessage);
+    throw new Error(message);
+  }
+
+  if (isHtmlFallbackResponse(response)) {
+    throw new Error('Upload dedicado requer API Rust ativa');
+  }
+
+  return response.json();
+}
+
+async function downloadCondominiumAsset(
+  token: string,
+  path: string,
+  fallback: string
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(resolveApiUrl(path), {
+    headers: {
+      Accept: '*/*',
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const message = await response
+      .json()
+      .then((body) => body.message || 'Download falhou')
+      .catch(() => 'Download falhou');
+    throw new Error(message);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: response.headers.get('content-disposition')?.match(/filename="?([^"]+)"?/)?.[1] ?? fallback
+  };
 }

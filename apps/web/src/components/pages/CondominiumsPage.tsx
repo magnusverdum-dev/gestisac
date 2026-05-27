@@ -2,15 +2,24 @@
 import {
   archiveCondominium,
   commitCondominiumImport,
+  createCondominiumPlanMarker,
   createCondominiumSubresource,
   createResource,
+  downloadCondominiumDocument,
+  downloadCondominiumMedia,
   getCondominiumDetail,
+  previewCondominiumImportFile,
+  previewCondominiumImportMapped,
   previewCondominiumImport,
   saveCondominiumDraft,
+  uploadCondominiumDocument,
+  uploadCondominiumMedia,
   updateCondominiumSection,
+  type CondominiumAlert,
   type CompletenessReport,
   type Condominium,
   type CondominiumDetailResponse,
+  type ImportFilePreview,
   type ImportPreview,
   type ResourceState
 } from '../../lib/api';
@@ -18,6 +27,8 @@ import { entityPath, personPath } from '../../lib/entity-navigation';
 import { EntityAction } from '../common/EntityAction';
 import { SimpleHubCards, type SimpleHubSection } from './SimpleHub';
 import {
+  AlertsPanel,
+  AssetUploadPanel,
   Field,
   FuturePanel,
   History,
@@ -50,6 +61,7 @@ const tabs = [
   'contacts',
   'documents',
   'media',
+  'alerts',
   'history',
   'status',
   'notes',
@@ -80,6 +92,7 @@ const tabLabels: Record<TabId, string> = {
   contacts: 'Contactos',
   documents: 'Documentos',
   media: 'Imagens e plantas',
+  alerts: 'Alertas',
   history: 'Historico',
   status: 'Estado operacional',
   notes: 'Notas internas',
@@ -93,6 +106,34 @@ const emptyCompleteness: CompletenessReport = {
   categories: []
 };
 
+const CondominiumDetailSkeleton = component$(() => (
+  <section class="simple-detail-panel condo-detail-skeleton" aria-label="A carregar detalhe do condominio">
+    <header class="simple-detail-header">
+      <span class="condo-skeleton-block image" />
+      <div>
+        <span class="condo-skeleton-line short" />
+        <span class="condo-skeleton-line title" />
+        <span class="condo-skeleton-line medium" />
+      </div>
+    </header>
+    <section class="condo-summary-grid simple-summary-grid">
+      {[0, 1, 2, 3].map((item) => (
+        <div class="kpi-card condo-skeleton-card" key={item}>
+          <span class="condo-skeleton-line short" />
+          <span class="condo-skeleton-line title" />
+          <span class="condo-skeleton-line medium" />
+        </div>
+      ))}
+    </section>
+    <div class="condo-skeleton-panel">
+      <span class="condo-skeleton-line title" />
+      <span class="condo-skeleton-line wide" />
+      <span class="condo-skeleton-line wide" />
+      <span class="condo-skeleton-line medium" />
+    </div>
+  </section>
+));
+
 export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
   const selectedId = useSignal(props.resources.condominiums[0]?.id ?? '');
   const contextId = useSignal('all');
@@ -101,14 +142,24 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
   const detailOpen = useSignal(false);
   const creationOpen = useSignal(false);
   const importOpen = useSignal(false);
+  const wizardOpen = useSignal(false);
+  const wizardStep = useSignal(1);
   const editOpen = useSignal(false);
   const search = useSignal('');
   const statusFilter = useSignal('todos');
+  const historySearch = useSignal('');
+  const historySource = useSignal('');
+  const contactFilter = useSignal('');
+  const documentFilter = useSignal('');
+  const blockOrder = useSignal('name');
   const localSaving = useSignal(false);
+  const detailLoading = useSignal(false);
   const localError = useSignal('');
   const localNotice = useSignal('');
   const detail = useSignal<CondominiumDetailResponse | null>(null);
   const importPreview = useSignal<ImportPreview | null>(null);
+  const importFilePreview = useSignal<ImportFilePreview | null>(null);
+  const importMapping = useSignal<Record<string, string>>({});
 
   const selectedFromDetail = detail.value?.condominium.id === selectedId.value ? detail.value.condominium : undefined;
   const selected =
@@ -122,6 +173,8 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
   const contextName = contextCondominium?.name ?? '';
   const isGlobalContext = contextId.value === 'all';
   const completeness = selectedFromDetail ? detail.value!.completeness : localCompleteness(selected);
+  const alerts: CondominiumAlert[] = selectedFromDetail ? detail.value!.alerts : localAlerts(selected);
+  const showDetailSkeleton = detailLoading.value && detail.value?.condominium.id !== selectedId.value;
   const filtered = props.resources.condominiums.filter((item) => {
     const haystack = [
       item.name,
@@ -169,16 +222,20 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
   const loadDetail$ = $(async (id: string) => {
     if (!id) {
       detail.value = null;
+      detailLoading.value = false;
       return;
     }
     if (detail.value?.condominium.id === id) {
       return;
     }
     localError.value = '';
+    detailLoading.value = true;
     try {
       detail.value = await getCondominiumDetail(props.token, id);
     } catch (err) {
       localError.value = err instanceof Error ? err.message : 'Nao foi possivel abrir o condominio';
+    } finally {
+      detailLoading.value = false;
     }
   });
 
@@ -338,6 +395,42 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
     }
   });
 
+  const previewImportFile$ = $(async (form: HTMLFormElement) => {
+    const payload = new FormData(form);
+    localSaving.value = true;
+    localError.value = '';
+    try {
+      importFilePreview.value = await previewCondominiumImportFile(props.token, payload);
+      importPreview.value = importFilePreview.value.preview;
+      importMapping.value = importFilePreview.value.suggestedMapping;
+      localNotice.value = 'Preview do ficheiro preparado.';
+    } catch (err) {
+      localError.value = err instanceof Error ? err.message : 'Nao foi possivel validar ficheiro';
+    } finally {
+      localSaving.value = false;
+    }
+  });
+
+  const previewMappedImport$ = $(async () => {
+    if (!importFilePreview.value) {
+      return;
+    }
+    localSaving.value = true;
+    localError.value = '';
+    try {
+      importPreview.value = await previewCondominiumImportMapped(
+        props.token,
+        importFilePreview.value.rows,
+        importMapping.value
+      );
+      localNotice.value = 'Mapeamento validado.';
+    } catch (err) {
+      localError.value = err instanceof Error ? err.message : 'Nao foi possivel validar mapeamento';
+    } finally {
+      localSaving.value = false;
+    }
+  });
+
   const commitImport$ = $(async () => {
     if (!importPreview.value) {
       return;
@@ -350,6 +443,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       localNotice.value = `${report.created} condominios importados, ${report.skipped} ignorados.`;
       await props.onRefresh$();
       importPreview.value = null;
+      importFilePreview.value = null;
     } catch (err) {
       localError.value = err instanceof Error ? err.message : 'Nao foi possivel importar';
     } finally {
@@ -475,6 +569,93 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       path: personPath(props.resources, user.name, user.email)
     };
   });
+
+  const uploadAsset$ = $(async (form: HTMLFormElement, kind: 'documents' | 'media') => {
+    if (!selected?.id) {
+      return;
+    }
+    const payload = new FormData(form);
+    localSaving.value = true;
+    localError.value = '';
+    localNotice.value = '';
+    try {
+      if (kind === 'documents') {
+        await uploadCondominiumDocument(props.token, selected.id, payload);
+      } else {
+        await uploadCondominiumMedia(props.token, selected.id, payload);
+      }
+      form.reset();
+      localNotice.value = kind === 'documents' ? 'Documento carregado.' : 'Media carregado.';
+      await refreshDetail$();
+    } catch (err) {
+      localError.value = err instanceof Error ? err.message : 'Nao foi possivel carregar ficheiro';
+    } finally {
+      localSaving.value = false;
+    }
+  });
+
+  const downloadAsset$ = $(async (kind: 'documents' | 'media', resourceId: string) => {
+    if (!selected?.id) {
+      return;
+    }
+    try {
+      const downloaded = kind === 'documents'
+        ? await downloadCondominiumDocument(props.token, selected.id, resourceId)
+        : await downloadCondominiumMedia(props.token, selected.id, resourceId);
+      triggerDownload(downloaded.blob, downloaded.filename);
+    } catch (err) {
+      localError.value = err instanceof Error ? err.message : 'Download falhou';
+    }
+  });
+
+  const addPlanMarker$ = $(async (form: HTMLFormElement) => {
+    if (!selected?.id) {
+      return;
+    }
+    const data = new FormData(form);
+    localSaving.value = true;
+    localError.value = '';
+    try {
+      await createCondominiumPlanMarker(props.token, selected.id, {
+        label: text(data, 'label'),
+        markerType: 'manual',
+        xPercent: numberValue(data, 'xPercent'),
+        yPercent: numberValue(data, 'yPercent'),
+        notes: text(data, 'notes')
+      });
+      form.reset();
+      localNotice.value = 'Marcador adicionado a planta.';
+      await refreshDetail$();
+    } catch (err) {
+      localError.value = err instanceof Error ? err.message : 'Nao foi possivel adicionar marcador';
+    } finally {
+      localSaving.value = false;
+    }
+  });
+
+  const openWizard$ = $(async () => {
+    if (selected?.id) {
+      detailOpen.value = true;
+      activeArea.value = 'general';
+      wizardStep.value = selected.onboardingDraft?.currentStep || 1;
+      activeTab.value = wizardTab(wizardStep.value);
+      await loadDetail$(selected.id);
+    }
+    wizardOpen.value = true;
+  });
+
+  const moveWizard$ = $(async (direction: 1 | -1) => {
+    const next = Math.min(12, Math.max(1, wizardStep.value + direction));
+    wizardStep.value = next;
+    activeTab.value = wizardTab(next);
+    if (selected?.id) {
+      await saveCondominiumDraft(props.token, selected.id, {
+        currentStep: next,
+        completedSteps: completedWizardSteps(next),
+        isQuickMode: false
+      });
+    }
+  });
   return (
     <section class="condominiums-workspace simple-workspace">
       <header class="condo-hero simple-hero glass-panel">
@@ -518,6 +699,15 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
           ) : null}
           {!activeArea.value && !editOpen.value ? (
             <button
+              class="secondary-action"
+              type="button"
+              onClick$={openWizard$}
+            >
+              Wizard 12 passos
+            </button>
+          ) : null}
+          {!activeArea.value && !editOpen.value ? (
+            <button
               class="primary-action"
               type="button"
               onClick$={() => {
@@ -547,6 +737,91 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
 
       {localError.value ? <div class="app-error glass-panel">{localError.value}</div> : null}
       {localNotice.value ? <div class="app-success glass-panel">{localNotice.value}</div> : null}
+
+      {wizardOpen.value ? (
+        <section class="condo-modal-backdrop" role="dialog" aria-modal="true" aria-label="Wizard de condominio">
+          <div class="condo-wizard-modal glass-panel">
+            <header class="condo-wizard-header">
+              <div>
+                <small>Passo {wizardStep.value} de 12</small>
+                <h2>{wizardSteps[wizardStep.value - 1]?.title}</h2>
+                <p>{wizardSteps[wizardStep.value - 1]?.detail}</p>
+              </div>
+              <button class="secondary-action" type="button" onClick$={() => (wizardOpen.value = false)}>Fechar</button>
+            </header>
+            <nav class="condo-wizard-rail" aria-label="Passos do wizard">
+              {wizardSteps.map((step) => (
+                <button
+                  key={step.step}
+                  class={wizardStep.value === step.step ? 'active' : ''}
+                  type="button"
+                  onClick$={() => {
+                    wizardStep.value = step.step;
+                    activeTab.value = wizardTab(step.step);
+                    detailOpen.value = true;
+                    activeArea.value = 'general';
+                  }}
+                >
+                  {step.step}
+                </button>
+              ))}
+            </nav>
+            {selected ? (
+              <div class="condo-wizard-body">
+                {wizardStep.value === 1 ? (
+                  <SectionEditor title="Identificacao" fields={identificationFields} values={selected} isSaving={localSaving.value} onSubmit$={async (form) => submitSection$(form, 'identification', identificationFields)} />
+                ) : null}
+                {wizardStep.value === 2 ? (
+                  <SectionEditor title="Morada" fields={addressFields} values={selected.address} isSaving={localSaving.value} onSubmit$={async (form) => submitSection$(form, 'address', addressFields)} />
+                ) : null}
+                {wizardStep.value === 3 ? (
+                  <SectionEditor title="Estrutura" fields={structureFields} values={selected.structure} isSaving={localSaving.value} onSubmit$={async (form) => submitSection$(form, 'structure', structureFields)} />
+                ) : null}
+                {wizardStep.value >= 4 && wizardStep.value <= 9 ? (
+                  <SubresourcePanel
+                    title={wizardSteps[wizardStep.value - 1]!.title}
+                    resource={wizardResource(wizardStep.value)}
+                    fields={fieldsForSubresource(wizardTab(wizardStep.value))}
+                    rows={rowsForSubresource(selected, wizardTab(wizardStep.value))}
+                    orderMode={blockOrder.value}
+                    isSaving={localSaving.value}
+                    onOrderChange$={(value) => (blockOrder.value = value)}
+                    onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)}
+                  />
+                ) : null}
+                {wizardStep.value === 10 ? (
+                  <div class="condo-wizard-stack">
+                    <AssetUploadPanel kind="documents" isSaving={localSaving.value} onUpload$={uploadAsset$} />
+                    <AssetUploadPanel kind="media" isSaving={localSaving.value} onUpload$={uploadAsset$} />
+                  </div>
+                ) : null}
+                {wizardStep.value === 11 ? (
+                  <div class="condo-wizard-stack">
+                    <SectionEditor title="Estado operacional" fields={statusFields} values={selected.operationalStatus} isSaving={localSaving.value} onSubmit$={async (form) => submitSection$(form, 'operational-status', statusFields)} />
+                    <SubresourcePanel title="Notas internas" resource="notes" fields={subresourceFields.notes} rows={selected.internalNotesRegistry ?? []} isSaving={localSaving.value} onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)} />
+                  </div>
+                ) : null}
+                {wizardStep.value === 12 ? (
+                  <div class="condo-wizard-stack">
+                    <Overview selected={selected} completeness={completeness} />
+                    <AlertsPanel alerts={alerts} />
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <article class="simple-empty-state">
+                <strong>Cria primeiro um condominio</strong>
+                <span>O wizard continua assim que existir uma ficha para completar.</span>
+              </article>
+            )}
+            <footer class="condo-wizard-footer">
+              <button type="button" onClick$={() => moveWizard$(-1)} disabled={wizardStep.value === 1}>Anterior</button>
+              <button type="button" onClick$={() => moveWizard$(1)} disabled={wizardStep.value === 12}>Seguinte</button>
+              <button class="primary-action" type="button" onClick$={saveDraft$} disabled={!selected || localSaving.value}>Guardar rascunho</button>
+            </footer>
+          </div>
+        </section>
+      ) : null}
 
       {editOpen.value && contextId.value === 'all' ? (
         <section class="simple-record-list">
@@ -696,6 +971,15 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   onSubmit$={async (event) => previewImport$(event.target as HTMLFormElement)}
                 >
                   <strong>Importar CSV</strong>
+                  <label>
+                    <span>Ficheiro CSV ou Excel</span>
+                    <input name="file" type="file" accept=".csv,.txt,.xlsx" />
+                  </label>
+                  <div class="condo-inline-actions">
+                    <button type="button" onClick$={async (event) => previewImportFile$((event.target as HTMLElement).closest('form') as HTMLFormElement)} disabled={localSaving.value}>
+                      Validar ficheiro
+                    </button>
+                  </div>
                   <textarea
                     name="csv"
                     placeholder="nome,codigo_interno,tipo,estado,localidade,total_fracoes"
@@ -708,6 +992,31 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   </div>
                   {importPreview.value ? (
                     <small>{importPreview.value!.validRows} validas / {importPreview.value!.invalidRows} com erros</small>
+                  ) : null}
+                  {importFilePreview.value ? (
+                    <div class="condo-import-mapping">
+                      <strong>Mapeamento de colunas</strong>
+                      {importTargets.map((target) => (
+                        <label key={target.key}>
+                          <span>{target.label}</span>
+                          <select
+                            value={importMapping.value[target.key] || ''}
+                            onChange$={(event) => {
+                              importMapping.value = {
+                                ...importMapping.value,
+                                [target.key]: (event.target as HTMLSelectElement).value
+                              };
+                            }}
+                          >
+                            <option value="">Sem coluna</option>
+                            {importFilePreview.value!.headers.map((header) => (
+                              <option key={header} value={header}>{header}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                      <button type="button" onClick$={previewMappedImport$} disabled={localSaving.value}>Validar mapeamento</button>
+                    </div>
                   ) : null}
                 </form>
               ) : null}
@@ -822,7 +1131,9 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                 )}
               </div>
 
-              {selected && detailOpen.value ? (
+              {selected && detailOpen.value && showDetailSkeleton ? <CondominiumDetailSkeleton /> : null}
+
+              {selected && detailOpen.value && !showDetailSkeleton ? (
                 <section class="simple-detail-panel">
                   <header class="simple-detail-header">
                     <div class="condo-building-image">
@@ -900,15 +1211,43 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                       onSubmit$={async (form) => submitSection$(form, 'operational-status', statusFields)}
                     />
                   ) : null}
-                  {activeTab.value === 'history' ? <History events={selected.history ?? []} /> : null}
-                  {activeTab.value === 'future' ? <FuturePanel selected={selected} /> : null}
+                  {activeTab.value === 'alerts' ? <AlertsPanel alerts={alerts} /> : null}
+                  {activeTab.value === 'history' ? (
+                    <section class="condo-filtered-panel">
+                      <div class="simple-search-row condo-filter-grid">
+                        <input value={historySearch.value} placeholder="Filtrar historico..." onInput$={(event) => (historySearch.value = (event.target as HTMLInputElement).value)} />
+                        <input value={historySource.value} placeholder="Fonte ou entidade..." onInput$={(event) => (historySource.value = (event.target as HTMLInputElement).value)} />
+                      </div>
+                      <History events={selected.history ?? []} query={historySearch.value} source={historySource.value} />
+                    </section>
+                  ) : null}
+                  {activeTab.value === 'future' ? <FuturePanel selected={selected} markers={selected.planMarkers ?? []} onAddMarker$={addPlanMarker$} /> : null}
+                  {activeTab.value === 'documents' ? <AssetUploadPanel kind="documents" isSaving={localSaving.value} onUpload$={uploadAsset$} /> : null}
+                  {activeTab.value === 'media' ? <AssetUploadPanel kind="media" isSaving={localSaving.value} onUpload$={uploadAsset$} /> : null}
+                  {activeTab.value === 'documents' ? (
+                    <div class="simple-search-row condo-filter-grid">
+                      <input value={documentFilter.value} placeholder="Filtrar documentos por titulo, tipo ou estado..." onInput$={(event) => (documentFilter.value = (event.target as HTMLInputElement).value)} />
+                    </div>
+                  ) : null}
+                  {activeTab.value === 'contacts' ? (
+                    <div class="simple-search-row condo-filter-grid">
+                      <input value={contactFilter.value} placeholder="Filtrar contactos por nome, empresa ou servico..." onInput$={(event) => (contactFilter.value = (event.target as HTMLInputElement).value)} />
+                    </div>
+                  ) : null}
                   {subresourceTab(activeTab.value) ? (
                     <SubresourcePanel
                       title={tabLabels[activeTab.value]}
                       resource={subresourceTab(activeTab.value)!}
                       fields={fieldsForSubresource(activeTab.value)}
-                      rows={rowsForSubresource(selected, activeTab.value)}
+                      rows={rowsForSubresource(selected, activeTab.value, {
+                        documentFilter: documentFilter.value,
+                        contactFilter: contactFilter.value,
+                        blockOrder: blockOrder.value
+                      })}
+                      orderMode={blockOrder.value}
                       isSaving={localSaving.value}
+                      onOrderChange$={(value) => (blockOrder.value = value)}
+                      onDownload$={downloadAsset$}
                       onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)}
                     />
                   ) : null}
@@ -987,23 +1326,31 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                     </select>
                   </label>
                   {activeTab.value === 'media' ? (
+                    <>
+                    <AssetUploadPanel kind="media" isSaving={localSaving.value} onUpload$={uploadAsset$} />
                     <SubresourcePanel
                       title="Imagens e plantas"
                       resource="media"
                       fields={subresourceFields.media}
                       rows={selected.media ?? []}
                       isSaving={localSaving.value}
+                      onDownload$={downloadAsset$}
                       onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)}
                     />
+                    </>
                   ) : (
+                    <>
+                    <AssetUploadPanel kind="documents" isSaving={localSaving.value} onUpload$={uploadAsset$} />
                     <SubresourcePanel
                       title="Documentos"
                       resource="documents"
                       fields={subresourceFields.documents}
                       rows={selected.managedDocuments ?? []}
                       isSaving={localSaving.value}
+                      onDownload$={downloadAsset$}
                       onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)}
                     />
+                    </>
                   )}
                 </section>
               ) : null}
@@ -1290,6 +1637,37 @@ const statusFields: FieldConfig[] = [
   { name: 'reason', label: 'Motivo', kind: 'textarea' }
 ];
 
+const wizardSteps = [
+  { step: 1, title: 'Identificacao', detail: 'Dados administrativos e equipa responsavel.' },
+  { step: 2, title: 'Morada', detail: 'Localizacao, coordenadas e acessos.' },
+  { step: 3, title: 'Estrutura', detail: 'Fracoes, blocos, pisos e atributos fisicos.' },
+  { step: 4, title: 'Blocos', detail: 'Entradas, blocos e notas operacionais.' },
+  { step: 5, title: 'Pisos', detail: 'Pisos ligados aos blocos.' },
+  { step: 6, title: 'Zonas', detail: 'Zonas comuns com QR e estado.' },
+  { step: 7, title: 'Equipamentos', detail: 'Equipamentos tecnicos e criticidade.' },
+  { step: 8, title: 'Contactos', detail: 'Contactos uteis e emergencia.' },
+  { step: 9, title: 'Notas', detail: 'Notas internas com visibilidade.' },
+  { step: 10, title: 'Documentos e media', detail: 'Upload real de documentos, imagens e plantas.' },
+  { step: 11, title: 'Estado', detail: 'Estado operacional e notas finais.' },
+  { step: 12, title: 'Revisao', detail: 'Completude, alertas e revisao antes de fechar.' }
+];
+
+const importTargets = [
+  { key: 'name', label: 'Nome' },
+  { key: 'internalCode', label: 'Codigo interno' },
+  { key: 'condominiumType', label: 'Tipo' },
+  { key: 'status', label: 'Estado' },
+  { key: 'street', label: 'Rua' },
+  { key: 'number', label: 'Numero' },
+  { key: 'postalCode', label: 'Codigo postal' },
+  { key: 'locality', label: 'Localidade' },
+  { key: 'totalFractions', label: 'Total fracoes' },
+  { key: 'blocksCount', label: 'Blocos' },
+  { key: 'elevatorsCount', label: 'Elevadores' },
+  { key: 'manager', label: 'Gestor' },
+  { key: 'notes', label: 'Notas' }
+];
+
 const subresourceFields: Record<SubresourceName, FieldConfig[]> = {
   blocks: [
     { name: 'name', label: 'Nome' },
@@ -1356,6 +1734,15 @@ const subresourceFields: Record<SubresourceName, FieldConfig[]> = {
     { name: 'isPrimary', label: 'Imagem principal', kind: 'checkbox' },
     { name: 'description', label: 'Descricao', kind: 'textarea' }
   ],
+  'plan-markers': [
+    { name: 'label', label: 'Etiqueta' },
+    { name: 'markerType', label: 'Tipo' },
+    { name: 'xPercent', label: 'X %', kind: 'number' },
+    { name: 'yPercent', label: 'Y %', kind: 'number' },
+    { name: 'zoneId', label: 'Zona ID' },
+    { name: 'equipmentId', label: 'Equipamento ID' },
+    { name: 'notes', label: 'Notas', kind: 'textarea' }
+  ],
   notes: [
     { name: 'title', label: 'Titulo' },
     { name: 'noteType', label: 'Tipo' },
@@ -1376,27 +1763,52 @@ function fieldsForSubresource(tab: TabId): FieldConfig[] {
   return subresourceFields[subresourceTab(tab) ?? 'blocks'];
 }
 
-function rowsForSubresource(selected: Condominium, tab: TabId): Array<Record<string, unknown>> {
+function rowsForSubresource(
+  selected: Condominium,
+  tab: TabId,
+  filters: { documentFilter?: string; contactFilter?: string; blockOrder?: string } = {}
+): Array<Record<string, unknown>> {
+  let rows: Array<Record<string, unknown>>;
   switch (tab) {
     case 'blocks':
-      return selected.blocksDetailed ?? [];
+      rows = selected.blocksDetailed ?? [];
+      break;
     case 'floors':
-      return selected.floorsDetailed ?? [];
+      rows = selected.floorsDetailed ?? [];
+      break;
     case 'zones':
-      return selected.zones ?? [];
+      rows = selected.zones ?? [];
+      break;
     case 'equipment':
-      return selected.equipment ?? [];
+      rows = selected.equipment ?? [];
+      break;
     case 'contacts':
-      return selected.contacts ?? [];
+      rows = selected.contacts ?? [];
+      break;
     case 'documents':
-      return selected.managedDocuments ?? [];
+      rows = selected.managedDocuments ?? [];
+      break;
     case 'media':
-      return selected.media ?? [];
+      rows = selected.media ?? [];
+      break;
     case 'notes':
-      return selected.internalNotesRegistry ?? [];
+      rows = selected.internalNotesRegistry ?? [];
+      break;
     default:
-      return [];
+      rows = [];
   }
+
+  if (tab === 'contacts' && filters.contactFilter) {
+    rows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(filters.contactFilter!.toLowerCase()));
+  }
+  if (tab === 'documents' && filters.documentFilter) {
+    rows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(filters.documentFilter!.toLowerCase()));
+  }
+  if (tab === 'blocks') {
+    const key = filters.blockOrder === 'code' ? 'code' : filters.blockOrder === 'status' ? 'operationalStatus' : 'name';
+    rows = [...rows].sort((a, b) => String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'pt'));
+  }
+  return rows;
 }
 
 function payloadFromForm(form: HTMLFormElement, fields: FieldConfig[]): Record<string, unknown> {
@@ -1478,4 +1890,76 @@ function localCompleteness(item?: Condominium): CompletenessReport {
 function tabToStep(tab: TabId): number {
   const index = tabs.indexOf(tab);
   return index < 0 ? 1 : index + 1;
+}
+
+function wizardTab(step: number): TabId {
+  const map: Record<number, TabId> = {
+    1: 'identification',
+    2: 'address',
+    3: 'structure',
+    4: 'blocks',
+    5: 'floors',
+    6: 'zones',
+    7: 'equipment',
+    8: 'contacts',
+    9: 'notes',
+    10: 'documents',
+    11: 'status',
+    12: 'overview'
+  };
+  return map[step] ?? 'overview';
+}
+
+function wizardResource(step: number): SubresourceName {
+  const tab = wizardTab(step);
+  return subresourceTab(tab) ?? 'blocks';
+}
+
+function completedWizardSteps(current: number): number[] {
+  return Array.from({ length: current }, (_, index) => index + 1);
+}
+
+function localAlerts(item?: Condominium): CondominiumAlert[] {
+  if (!item) {
+    return [];
+  }
+  const alerts: CondominiumAlert[] = [];
+  const completeness = localCompleteness(item);
+  if (!completeness.complete) {
+    alerts.push({
+      id: `${item.id}-completude`,
+      severity: 'warning',
+      category: 'completude',
+      title: 'Ficha incompleta',
+      detail: completeness.missingItems.slice(0, 3).join(', '),
+      entityId: item.id
+    });
+  }
+  for (const document of item.managedDocuments ?? []) {
+    if (document.expiryDate && document.expiryDate < new Date().toISOString().slice(0, 10)) {
+      alerts.push({
+        id: `${document.id}-expired`,
+        severity: 'critical',
+        category: 'documentos',
+        title: 'Documento expirado',
+        detail: document.title,
+        entityId: document.id,
+        dueDate: document.expiryDate
+      });
+    }
+  }
+  return alerts;
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

@@ -100,6 +100,7 @@ export type Condominium = {
   contacts?: CondominiumContact[];
   managedDocuments?: CondominiumManagedDocument[];
   media?: CondominiumMedia[];
+  planMarkers?: CondominiumPlanMarker[];
   internalNotesRegistry?: CondominiumInternalNote[];
   history?: CondominiumHistoryEvent[];
   onboardingDraft?: CondominiumOnboardingDraft | null;
@@ -271,6 +272,10 @@ export type CondominiumManagedDocument = {
   description: string;
   fileName: string;
   fileUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+  storageKey: string;
+  downloadUrl: string;
   blockId: string;
   zoneId: string;
   equipmentId: string;
@@ -289,12 +294,29 @@ export type CondominiumMedia = {
   title: string;
   fileName: string;
   fileUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+  storageKey: string;
+  downloadUrl: string;
   blockId: string;
   floorId: string;
   zoneId: string;
   description: string;
   isPrimary: boolean;
   createdAt: string;
+};
+
+export type CondominiumPlanMarker = {
+  id: string;
+  label: string;
+  markerType: string;
+  xPercent: number;
+  yPercent: number;
+  blockId: string;
+  floorId: string;
+  zoneId: string;
+  equipmentId: string;
+  notes: string;
 };
 
 export type CondominiumInternalNote = {
@@ -344,6 +366,17 @@ export type CompletenessReport = {
 export type CondominiumDetailResponse = {
   condominium: Condominium;
   completeness: CompletenessReport;
+  alerts: CondominiumAlert[];
+};
+
+export type CondominiumAlert = {
+  id: string;
+  severity: string;
+  category: string;
+  title: string;
+  detail: string;
+  entityId: string;
+  dueDate?: string | null;
 };
 
 export type ImportRowInput = {
@@ -376,6 +409,14 @@ export type ImportPreview = {
     errors: string[];
     values: ImportRowInput;
   }>;
+};
+
+export type ImportFilePreview = {
+  fileName: string;
+  headers: string[];
+  rows: Array<Record<string, string>>;
+  suggestedMapping: Record<string, string>;
+  preview: ImportPreview;
 };
 
 export type ImportReport = {

@@ -181,6 +181,8 @@ pub struct Condominium {
     #[serde(default)]
     pub media: Vec<CondominiumMedia>,
     #[serde(default)]
+    pub plan_markers: Vec<CondominiumPlanMarker>,
+    #[serde(default)]
     pub internal_notes_registry: Vec<CondominiumInternalNote>,
     #[serde(default)]
     pub history: Vec<CondominiumHistoryEvent>,
@@ -515,6 +517,14 @@ pub struct CondominiumManagedDocument {
     #[serde(default)]
     pub file_url: String,
     #[serde(default)]
+    pub mime_type: String,
+    #[serde(default)]
+    pub size_bytes: u64,
+    #[serde(default)]
+    pub storage_key: String,
+    #[serde(default)]
+    pub download_url: String,
+    #[serde(default)]
     pub block_id: String,
     #[serde(default)]
     pub zone_id: String,
@@ -549,6 +559,14 @@ pub struct CondominiumMedia {
     #[serde(default)]
     pub file_url: String,
     #[serde(default)]
+    pub mime_type: String,
+    #[serde(default)]
+    pub size_bytes: u64,
+    #[serde(default)]
+    pub storage_key: String,
+    #[serde(default)]
+    pub download_url: String,
+    #[serde(default)]
     pub block_id: String,
     #[serde(default)]
     pub floor_id: String,
@@ -560,6 +578,30 @@ pub struct CondominiumMedia {
     pub is_primary: bool,
     #[serde(default)]
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumPlanMarker {
+    pub id: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub marker_type: String,
+    #[serde(default)]
+    pub x_percent: f64,
+    #[serde(default)]
+    pub y_percent: f64,
+    #[serde(default)]
+    pub block_id: String,
+    #[serde(default)]
+    pub floor_id: String,
+    #[serde(default)]
+    pub zone_id: String,
+    #[serde(default)]
+    pub equipment_id: String,
+    #[serde(default)]
+    pub notes: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]

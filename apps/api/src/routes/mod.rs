@@ -89,6 +89,14 @@ pub fn router(state: AppState) -> Router {
             post(condominiums::import_commit),
         )
         .route(
+            "/api/condominiums/import/preview-file",
+            post(condominiums::import_preview_file),
+        )
+        .route(
+            "/api/condominiums/import/preview-mapped",
+            post(condominiums::import_preview_mapped),
+        )
+        .route(
             "/api/condominiums/{id}",
             get(condominiums::condominium_detail)
                 .put(condominiums::update_condominium)
@@ -105,6 +113,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/condominiums/{id}/completeness",
             get(condominiums::condominium_completeness),
+        )
+        .route(
+            "/api/condominiums/{id}/alerts",
+            get(condominiums::condominium_alerts),
         )
         .route(
             "/api/condominiums/{id}/identification",
@@ -154,6 +166,10 @@ pub fn router(state: AppState) -> Router {
                 .delete(condominiums::delete_condominium_zone),
         )
         .route(
+            "/api/condominiums/{id}/zones/{resource_id}/qr.svg",
+            get(condominiums::condominium_zone_qr_svg),
+        )
+        .route(
             "/api/condominiums/{id}/equipment",
             get(condominiums::condominium_equipment)
                 .post(condominiums::create_condominium_equipment),
@@ -178,18 +194,44 @@ pub fn router(state: AppState) -> Router {
                 .post(condominiums::create_condominium_document),
         )
         .route(
+            "/api/condominiums/{id}/documents/upload",
+            post(condominiums::upload_condominium_document),
+        )
+        .route(
             "/api/condominiums/{id}/documents/{resource_id}",
             put(condominiums::update_condominium_document)
                 .delete(condominiums::delete_condominium_document),
+        )
+        .route(
+            "/api/condominiums/{id}/documents/{resource_id}/download",
+            get(condominiums::download_condominium_document),
         )
         .route(
             "/api/condominiums/{id}/media",
             get(condominiums::condominium_media).post(condominiums::create_condominium_media),
         )
         .route(
+            "/api/condominiums/{id}/media/upload",
+            post(condominiums::upload_condominium_media),
+        )
+        .route(
             "/api/condominiums/{id}/media/{resource_id}",
             put(condominiums::update_condominium_media)
                 .delete(condominiums::delete_condominium_media),
+        )
+        .route(
+            "/api/condominiums/{id}/media/{resource_id}/download",
+            get(condominiums::download_condominium_media),
+        )
+        .route(
+            "/api/condominiums/{id}/plan-markers",
+            get(condominiums::condominium_plan_markers)
+                .post(condominiums::create_condominium_plan_marker),
+        )
+        .route(
+            "/api/condominiums/{id}/plan-markers/{resource_id}",
+            put(condominiums::update_condominium_plan_marker)
+                .delete(condominiums::delete_condominium_plan_marker),
         )
         .route(
             "/api/condominiums/{id}/notes",

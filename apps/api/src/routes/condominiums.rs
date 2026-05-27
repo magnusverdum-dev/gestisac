@@ -6,20 +6,26 @@ use crate::{
             AppStore, Condominium, CondominiumAddress, CondominiumBlock, CondominiumContact,
             CondominiumEquipment, CondominiumFloor, CondominiumHistoryEvent,
             CondominiumInternalNote, CondominiumManagedDocument, CondominiumMedia,
-            CondominiumOnboardingDraft, CondominiumOperationalStatus, CondominiumStructure,
-            CondominiumZone,
+            CondominiumOnboardingDraft, CondominiumOperationalStatus, CondominiumPlanMarker,
+            CondominiumStructure, CondominiumZone, PublicUser,
         },
     },
     routes::auth::{current_user, require_delete, require_write},
     state::AppState,
 };
 use axum::{
-    extract::{Path, Query, State},
-    http::HeaderMap,
+    body::Body,
+    extract::{Multipart, Path, Query, State},
+    http::{header, HeaderMap, StatusCode},
+    response::Response,
     Json,
 };
-use chrono::Utc;
+use calamine::{Reader, Xlsx};
+use chrono::{Duration, NaiveDate, Utc};
+use qrcode::render::svg;
+use qrcode::QrCode;
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, io::Cursor, path::PathBuf};
 use uuid::Uuid;
 
 pub use super::resources::{
@@ -271,6 +277,10 @@ pub struct CondominiumManagedDocumentInput {
     pub description: Option<String>,
     pub file_name: Option<String>,
     pub file_url: Option<String>,
+    pub mime_type: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub storage_key: Option<String>,
+    pub download_url: Option<String>,
     pub block_id: Option<String>,
     pub zone_id: Option<String>,
     pub equipment_id: Option<String>,
@@ -288,6 +298,10 @@ pub struct CondominiumMediaInput {
     pub title: String,
     pub file_name: Option<String>,
     pub file_url: Option<String>,
+    pub mime_type: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub storage_key: Option<String>,
+    pub download_url: Option<String>,
     pub block_id: Option<String>,
     pub floor_id: Option<String>,
     pub zone_id: Option<String>,
@@ -316,6 +330,20 @@ pub struct CondominiumDraftInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CondominiumPlanMarkerInput {
+    pub label: String,
+    pub marker_type: Option<String>,
+    pub x_percent: f64,
+    pub y_percent: f64,
+    pub block_id: Option<String>,
+    pub floor_id: Option<String>,
+    pub zone_id: Option<String>,
+    pub equipment_id: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ImportPreviewInput {
     pub csv: String,
     pub delimiter: Option<String>,
@@ -327,6 +355,13 @@ pub struct ImportCommitInput {
     pub rows: Vec<ImportRowInput>,
     #[serde(default)]
     pub skip_existing: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportMappedPreviewInput {
+    pub rows: Vec<HashMap<String, String>>,
+    pub mapping: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -356,6 +391,7 @@ pub struct ImportRowInput {
 pub struct CondominiumDetailResponse {
     pub condominium: Condominium,
     pub completeness: CompletenessReport,
+    pub alerts: Vec<CondominiumAlert>,
 }
 
 #[derive(Debug, Serialize)]
@@ -403,6 +439,28 @@ pub struct ImportReport {
     pub condominiums: Vec<Condominium>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondominiumAlert {
+    pub id: String,
+    pub severity: String,
+    pub category: String,
+    pub title: String,
+    pub detail: String,
+    pub entity_id: String,
+    pub due_date: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportFilePreview {
+    pub file_name: String,
+    pub headers: Vec<String>,
+    pub rows: Vec<HashMap<String, String>>,
+    pub suggested_mapping: HashMap<String, String>,
+    pub preview: ImportPreview,
+}
+
 pub async fn condominiums(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -425,17 +483,22 @@ pub async fn condominium_detail(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<CondominiumDetailResponse>, ApiError> {
-    current_user(&headers, &state).await?;
+    let user = current_user(&headers, &state).await?;
     let store = state.store.read().await;
-    let condominium = store
+    let mut condominium = store
         .condominiums
         .iter()
         .find(|item| item.id == id)
         .cloned()
         .ok_or_else(|| ApiError::not_found("Condominio nao encontrado"))?;
+    let completeness = completeness_for(&condominium);
+    let alerts = alerts_for(&store, &condominium);
+    condominium.internal_notes_registry =
+        visible_notes(&user, &condominium.internal_notes_registry);
 
     Ok(Json(CondominiumDetailResponse {
-        completeness: completeness_for(&condominium),
+        completeness,
+        alerts,
         condominium,
     }))
 }
@@ -470,6 +533,22 @@ pub async fn condominium_completeness(
         .ok_or_else(|| ApiError::not_found("Condominio nao encontrado"))?;
 
     Ok(Json(completeness_for(condominium)))
+}
+
+pub async fn condominium_alerts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<CondominiumAlert>>, ApiError> {
+    current_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let condominium = store
+        .condominiums
+        .iter()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Condominio nao encontrado"))?;
+
+    Ok(Json(alerts_for(&store, condominium)))
 }
 
 pub async fn create_condominium(
@@ -1094,6 +1173,257 @@ pub async fn import_commit(
     }))
 }
 
+pub async fn import_preview_file(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    multipart: Multipart,
+) -> Result<Json<ImportFilePreview>, ApiError> {
+    current_user(&headers, &state).await?;
+    let (_fields, uploaded_file) = read_multipart_upload(multipart).await?;
+    let table = import_table_from_file(&uploaded_file)?;
+    let suggested_mapping = suggest_import_mapping(&table.headers);
+    let rows = table
+        .rows
+        .iter()
+        .map(|row| row_to_import_input(row, &suggested_mapping))
+        .collect::<Vec<_>>();
+    let store = state.store.read().await;
+    let preview = preview_import_rows(&store, rows);
+
+    Ok(Json(ImportFilePreview {
+        file_name: uploaded_file.original_name,
+        headers: table.headers,
+        rows: table.rows,
+        suggested_mapping,
+        preview,
+    }))
+}
+
+pub async fn import_preview_mapped(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<ImportMappedPreviewInput>,
+) -> Result<Json<ImportPreview>, ApiError> {
+    current_user(&headers, &state).await?;
+    let rows = input
+        .rows
+        .iter()
+        .map(|row| row_to_import_input(row, &input.mapping))
+        .collect::<Vec<_>>();
+    let store = state.store.read().await;
+    Ok(Json(preview_import_rows(&store, rows)))
+}
+
+pub async fn upload_condominium_document(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    multipart: Multipart,
+) -> Result<Json<CondominiumManagedDocument>, ApiError> {
+    let user = require_write(&headers, &state, "condominiums").await?;
+    let (fields, uploaded_file) = read_multipart_upload(multipart).await?;
+    let title = field_or_default(&fields, "title", &uploaded_file.original_name);
+    validate_required(&title, "Titulo do documento")?;
+    let resource_id = new_id();
+    let storage_key = condominium_storage_key(&id, &resource_id, &uploaded_file.original_name);
+    write_condominium_file(&state, &storage_key, &uploaded_file.bytes).await?;
+
+    let mut store = state.store.write().await;
+    let item = find_condominium_mut(&mut store, &id)?;
+    let document = CondominiumManagedDocument {
+        id: resource_id.clone(),
+        title: clean(title),
+        document_type: field_or_default(&fields, "documentType", "documento"),
+        description: field_or_default(&fields, "description", ""),
+        file_name: uploaded_file.original_name,
+        file_url: format!("/api/condominiums/{id}/documents/{resource_id}/download"),
+        mime_type: uploaded_file.mime_type,
+        size_bytes: uploaded_file.bytes.len().try_into().unwrap_or(u64::MAX),
+        storage_key,
+        download_url: format!("/api/condominiums/{id}/documents/{resource_id}/download"),
+        block_id: field_or_default(&fields, "blockId", ""),
+        zone_id: field_or_default(&fields, "zoneId", ""),
+        equipment_id: field_or_default(&fields, "equipmentId", ""),
+        document_date: field_or_default(&fields, "documentDate", ""),
+        expiry_date: field_or_default(&fields, "expiryDate", ""),
+        uploaded_by: user.name.clone(),
+        uploaded_at: Utc::now().to_rfc3339(),
+        version: field_or_default(&fields, "version", "1"),
+        status: field_or_default(&fields, "status", "ativo"),
+        notes: field_or_default(&fields, "notes", ""),
+    };
+    validate_block_reference(item, &document.block_id, "blockId")?;
+    validate_zone_reference(item, &document.zone_id, "zoneId")?;
+    validate_equipment_reference(item, &document.equipment_id, "equipmentId")?;
+    item.managed_documents.push(document.clone());
+    item.push_history(
+        "document-uploaded",
+        "Documento carregado",
+        user.name,
+        "documento",
+        "",
+        snapshot(&document),
+        "upload",
+    );
+    drop(store);
+    persist(&state).await?;
+    Ok(Json(document))
+}
+
+pub async fn upload_condominium_media(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    multipart: Multipart,
+) -> Result<Json<CondominiumMedia>, ApiError> {
+    let user = require_write(&headers, &state, "condominiums").await?;
+    let (fields, uploaded_file) = read_multipart_upload(multipart).await?;
+    let title = field_or_default(&fields, "title", &uploaded_file.original_name);
+    validate_required(&title, "Titulo da imagem/planta")?;
+    let resource_id = new_id();
+    let storage_key = condominium_storage_key(&id, &resource_id, &uploaded_file.original_name);
+    write_condominium_file(&state, &storage_key, &uploaded_file.bytes).await?;
+
+    let mut store = state.store.write().await;
+    let item = find_condominium_mut(&mut store, &id)?;
+    let is_primary = field_bool(&fields, "isPrimary");
+    if is_primary {
+        for media in &mut item.media {
+            media.is_primary = false;
+        }
+    }
+    let media_type = field_or_default(&fields, "mediaType", "imagem");
+    let media = CondominiumMedia {
+        id: resource_id.clone(),
+        media_type,
+        title: clean(title),
+        file_name: uploaded_file.original_name,
+        file_url: format!("/api/condominiums/{id}/media/{resource_id}/download"),
+        mime_type: uploaded_file.mime_type,
+        size_bytes: uploaded_file.bytes.len().try_into().unwrap_or(u64::MAX),
+        storage_key,
+        download_url: format!("/api/condominiums/{id}/media/{resource_id}/download"),
+        block_id: field_or_default(&fields, "blockId", ""),
+        floor_id: field_or_default(&fields, "floorId", ""),
+        zone_id: field_or_default(&fields, "zoneId", ""),
+        description: field_or_default(&fields, "description", ""),
+        is_primary,
+        created_at: Utc::now().to_rfc3339(),
+    };
+    validate_block_reference(item, &media.block_id, "blockId")?;
+    validate_floor_reference(item, &media.floor_id, "floorId")?;
+    validate_zone_reference(item, &media.zone_id, "zoneId")?;
+    validate_floor_block_consistency(item, &media.floor_id, &media.block_id)?;
+    validate_zone_consistency(item, &media.zone_id, &media.floor_id, &media.block_id)?;
+    if media.is_primary {
+        item.primary_image_url = media.file_url.clone();
+    }
+    item.media.push(media.clone());
+    item.push_history(
+        "media-uploaded",
+        "Media carregado",
+        user.name,
+        "media",
+        "",
+        snapshot(&media),
+        "upload",
+    );
+    drop(store);
+    persist(&state).await?;
+    Ok(Json(media))
+}
+
+pub async fn download_condominium_document(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, resource_id)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    current_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let document = store
+        .condominiums
+        .iter()
+        .find(|item| item.id == id)
+        .and_then(|item| {
+            item.managed_documents
+                .iter()
+                .find(|doc| doc.id == resource_id)
+        })
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("Documento nao encontrado"))?;
+    drop(store);
+
+    binary_response(
+        read_condominium_file_or_metadata(
+            &state,
+            &document.storage_key,
+            format!(
+                "GESTISAC Documento\nTitulo: {}\nTipo: {}\nEstado: {}\n",
+                document.title, document.document_type, document.status
+            )
+            .into_bytes(),
+        )
+        .await?,
+        &document.file_name,
+        &document.mime_type,
+    )
+}
+
+pub async fn download_condominium_media(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, resource_id)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    current_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let media = store
+        .condominiums
+        .iter()
+        .find(|item| item.id == id)
+        .and_then(|item| item.media.iter().find(|item| item.id == resource_id))
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("Media nao encontrado"))?;
+    drop(store);
+
+    binary_response(
+        read_condominium_file_or_metadata(
+            &state,
+            &media.storage_key,
+            format!(
+                "GESTISAC Media\nTitulo: {}\nTipo: {}\n",
+                media.title, media.media_type
+            )
+            .into_bytes(),
+        )
+        .await?,
+        &media.file_name,
+        &media.mime_type,
+    )
+}
+
+pub async fn condominium_zone_qr_svg(
+    State(state): State<AppState>,
+    _headers: HeaderMap,
+    Path((id, resource_id)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let store = state.store.read().await;
+    let zone = store
+        .condominiums
+        .iter()
+        .find(|item| item.id == id)
+        .and_then(|item| item.zones.iter().find(|zone| zone.id == resource_id))
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("Zona nao encontrada"))?;
+    drop(store);
+
+    let svg = qr_svg_for(&zone.public_qr_url);
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")
+        .body(Body::from(svg))
+        .map_err(|_| ApiError::internal("Nao foi possivel gerar QR"))
+}
+
 macro_rules! subresource_handlers {
     (
         $list_fn:ident,
@@ -1324,20 +1654,133 @@ subresource_handlers!(
     "media"
 );
 subresource_handlers!(
-    condominium_notes,
-    create_condominium_note,
-    update_condominium_note,
-    delete_condominium_note,
-    CondominiumNoteInput,
-    CondominiumInternalNote,
-    internal_notes_registry,
-    make_note,
-    apply_note,
-    "note-created",
-    "note-updated",
-    "note-deleted",
-    "nota"
+    condominium_plan_markers,
+    create_condominium_plan_marker,
+    update_condominium_plan_marker,
+    delete_condominium_plan_marker,
+    CondominiumPlanMarkerInput,
+    CondominiumPlanMarker,
+    plan_markers,
+    make_plan_marker,
+    apply_plan_marker,
+    "plan-marker-created",
+    "plan-marker-updated",
+    "plan-marker-deleted",
+    "marcador de planta"
 );
+
+pub async fn condominium_notes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<CondominiumInternalNote>>, ApiError> {
+    let user = current_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    let item = store
+        .condominiums
+        .iter()
+        .find(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Condominio nao encontrado"))?;
+    Ok(Json(visible_notes(&user, &item.internal_notes_registry)))
+}
+
+pub async fn create_condominium_note(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<CondominiumNoteInput>,
+) -> Result<Json<CondominiumInternalNote>, ApiError> {
+    let user = require_write(&headers, &state, "condominiums").await?;
+    let mut store = state.store.write().await;
+    let item = find_condominium_mut(&mut store, &id)?;
+    let mut resource = make_note(input, item)?;
+    resource.created_by = user.name.clone();
+    item.internal_notes_registry.push(resource.clone());
+    item.push_history(
+        "note-created",
+        "nota adicionada",
+        user.name,
+        "nota",
+        "",
+        snapshot(&resource),
+        "api",
+    );
+    drop(store);
+    persist(&state).await?;
+    Ok(Json(resource))
+}
+
+pub async fn update_condominium_note(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, resource_id)): Path<(String, String)>,
+    Json(input): Json<CondominiumNoteInput>,
+) -> Result<Json<CondominiumInternalNote>, ApiError> {
+    let user = require_write(&headers, &state, "condominiums").await?;
+    let mut store = state.store.write().await;
+    let item = find_condominium_mut(&mut store, &id)?;
+    let index = item
+        .internal_notes_registry
+        .iter()
+        .position(|resource| resource.id == resource_id)
+        .ok_or_else(|| ApiError::not_found("nota nao encontrada"))?;
+    if !can_see_note(&user, &item.internal_notes_registry[index]) {
+        return Err(ApiError::forbidden("Sem permissao para alterar esta nota"));
+    }
+    let before = snapshot(&item.internal_notes_registry[index]);
+    apply_note(
+        &mut item.internal_notes_registry[index],
+        input,
+        &Condominium::default(),
+    )?;
+    let response = item.internal_notes_registry[index].clone();
+    item.push_history(
+        "note-updated",
+        "nota alterada",
+        user.name,
+        "nota",
+        before,
+        snapshot(&response),
+        "api",
+    );
+    drop(store);
+    persist(&state).await?;
+    Ok(Json(response))
+}
+
+pub async fn delete_condominium_note(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, resource_id)): Path<(String, String)>,
+) -> Result<Json<Vec<CondominiumInternalNote>>, ApiError> {
+    let user = require_delete(&headers, &state, "condominiums").await?;
+    let mut store = state.store.write().await;
+    let item = find_condominium_mut(&mut store, &id)?;
+    let deleted_note = item
+        .internal_notes_registry
+        .iter()
+        .find(|resource| resource.id == resource_id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("nota nao encontrada"))?;
+    if !can_see_note(&user, &deleted_note) {
+        return Err(ApiError::forbidden("Sem permissao para apagar esta nota"));
+    }
+    item.internal_notes_registry
+        .retain(|resource| resource.id != resource_id);
+    item.push_history(
+        "note-deleted",
+        "nota removida",
+        user.name.clone(),
+        "nota",
+        snapshot(&deleted_note),
+        "",
+        "api",
+    );
+    let response = visible_notes(&user, &item.internal_notes_registry);
+    drop(store);
+    persist(&state).await?;
+    Ok(Json(response))
+}
 
 fn filtered_condominiums(store: &AppStore, params: &CondominiumListParams) -> Vec<Condominium> {
     store
@@ -1824,6 +2267,10 @@ fn apply_document(
     set_string(&mut item.description, input.description);
     set_string(&mut item.file_name, input.file_name);
     set_string(&mut item.file_url, input.file_url);
+    set_string(&mut item.mime_type, input.mime_type);
+    set_u64(&mut item.size_bytes, input.size_bytes);
+    set_string(&mut item.storage_key, input.storage_key);
+    set_string(&mut item.download_url, input.download_url);
     set_string(&mut item.block_id, input.block_id);
     set_string(&mut item.zone_id, input.zone_id);
     set_string(&mut item.equipment_id, input.equipment_id);
@@ -1863,6 +2310,10 @@ fn apply_media(
     set_string(&mut item.media_type, input.media_type);
     set_string(&mut item.file_name, input.file_name);
     set_string(&mut item.file_url, input.file_url);
+    set_string(&mut item.mime_type, input.mime_type);
+    set_u64(&mut item.size_bytes, input.size_bytes);
+    set_string(&mut item.storage_key, input.storage_key);
+    set_string(&mut item.download_url, input.download_url);
     set_string(&mut item.block_id, input.block_id);
     set_string(&mut item.floor_id, input.floor_id);
     set_string(&mut item.zone_id, input.zone_id);
@@ -1909,6 +2360,49 @@ fn apply_note(
     set_string(&mut item.priority, input.priority);
     set_bool(&mut item.pinned, input.pinned);
     item.updated_at = Utc::now().to_rfc3339();
+    Ok(())
+}
+
+fn make_plan_marker(
+    input: CondominiumPlanMarkerInput,
+    condominium: &Condominium,
+) -> Result<CondominiumPlanMarker, ApiError> {
+    validate_required(&input.label, "Etiqueta do marcador")?;
+    let mut item = CondominiumPlanMarker {
+        id: new_id(),
+        label: clean(input.label.clone()),
+        ..Default::default()
+    };
+    apply_plan_marker(&mut item, input, condominium)?;
+    Ok(item)
+}
+
+fn apply_plan_marker(
+    item: &mut CondominiumPlanMarker,
+    input: CondominiumPlanMarkerInput,
+    condominium: &Condominium,
+) -> Result<(), ApiError> {
+    validate_required(&input.label, "Etiqueta do marcador")?;
+    if !(0.0..=100.0).contains(&input.x_percent) || !(0.0..=100.0).contains(&input.y_percent) {
+        return Err(ApiError::validation(
+            "Marcador de planta exige coordenadas entre 0 e 100",
+        ));
+    }
+    item.label = clean(input.label);
+    set_string(&mut item.marker_type, input.marker_type);
+    item.x_percent = input.x_percent;
+    item.y_percent = input.y_percent;
+    set_string(&mut item.block_id, input.block_id);
+    set_string(&mut item.floor_id, input.floor_id);
+    set_string(&mut item.zone_id, input.zone_id);
+    set_string(&mut item.equipment_id, input.equipment_id);
+    validate_block_reference(condominium, &item.block_id, "blockId")?;
+    validate_floor_reference(condominium, &item.floor_id, "floorId")?;
+    validate_zone_reference(condominium, &item.zone_id, "zoneId")?;
+    validate_equipment_reference(condominium, &item.equipment_id, "equipmentId")?;
+    validate_floor_block_consistency(condominium, &item.floor_id, &item.block_id)?;
+    validate_zone_consistency(condominium, &item.zone_id, &item.floor_id, &item.block_id)?;
+    set_string(&mut item.notes, input.notes);
     Ok(())
 }
 
@@ -2022,6 +2516,253 @@ fn validate_import_row(row: &ImportRowInput) -> Vec<String> {
     errors
 }
 
+fn preview_import_rows(store: &AppStore, rows: Vec<ImportRowInput>) -> ImportPreview {
+    let previews = rows
+        .into_iter()
+        .enumerate()
+        .map(|(index, values)| {
+            let mut errors = validate_import_row(&values);
+            if !values.internal_code.trim().is_empty()
+                && store.condominiums.iter().any(|item| {
+                    item.internal_code
+                        .eq_ignore_ascii_case(values.internal_code.trim())
+                })
+            {
+                errors.push("Codigo interno ja existe".to_string());
+            }
+            ImportRowPreview {
+                row_number: index + 2,
+                valid: errors.is_empty(),
+                errors,
+                values,
+            }
+        })
+        .collect::<Vec<_>>();
+    let valid_rows = previews.iter().filter(|row| row.valid).count();
+
+    ImportPreview {
+        total_rows: previews.len(),
+        valid_rows,
+        invalid_rows: previews.len().saturating_sub(valid_rows),
+        rows: previews,
+    }
+}
+
+#[derive(Debug)]
+struct UploadedCondominiumFile {
+    original_name: String,
+    mime_type: String,
+    bytes: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct ImportTable {
+    headers: Vec<String>,
+    rows: Vec<HashMap<String, String>>,
+}
+
+async fn read_multipart_upload(
+    mut multipart: Multipart,
+) -> Result<(HashMap<String, String>, UploadedCondominiumFile), ApiError> {
+    let mut fields = HashMap::new();
+    let mut uploaded_file = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|error| ApiError::validation(format!("Multipart invalido: {error}")))?
+    {
+        let name = field.name().unwrap_or_default().to_string();
+        if let Some(file_name) = field.file_name().map(str::to_string) {
+            let mime_type = field
+                .content_type()
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|error| ApiError::validation(format!("Ficheiro invalido: {error}")))?;
+            uploaded_file = Some(UploadedCondominiumFile {
+                original_name: safe_file_name(&file_name),
+                mime_type,
+                bytes: bytes.to_vec(),
+            });
+        } else {
+            let value = field
+                .text()
+                .await
+                .map_err(|error| ApiError::validation(format!("Campo invalido: {error}")))?;
+            fields.insert(name, value.trim().to_string());
+        }
+    }
+
+    let uploaded_file =
+        uploaded_file.ok_or_else(|| ApiError::validation("Seleciona um ficheiro"))?;
+    Ok((fields, uploaded_file))
+}
+
+fn import_table_from_file(file: &UploadedCondominiumFile) -> Result<ImportTable, ApiError> {
+    let lower_name = file.original_name.to_lowercase();
+    if lower_name.ends_with(".xlsx") {
+        return import_table_from_xlsx(&file.bytes);
+    }
+
+    let text = String::from_utf8(file.bytes.clone())
+        .map_err(|_| ApiError::validation("Ficheiro CSV deve estar em UTF-8"))?;
+    let delimiter = if text.lines().next().unwrap_or_default().contains(';') {
+        ';'
+    } else {
+        ','
+    };
+    import_table_from_csv(&text, delimiter)
+}
+
+fn import_table_from_csv(csv: &str, delimiter: char) -> Result<ImportTable, ApiError> {
+    let lines = csv
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    if lines.is_empty() {
+        return Err(ApiError::validation("Ficheiro de importacao vazio"));
+    }
+    let headers = split_csv_line(lines[0], delimiter);
+    let normalized_headers = headers
+        .iter()
+        .map(|header| normalize_header(header))
+        .collect::<Vec<_>>();
+    let rows = lines
+        .iter()
+        .skip(1)
+        .map(|line| {
+            let cells = split_csv_line(line, delimiter);
+            normalized_headers
+                .iter()
+                .enumerate()
+                .map(|(index, header)| {
+                    (
+                        header.clone(),
+                        cells.get(index).cloned().unwrap_or_default(),
+                    )
+                })
+                .collect::<HashMap<_, _>>()
+        })
+        .collect::<Vec<_>>();
+
+    Ok(ImportTable {
+        headers: normalized_headers,
+        rows,
+    })
+}
+
+fn import_table_from_xlsx(bytes: &[u8]) -> Result<ImportTable, ApiError> {
+    let cursor = Cursor::new(bytes.to_vec());
+    let mut workbook =
+        Xlsx::new(cursor).map_err(|_| ApiError::validation("Nao foi possivel ler o Excel"))?;
+    let sheet_name = workbook
+        .sheet_names()
+        .first()
+        .cloned()
+        .ok_or_else(|| ApiError::validation("Excel sem folhas"))?;
+    let range = workbook
+        .worksheet_range(&sheet_name)
+        .map_err(|_| ApiError::validation("Nao foi possivel ler a primeira folha do Excel"))?;
+    let mut rows = range.rows();
+    let headers = rows
+        .next()
+        .ok_or_else(|| ApiError::validation("Excel sem cabecalhos"))?
+        .iter()
+        .map(|cell| normalize_header(&cell.to_string()))
+        .collect::<Vec<_>>();
+    let data_rows = rows
+        .filter(|row| row.iter().any(|cell| !cell.to_string().trim().is_empty()))
+        .map(|row| {
+            headers
+                .iter()
+                .enumerate()
+                .map(|(index, header)| {
+                    (
+                        header.clone(),
+                        row.get(index)
+                            .map(|cell| cell.to_string())
+                            .unwrap_or_default(),
+                    )
+                })
+                .collect::<HashMap<_, _>>()
+        })
+        .collect::<Vec<_>>();
+
+    Ok(ImportTable {
+        headers,
+        rows: data_rows,
+    })
+}
+
+fn suggest_import_mapping(headers: &[String]) -> HashMap<String, String> {
+    [
+        ("name", &["nome", "condominio", "designacao"][..]),
+        (
+            "internalCode",
+            &["codigo_interno", "codigo", "referencia"][..],
+        ),
+        ("condominiumType", &["tipo", "tipo_condominio"][..]),
+        ("status", &["estado", "status"][..]),
+        ("street", &["rua", "morada", "endereco"][..]),
+        ("number", &["numero", "n_porta", "porta"][..]),
+        ("postalCode", &["codigo_postal", "cp"][..]),
+        ("locality", &["localidade", "cidade"][..]),
+        ("parish", &["freguesia"][..]),
+        ("municipality", &["concelho", "municipio"][..]),
+        ("district", &["distrito"][..]),
+        ("country", &["pais"][..]),
+        ("totalFractions", &["total_fracoes", "fracoes"][..]),
+        ("blocksCount", &["numero_blocos", "blocos"][..]),
+        ("elevatorsCount", &["numero_elevadores", "elevadores"][..]),
+        ("manager", &["gestor_responsavel", "gestor"][..]),
+        ("notes", &["notas", "observacoes"][..]),
+    ]
+    .into_iter()
+    .filter_map(|(target, candidates)| {
+        candidates
+            .iter()
+            .find(|candidate| headers.iter().any(|header| header == **candidate))
+            .map(|candidate| (target.to_string(), (*candidate).to_string()))
+    })
+    .collect()
+}
+
+fn row_to_import_input(
+    row: &HashMap<String, String>,
+    mapping: &HashMap<String, String>,
+) -> ImportRowInput {
+    let value = |target: &str| -> String {
+        mapping
+            .get(target)
+            .and_then(|source| row.get(source))
+            .cloned()
+            .unwrap_or_default()
+    };
+    ImportRowInput {
+        name: value("name"),
+        internal_code: value("internalCode"),
+        condominium_type: value("condominiumType"),
+        status: value("status"),
+        street: value("street"),
+        number: value("number"),
+        postal_code: value("postalCode"),
+        locality: value("locality"),
+        parish: value("parish"),
+        municipality: value("municipality"),
+        district: value("district"),
+        country: value("country"),
+        total_fractions: value("totalFractions").parse().unwrap_or(0),
+        blocks_count: value("blocksCount").parse().unwrap_or(0),
+        elevators_count: value("elevatorsCount").parse().unwrap_or(0),
+        manager: value("manager"),
+        notes: value("notes"),
+    }
+}
+
 fn split_csv_line(line: &str, delimiter: char) -> Vec<String> {
     let mut values = Vec::new();
     let mut current = String::new();
@@ -2053,6 +2794,294 @@ fn normalize_header(header: &str) -> String {
         .replace("í", "i")
         .replace("ó", "o")
         .replace("ú", "u")
+}
+
+fn field_or_default(fields: &HashMap<String, String>, name: &str, fallback: &str) -> String {
+    fields
+        .get(name)
+        .filter(|value| !value.trim().is_empty())
+        .cloned()
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn field_bool(fields: &HashMap<String, String>, name: &str) -> bool {
+    fields
+        .get(name)
+        .map(|value| {
+            matches!(
+                value.trim().to_lowercase().as_str(),
+                "true" | "1" | "sim" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn condominium_storage_key(condominium_id: &str, resource_id: &str, file_name: &str) -> String {
+    format!(
+        "condominiums/{}/{resource_id}-{}",
+        safe_file_name(condominium_id),
+        safe_file_name(file_name)
+    )
+}
+
+async fn write_condominium_file(
+    state: &AppState,
+    storage_key: &str,
+    bytes: &[u8],
+) -> Result<(), ApiError> {
+    let path = condominium_storage_path(state, storage_key);
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel preparar o arquivo do condominio"))?;
+    }
+    tokio::fs::write(path, bytes)
+        .await
+        .map_err(|_| ApiError::internal("Nao foi possivel guardar o ficheiro do condominio"))
+}
+
+async fn read_condominium_file_or_metadata(
+    state: &AppState,
+    storage_key: &str,
+    fallback: Vec<u8>,
+) -> Result<Vec<u8>, ApiError> {
+    if storage_key.trim().is_empty() {
+        return Ok(fallback);
+    }
+
+    tokio::fs::read(condominium_storage_path(state, storage_key))
+        .await
+        .map_err(|_| ApiError::not_found("Ficheiro do condominio nao encontrado"))
+}
+
+fn condominium_storage_path(state: &AppState, storage_key: &str) -> PathBuf {
+    let mut path = state.config.document_storage_path.clone();
+    for segment in storage_key.split('/') {
+        path.push(safe_file_name(segment));
+    }
+    path
+}
+
+fn binary_response(bytes: Vec<u8>, file_name: &str, mime_type: &str) -> Result<Response, ApiError> {
+    let file_name = if file_name.trim().is_empty() {
+        "gestisac-ficheiro.bin".to_string()
+    } else {
+        safe_file_name(file_name)
+    };
+    let mime_type = if mime_type.trim().is_empty() {
+        "application/octet-stream"
+    } else {
+        mime_type
+    };
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, mime_type)
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{file_name}\""),
+        )
+        .body(Body::from(bytes))
+        .map_err(|_| ApiError::internal("Nao foi possivel preparar o download"))
+}
+
+fn safe_file_name(value: &str) -> String {
+    let safe = value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_' | '(' | ')')
+            {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+
+    if safe.is_empty() {
+        "ficheiro.bin".to_string()
+    } else {
+        safe
+    }
+}
+
+fn alerts_for(store: &AppStore, condominium: &Condominium) -> Vec<CondominiumAlert> {
+    let mut alerts = Vec::new();
+    let completeness = completeness_for(condominium);
+    if !completeness.complete {
+        alerts.push(CondominiumAlert {
+            id: format!("{}-completeness", condominium.id),
+            severity: "warning".to_string(),
+            category: "completude".to_string(),
+            title: "Ficha incompleta".to_string(),
+            detail: completeness
+                .missing_items
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
+            entity_id: condominium.id.clone(),
+            due_date: None,
+        });
+    }
+
+    let today = Utc::now().date_naive();
+    for document in &condominium.managed_documents {
+        if let Some(date) = parse_date(&document.expiry_date) {
+            if date < today {
+                alerts.push(alert(
+                    "critical",
+                    "documentos",
+                    "Documento expirado",
+                    &document.title,
+                    &document.id,
+                    Some(date),
+                ));
+            } else if date <= today + Duration::days(30) {
+                alerts.push(alert(
+                    "warning",
+                    "documentos",
+                    "Documento a expirar",
+                    &document.title,
+                    &document.id,
+                    Some(date),
+                ));
+            }
+        }
+    }
+
+    for zone in &condominium.zones {
+        let status = zone.operational_status.to_lowercase();
+        let alert_level = zone.alert_level.to_lowercase();
+        if status.contains("interdit") || status.contains("crit") || alert_level.contains("vermel")
+        {
+            alerts.push(alert(
+                "critical",
+                "zonas",
+                "Zona critica",
+                &zone.name,
+                &zone.id,
+                None,
+            ));
+        }
+    }
+
+    for equipment in &condominium.equipment {
+        let criticality = equipment.criticality.to_lowercase();
+        let status = equipment.status.to_lowercase();
+        if criticality.contains("alta") || criticality.contains("crit") || status.contains("avari")
+        {
+            alerts.push(alert(
+                "critical",
+                "equipamentos",
+                "Equipamento critico",
+                &equipment.name,
+                &equipment.id,
+                None,
+            ));
+        }
+        if let Some(date) = parse_date(&equipment.next_maintenance_date) {
+            if date < today {
+                alerts.push(alert(
+                    "warning",
+                    "manutencao",
+                    "Manutencao vencida",
+                    &equipment.name,
+                    &equipment.id,
+                    Some(date),
+                ));
+            }
+        }
+    }
+
+    for maintenance in &store.maintenance {
+        if !maintenance
+            .condominium
+            .eq_ignore_ascii_case(&condominium.name)
+        {
+            continue;
+        }
+        let status = maintenance.status.to_lowercase();
+        if status.contains("conclu") || status.contains("resolvid") {
+            continue;
+        }
+        if let Some(date) = parse_date(&maintenance.date) {
+            if date < today {
+                alerts.push(alert(
+                    "warning",
+                    "manutencao",
+                    "Intervencao vencida",
+                    &maintenance.title,
+                    &maintenance.id,
+                    Some(date),
+                ));
+            }
+        }
+    }
+
+    alerts
+}
+
+fn alert(
+    severity: &str,
+    category: &str,
+    title: &str,
+    detail: &str,
+    entity_id: &str,
+    due_date: Option<NaiveDate>,
+) -> CondominiumAlert {
+    CondominiumAlert {
+        id: format!("{}-{}-{}", category, severity, entity_id),
+        severity: severity.to_string(),
+        category: category.to_string(),
+        title: title.to_string(),
+        detail: detail.to_string(),
+        entity_id: entity_id.to_string(),
+        due_date: due_date.map(|date| date.to_string()),
+    }
+}
+
+fn parse_date(value: &str) -> Option<NaiveDate> {
+    let date = value.trim().split('T').next().unwrap_or_default();
+    NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()
+}
+
+fn visible_notes(
+    user: &PublicUser,
+    notes: &[CondominiumInternalNote],
+) -> Vec<CondominiumInternalNote> {
+    notes
+        .iter()
+        .filter(|note| can_see_note(user, note))
+        .cloned()
+        .collect()
+}
+
+fn can_see_note(user: &PublicUser, note: &CondominiumInternalNote) -> bool {
+    let role = user.role.to_lowercase();
+    let visibility = note.visibility.to_lowercase();
+    role.contains("administrador")
+        || visibility.is_empty()
+        || visibility == "equipa"
+        || (visibility == "gestao" && role.contains("gest"))
+        || (visibility == "privada" && note.created_by.eq_ignore_ascii_case(&user.name))
+}
+
+fn qr_svg_for(value: &str) -> String {
+    match QrCode::new(value.as_bytes()) {
+        Ok(code) => code
+            .render::<svg::Color>()
+            .min_dimensions(220, 220)
+            .dark_color(svg::Color("#111827"))
+            .light_color(svg::Color("#ffffff"))
+            .build(),
+        Err(_) => "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"220\" height=\"220\"><rect width=\"220\" height=\"220\" fill=\"#fff\"/><text x=\"20\" y=\"110\" fill=\"#111827\">QR indisponivel</text></svg>".to_string(),
+    }
 }
 
 fn compact_location(address: &CondominiumAddress) -> String {
@@ -2107,6 +3136,12 @@ fn set_string(target: &mut String, value: Option<String>) {
 }
 
 fn set_u16(target: &mut u16, value: Option<u16>) {
+    if let Some(value) = value {
+        *target = value;
+    }
+}
+
+fn set_u64(target: &mut u64, value: Option<u64>) {
     if let Some(value) = value {
         *target = value;
     }
@@ -2411,5 +3446,81 @@ mod tests {
         );
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn mapped_import_preview_uses_selected_columns() {
+        let mut row = HashMap::new();
+        row.insert("edificio".to_string(), "Torre Norte".to_string());
+        row.insert("local".to_string(), "Porto".to_string());
+        row.insert("fracoes".to_string(), "18".to_string());
+        row.insert("estado".to_string(), "ativo".to_string());
+        let mapping = HashMap::from([
+            ("name".to_string(), "edificio".to_string()),
+            ("locality".to_string(), "local".to_string()),
+            ("totalFractions".to_string(), "fracoes".to_string()),
+            ("status".to_string(), "estado".to_string()),
+        ]);
+
+        let input = row_to_import_input(&row, &mapping);
+
+        assert_eq!(input.name, "Torre Norte");
+        assert_eq!(input.locality, "Porto");
+        assert_eq!(input.total_fractions, 18);
+        assert!(validate_import_row(&input).is_empty());
+    }
+
+    #[test]
+    fn alerts_include_expired_documents_and_incomplete_profile() {
+        let condominium = Condominium {
+            id: "condo-1".to_string(),
+            managed_documents: vec![CondominiumManagedDocument {
+                id: "doc-1".to_string(),
+                title: "Seguro".to_string(),
+                expiry_date: "2020-01-01".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let store = AppStore::default();
+
+        let alerts = alerts_for(&store, &condominium);
+
+        assert!(alerts.iter().any(|alert| alert.category == "documentos"));
+        assert!(alerts.iter().any(|alert| alert.category == "completude"));
+    }
+
+    #[test]
+    fn note_visibility_limits_private_notes_to_author_or_admin() {
+        let note = CondominiumInternalNote {
+            id: "note-1".to_string(),
+            visibility: "privada".to_string(),
+            created_by: "Ana".to_string(),
+            ..Default::default()
+        };
+        let operator = PublicUser {
+            id: "user-1".to_string(),
+            tenant_id: "demo".to_string(),
+            name: "Bruno".to_string(),
+            email: "bruno@example.test".to_string(),
+            role: "Operador".to_string(),
+            active_condominium: String::new(),
+            active_condominiums: 1,
+        };
+        let admin = PublicUser {
+            role: "Administrador".to_string(),
+            ..operator.clone()
+        };
+
+        assert!(!can_see_note(&operator, &note));
+        assert!(can_see_note(&admin, &note));
+    }
+
+    #[test]
+    fn qr_svg_generation_returns_svg_markup() {
+        let svg = qr_svg_for("/condomino/avarias?zona=hall");
+
+        assert!(svg.contains("<svg"));
+        assert!(svg.contains("</svg>"));
     }
 }

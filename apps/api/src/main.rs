@@ -1,6 +1,8 @@
 mod config;
 mod error;
 mod models;
+#[allow(dead_code)]
+mod repositories;
 mod routes;
 mod state;
 
