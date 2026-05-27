@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let state = AppState::load()?;
+    let state = AppState::load().await?;
     let bind_addr = state.config.bind_addr();
     let cors = state.config.cors_layer()?;
     let app = routes::router(state)

@@ -1044,6 +1044,7 @@ mod tests {
                 database: None,
             },
             store: Arc::new(RwLock::new(store)),
+            postgres: None,
         }
     }
 
@@ -1527,6 +1528,7 @@ mod tests {
                 database: None,
             },
             store: Arc::new(RwLock::new(store)),
+            postgres: None,
         };
         let app = app(state);
 

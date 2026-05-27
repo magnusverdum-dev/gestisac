@@ -1,0 +1,2 @@
+ALTER TABLE app_sessions
+ADD COLUMN IF NOT EXISTS app_context TEXT NOT NULL DEFAULT 'hq';

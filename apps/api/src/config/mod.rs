@@ -103,7 +103,11 @@ impl ApiConfig {
 
     pub fn persistence_status(&self) -> PersistenceStatus {
         PersistenceStatus {
-            active_backend: "json-file",
+            active_backend: if self.database.is_some() {
+                "hybrid-json-postgres"
+            } else {
+                "json-file"
+            },
             database_configured: self.database.is_some(),
             database_url: self.database.as_ref().map(DatabaseConfig::redacted_url),
             json_store_path: self.data_path.display().to_string(),
@@ -125,6 +129,10 @@ impl DatabaseConfig {
 
     fn redacted_url(&self) -> String {
         redact_database_url(&self.url)
+    }
+
+    pub fn url(&self) -> &str {
+        &self.url
     }
 }
 
