@@ -68,7 +68,7 @@ type DemoStore = Omit<ResourceState, 'permissions'> & {
 };
 
 export function canUseBrowserDemoApi(status = 0): boolean {
-  return !API_BASE_URL && typeof window !== 'undefined' && (status === 0 || status >= 400);
+  return false;
 }
 
 export async function demoApiRequest<T>(
@@ -541,6 +541,7 @@ function createDemoStore(): DemoStore {
         updatedAt: '2026-05-14 16:10'
       }
     ],
+    ocorrencias: [],
     suppliers: [
       {
         id: 'supplier-001',

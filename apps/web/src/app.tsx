@@ -635,6 +635,7 @@ export const App = component$(() => {
         <TicketsPage
           resources={resources.value}
           isSaving={isSaving.value}
+          token={session.token}
           createIntentVersion={createIntent.path === page.path ? createIntent.version : 0}
           initialStatusGroup={route.kind === 'ticketStatus' ? route.group : ''}
           initialPriority={route.kind === 'ticketPriority' ? route.priority : ''}

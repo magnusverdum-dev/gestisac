@@ -41,19 +41,17 @@ export const Sidebar = component$((props: SidebarProps) => {
 
       <nav class={mobileMenuOpen.value ? 'nav-list mobile-open' : 'nav-list'}>
         {navPages.map((page) => (
-          <a
+          <button
             class={props.currentPath === page.path ? 'nav-item active' : 'nav-item'}
-            href={page.path}
             key={page.path}
-            onClick$={(event) => {
-              event.preventDefault();
+            onClick$={() => {
               mobileMenuOpen.value = false;
               props.navigate$(page.path);
             }}
           >
             <span>{page.icon}</span>
             {page.navLabel}
-          </a>
+          </button>
         ))}
       </nav>
 

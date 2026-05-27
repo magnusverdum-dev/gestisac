@@ -101,6 +101,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
   const detailOpen = useSignal(false);
   const creationOpen = useSignal(false);
   const importOpen = useSignal(false);
+  const editOpen = useSignal(false);
   const search = useSignal('');
   const statusFilter = useSignal('todos');
   const localSaving = useSignal(false);
@@ -492,13 +493,85 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
               Voltar aos 8 cartoes
             </button>
           ) : null}
+          {!activeArea.value && !editOpen.value ? (
+            <button
+              class="primary-action"
+              type="button"
+              onClick$={() => {
+                if (contextId.value !== 'all') {
+                  activeArea.value = 'general';
+                  detailOpen.value = true;
+                  activeTab.value = 'identification';
+                } else {
+                  editOpen.value = true;
+                }
+              }}
+            >
+              Editar
+            </button>
+          ) : null}
+          {editOpen.value && contextId.value === 'all' ? (
+            <button
+              class="secondary-action"
+              type="button"
+              onClick$={() => editOpen.value = false}
+            >
+              Cancelar
+            </button>
+          ) : null}
         </div>
       </header>
 
       {localError.value ? <div class="app-error glass-panel">{localError.value}</div> : null}
       {localNotice.value ? <div class="app-success glass-panel">{localNotice.value}</div> : null}
 
-      {!activeArea.value ? (
+      {editOpen.value && contextId.value === 'all' ? (
+        <section class="simple-record-list">
+          <strong>Escolhe um condominio para editar</strong>
+          {filtered.length ? filtered.map((item) => (
+            <article class="simple-record-card" key={item.id}>
+              <div>
+                <strong>{item.name}</strong>
+                <span>{item.internalCode || 'sem codigo'} - {item.address?.locality || item.location || 'localidade por completar'}</span>
+              </div>
+              <p>{item.structure?.totalFractions || item.fractions} fracoes - {item.structure?.blocksCount || item.buildings} blocos</p>
+              <small>{localCompleteness(item).percentage}% completo</small>
+              <div class="simple-card-actions">
+                <button
+                  class="primary-action"
+                  type="button"
+                  onClick$={() => {
+                    selectedId.value = item.id;
+                    contextId.value = item.id;
+                    editOpen.value = false;
+                    activeTab.value = 'identification';
+                    detailOpen.value = true;
+                  }}
+                >
+                  Editar
+                </button>
+                <button
+                  class="secondary-action"
+                  type="button"
+                  onClick$={async () => {
+                    if (confirm('Tem a certeza que deseja arquivar este condominio?')) {
+                      selectedId.value = item.id;
+                      await archiveSelected$();
+                    }
+                  }}
+                >
+                  Arquivar
+                </button>
+              </div>
+            </article>
+          )) : (
+            <article class="simple-empty-state">
+              <strong>Sem condominios disponiveis.</strong>
+              <span>Cria um novo condominio primeiro.</span>
+            </article>
+          )}
+        </section>
+      ) : !activeArea.value && !editOpen.value ? (
         <SimpleHubCards
           sections={condoSections}
           activeId={activeArea.value}

@@ -221,12 +221,17 @@ button {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  width: 100%;
   min-height: 44px;
   padding: 0 12px;
   color: #dbeafe;
   text-decoration: none;
+  background: transparent;
   border: 1px solid transparent;
   border-radius: 15px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
   transition:
     transform 180ms var(--ease),
     background 180ms var(--ease),
@@ -323,11 +328,31 @@ button {
   z-index: 4;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  gap: 12px;
   margin-bottom: 28px;
   padding: 12px 0;
   min-width: 0;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(7, 18, 40, 0.55);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.back-button:hover {
+  color: #dbeafe;
+  border-color: rgba(75, 163, 255, 0.34);
+  background: rgba(47, 125, 246, 0.14);
 }
 
 .search-box {
@@ -871,6 +896,7 @@ kbd {
   border-radius: 22px;
   box-shadow: var(--shadow-card);
   backdrop-filter: blur(20px);
+  cursor: pointer;
   transition:
     transform 220ms var(--ease),
     border-color 220ms var(--ease),
@@ -916,6 +942,7 @@ kbd {
 }
 
 .module-card:hover {
+  transform: translateY(-3px);
   box-shadow:
     var(--shadow-card),
     0 0 54px rgba(75, 163, 255, 0.12);

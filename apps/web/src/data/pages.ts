@@ -97,6 +97,7 @@ export const emptyResources: ResourceState = {
   fractions: [],
   residents: [],
   tickets: [],
+  ocorrencias: [],
   suppliers: [],
   documents: [],
   reports: [],

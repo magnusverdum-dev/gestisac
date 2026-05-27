@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use super::demo::DemoData;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppStore {
     pub version: VersionInfo,
@@ -22,6 +22,12 @@ pub struct AppStore {
     #[serde(default)]
     pub residents: Vec<Resident>,
     pub tickets: Vec<Ticket>,
+    #[serde(default)]
+    pub ocorrencias: Vec<Ocorrencia>,
+    #[serde(default)]
+    pub ocorrencia_comentarios: Vec<OcorrenciaComentario>,
+    #[serde(default)]
+    pub ocorrencia_anexos: Vec<OcorrenciaAnexo>,
     pub suppliers: Vec<Supplier>,
     pub documents: Vec<Document>,
     pub reports: Vec<Report>,
@@ -46,7 +52,7 @@ pub struct AppStore {
     pub audit_log: Vec<AuditLogEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionInfo {
     pub name: String,
@@ -719,6 +725,273 @@ pub struct Resident {
     pub status: String,
 }
 
+// ── Tipos enumerados para Ocorrencias ──
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum OcorrenciaTipo {
+    #[default]
+    Avaria,
+    Pedido,
+    Reclamacao,
+    Pergunta,
+    TarefaInterna,
+}
+
+impl OcorrenciaTipo {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OcorrenciaTipo::Avaria => "Avaria",
+            OcorrenciaTipo::Pedido => "Pedido",
+            OcorrenciaTipo::Reclamacao => "Reclamacao",
+            OcorrenciaTipo::Pergunta => "Pergunta",
+            OcorrenciaTipo::TarefaInterna => "Tarefa Interna",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub enum OcorrenciaStatus {
+    #[default]
+    Nova,
+    EmTriagem,
+    AguardaPecas,
+    EmCurso,
+    Pendente,
+    Resolvida,
+    Fechada,
+    Reaberta,
+}
+
+impl OcorrenciaStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OcorrenciaStatus::Nova => "Nova",
+            OcorrenciaStatus::EmTriagem => "Em Triagem",
+            OcorrenciaStatus::AguardaPecas => "Aguarda Pecas",
+            OcorrenciaStatus::EmCurso => "Em Curso",
+            OcorrenciaStatus::Pendente => "Pendente",
+            OcorrenciaStatus::Resolvida => "Resolvida",
+            OcorrenciaStatus::Fechada => "Fechada",
+            OcorrenciaStatus::Reaberta => "Reaberta",
+        }
+    }
+    pub fn transicoes_validas(&self) -> Vec<OcorrenciaStatus> {
+        match self {
+            OcorrenciaStatus::Nova => vec![
+                OcorrenciaStatus::EmTriagem,
+                OcorrenciaStatus::EmCurso,
+                OcorrenciaStatus::Fechada,
+            ],
+            OcorrenciaStatus::EmTriagem => vec![
+                OcorrenciaStatus::EmCurso,
+                OcorrenciaStatus::AguardaPecas,
+                OcorrenciaStatus::Fechada,
+            ],
+            OcorrenciaStatus::AguardaPecas => {
+                vec![OcorrenciaStatus::EmCurso, OcorrenciaStatus::Pendente]
+            }
+            OcorrenciaStatus::EmCurso => {
+                vec![OcorrenciaStatus::Pendente, OcorrenciaStatus::Resolvida]
+            }
+            OcorrenciaStatus::Pendente => {
+                vec![OcorrenciaStatus::EmCurso, OcorrenciaStatus::Fechada]
+            }
+            OcorrenciaStatus::Resolvida => {
+                vec![OcorrenciaStatus::Fechada, OcorrenciaStatus::Reaberta]
+            }
+            OcorrenciaStatus::Fechada => vec![OcorrenciaStatus::Reaberta],
+            OcorrenciaStatus::Reaberta => {
+                vec![OcorrenciaStatus::EmCurso, OcorrenciaStatus::EmTriagem]
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum Prioridade {
+    Baixa,
+    #[default]
+    Normal,
+    Alta,
+    Urgente,
+}
+
+impl Prioridade {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Prioridade::Baixa => "Baixa",
+            Prioridade::Normal => "Normal",
+            Prioridade::Alta => "Alta",
+            Prioridade::Urgente => "Urgente",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum Impacto {
+    Baixo,
+    #[default]
+    Medio,
+    Alto,
+    Critico,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum Urgencia {
+    Baixa,
+    #[default]
+    Media,
+    Alta,
+    Imediata,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum Canal {
+    #[default]
+    Portal,
+    Email,
+    Telefone,
+    Presencial,
+    Interno,
+}
+
+impl Canal {
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Canal::Portal => "Portal",
+            Canal::Email => "Email",
+            Canal::Telefone => "Telefone",
+            Canal::Presencial => "Presencial",
+            Canal::Interno => "Interno",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ComentarioVisibilidade {
+    #[default]
+    Interno,
+    Publico,
+}
+
+// ── Ocorrencia (unificada: Avaria + Pedido + Reclamacao + Pergunta) ──
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ocorrencia {
+    pub id: String,
+    pub titulo: String,
+    pub tipo: OcorrenciaTipo,
+    pub status: OcorrenciaStatus,
+    #[serde(default)]
+    pub prioridade: Prioridade,
+    #[serde(default)]
+    pub impacto: Impacto,
+    #[serde(default)]
+    pub urgencia: Urgencia,
+    #[serde(default)]
+    pub descricao: String,
+    #[serde(default)]
+    pub condominium_id: String,
+    #[serde(default)]
+    pub requisitante_nome: String,
+    #[serde(default)]
+    pub requisitante_email: String,
+    #[serde(default)]
+    pub requisitante_telefone: String,
+    #[serde(default)]
+    pub canal: Canal,
+    #[serde(default)]
+    pub categoria: String,
+    #[serde(default)]
+    pub atribuido_a: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    // ── Específicos de Avaria ──
+    #[serde(default)]
+    pub bloco_id: String,
+    #[serde(default)]
+    pub piso_id: String,
+    #[serde(default)]
+    pub zona_id: String,
+    #[serde(default)]
+    pub equipamento_id: String,
+    #[serde(default)]
+    pub custo_estimado: String,
+    #[serde(default)]
+    pub custo_final: String,
+    #[serde(default)]
+    pub fornecedor_id: String,
+    #[serde(default)]
+    pub referencia_contrato: String,
+    #[serde(default)]
+    pub media_ids: Vec<String>,
+    #[serde(default)]
+    pub documento_ids: Vec<String>,
+    #[serde(default)]
+    pub motivo_resolucao: String,
+    // ── SLA ──
+    #[serde(default)]
+    pub sla_resposta_em: String,
+    #[serde(default)]
+    pub sla_resolucao_em: String,
+    #[serde(default)]
+    pub respondido_em: String,
+    #[serde(default)]
+    pub resolvido_em: String,
+    #[serde(default)]
+    pub fechado_em: String,
+    #[serde(default)]
+    pub token_acompanhamento: String,
+    // ── Timestamps ──
+    #[serde(default = "now_utc_string")]
+    pub criado_em: String,
+    #[serde(default = "now_utc_string")]
+    pub atualizado_em: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcorrenciaComentario {
+    pub id: String,
+    pub ocorrencia_id: String,
+    pub autor_id: String,
+    pub autor_nome: String,
+    pub texto: String,
+    #[serde(default)]
+    pub visibilidade: ComentarioVisibilidade,
+    #[serde(default = "now_utc_string")]
+    pub criado_em: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcorrenciaAnexo {
+    pub id: String,
+    pub ocorrencia_id: String,
+    pub nome: String,
+    #[serde(default)]
+    pub mime_type: String,
+    #[serde(default)]
+    pub tamanho_bytes: u64,
+    #[serde(default)]
+    pub storage_key: String,
+    #[serde(default)]
+    pub uploaded_por: String,
+    #[serde(default = "now_utc_string")]
+    pub criado_em: String,
+}
+
+// ── Ticket legacy ──
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Ticket {
@@ -1057,6 +1330,16 @@ pub struct UrgentNotice {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct OcorrenciasMetricas {
+    pub total_abertas: usize,
+    pub urgentes: usize,
+    pub total_avarias: usize,
+    pub mttr_segundos: f64,
+    pub aging_max_dias: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DashboardResponse {
     pub user: PublicUser,
     pub active_condominium: String,
@@ -1177,6 +1460,116 @@ impl AppStore {
                     updated_at: item.updated_at.clone(),
                 })
                 .collect(),
+            ocorrencias: demo
+                .tickets
+                .iter()
+                .enumerate()
+                .map(|(index, item)| {
+                    let is_avaria = item.title.to_lowercase().contains("avaria");
+                    let prioridade = if item.priority.to_lowercase().contains("urg")
+                        || item.priority.to_lowercase().contains("crit")
+                    {
+                        Prioridade::Urgente
+                    } else if item.priority.to_lowercase().contains("alta")
+                        || item.priority.to_lowercase().contains("import")
+                    {
+                        Prioridade::Alta
+                    } else if item.priority.to_lowercase().contains("baix") {
+                        Prioridade::Baixa
+                    } else {
+                        Prioridade::Normal
+                    };
+                    let status = if item.status.to_lowercase().contains("resol")
+                        || item.status.to_lowercase().contains("fech")
+                    {
+                        OcorrenciaStatus::Resolvida
+                    } else if item.status.to_lowercase().contains("fornecedor")
+                        || item.status.to_lowercase().contains("curso")
+                    {
+                        OcorrenciaStatus::EmCurso
+                    } else if item.status.to_lowercase().contains("analise")
+                        || item.status.to_lowercase().contains("pend")
+                    {
+                        OcorrenciaStatus::Pendente
+                    } else {
+                        OcorrenciaStatus::Nova
+                    };
+                    let resolved_at = if item.status.to_lowercase().contains("resolvido") {
+                        item.updated_at.clone()
+                    } else {
+                        String::new()
+                    };
+                    let impacto = if prioridade == Prioridade::Urgente {
+                        Impacto::Critico
+                    } else {
+                        Impacto::Medio
+                    };
+                    let urgencia = if prioridade == Prioridade::Urgente {
+                        Urgencia::Imediata
+                    } else {
+                        Urgencia::Media
+                    };
+                    Ocorrencia {
+                        id: Uuid::new_v4().to_string(),
+                        titulo: item.title.clone(),
+                        tipo: if is_avaria {
+                            OcorrenciaTipo::Avaria
+                        } else {
+                            OcorrenciaTipo::Pedido
+                        },
+                        status,
+                        prioridade,
+                        impacto,
+                        urgencia,
+                        descricao: item.status.clone(),
+                        condominium_id: item.condominium.clone(),
+                        requisitante_nome: if index == 0 {
+                            "Carlos Almeida".to_string()
+                        } else {
+                            "Maria Fernandes".to_string()
+                        },
+                        requisitante_email: if index == 0 {
+                            "carlos.almeida@example.pt".to_string()
+                        } else {
+                            "maria.fernandes@example.pt".to_string()
+                        },
+                        requisitante_telefone: String::new(),
+                        canal: Canal::Portal,
+                        categoria: if item.title.to_lowercase().contains("elevador") {
+                            "Elevadores".to_string()
+                        } else {
+                            "Infraestrutura".to_string()
+                        },
+                        atribuido_a: demo.user.name.clone(),
+                        tags: vec!["operacional".to_string(), "condominio".to_string()],
+                        bloco_id: String::new(),
+                        piso_id: String::new(),
+                        zona_id: String::new(),
+                        equipamento_id: if is_avaria {
+                            "elevador-bloco-b".to_string()
+                        } else {
+                            String::new()
+                        },
+                        custo_estimado: String::new(),
+                        custo_final: String::new(),
+                        fornecedor_id: String::new(),
+                        referencia_contrato: String::new(),
+                        media_ids: vec![],
+                        documento_ids: vec![],
+                        motivo_resolucao: String::new(),
+                        sla_resposta_em: "2026-05-20T18:00:00Z".to_string(),
+                        sla_resolucao_em: "2026-05-25T18:00:00Z".to_string(),
+                        respondido_em: String::new(),
+                        resolvido_em: resolved_at,
+                        fechado_em: String::new(),
+                        token_acompanhamento: String::new(),
+                        criado_em: item.updated_at.clone(),
+                        atualizado_em: item.updated_at.clone(),
+                    }
+                })
+                .collect(),
+            ocorrencia_comentarios: Vec::new(),
+            ocorrencia_anexos: Vec::new(),
             suppliers: demo
                 .suppliers
                 .iter()
@@ -1374,17 +1767,102 @@ impl AppStore {
             })
     }
 
+    // ── Ocorrencias helpers ──
+
+    pub fn ocorrencias_abertas(&self) -> Vec<&Ocorrencia> {
+        self.ocorrencias
+            .iter()
+            .filter(|o| {
+                o.status != OcorrenciaStatus::Resolvida && o.status != OcorrenciaStatus::Fechada
+            })
+            .collect()
+    }
+
+    pub fn ocorrencias_por_tipo(&self, tipo: &OcorrenciaTipo) -> Vec<&Ocorrencia> {
+        self.ocorrencias
+            .iter()
+            .filter(|o| o.tipo == *tipo)
+            .collect()
+    }
+
+    pub fn ocorrencias_urgentes(&self) -> Vec<&Ocorrencia> {
+        self.ocorrencias
+            .iter()
+            .filter(|o| {
+                o.prioridade == Prioridade::Alta
+                    || o.prioridade == Prioridade::Urgente
+                    || o.impacto == Impacto::Critico
+                    || o.urgencia == Urgencia::Imediata
+            })
+            .filter(|o| {
+                o.status != OcorrenciaStatus::Fechada && o.status != OcorrenciaStatus::Resolvida
+            })
+            .collect()
+    }
+
+    pub fn ocorrencias_mttr_segundos(&self) -> f64 {
+        let resolvidas: Vec<&Ocorrencia> = self
+            .ocorrencias
+            .iter()
+            .filter(|o| {
+                o.status == OcorrenciaStatus::Resolvida
+                    && !o.resolvido_em.is_empty()
+                    && !o.criado_em.is_empty()
+            })
+            .collect();
+        if resolvidas.is_empty() {
+            return 0.0;
+        }
+        let total: i64 = resolvidas
+            .iter()
+            .filter_map(|o| {
+                let criado = chrono::DateTime::parse_from_rfc3339(&o.criado_em).ok()?;
+                let resolvido = chrono::DateTime::parse_from_rfc3339(&o.resolvido_em).ok()?;
+                Some((resolvido - criado).num_seconds())
+            })
+            .sum();
+        total as f64 / resolvidas.len() as f64
+    }
+
+    pub fn ocorrencias_metricas(&self) -> OcorrenciasMetricas {
+        let abertas = self.ocorrencias_abertas();
+        let urgentes = self.ocorrencias_urgentes();
+        let avarias = self.ocorrencias_por_tipo(&OcorrenciaTipo::Avaria);
+        let avarias_abertas: Vec<&Ocorrencia> = avarias
+            .into_iter()
+            .filter(|o| {
+                o.status != OcorrenciaStatus::Fechada && o.status != OcorrenciaStatus::Resolvida
+            })
+            .collect();
+        OcorrenciasMetricas {
+            total_abertas: abertas.len(),
+            urgentes: urgentes.len(),
+            total_avarias: avarias_abertas.len(),
+            mttr_segundos: self.ocorrencias_mttr_segundos(),
+            aging_max_dias: abertas
+                .iter()
+                .filter_map(|o| {
+                    let criado = chrono::DateTime::parse_from_rfc3339(&o.criado_em).ok()?;
+                    let criado_utc: chrono::DateTime<Utc> = criado.with_timezone(&Utc);
+                    let dias = (Utc::now() - criado_utc).num_days();
+                    Some(dias.max(0))
+                })
+                .max()
+                .unwrap_or(0),
+        }
+    }
+
+    pub fn transicao_valida(actual: &OcorrenciaStatus, novo: &OcorrenciaStatus) -> bool {
+        actual != novo && actual.transicoes_validas().contains(novo)
+    }
+
     pub fn dashboard(&self, user: PublicUser) -> DashboardResponse {
         let active_condominium = if user.active_condominium.is_empty() {
             self.active_condominium.clone()
         } else {
             user.active_condominium.clone()
         };
-        let urgent_tickets = self
-            .tickets
-            .iter()
-            .filter(|ticket| is_critical_priority(&ticket.priority))
-            .count();
+        let ocorrencias_metricas = self.ocorrencias_metricas();
         let active_suppliers = self
             .suppliers
             .iter()
@@ -1400,8 +1878,12 @@ impl AppStore {
             urgent_notice: urgent_notice.clone(),
             operational_summary: vec![
                 OperationalSummaryItem {
-                    label: format!("{urgent_tickets} avaria critica"),
+                    label: format!("{} ocorrencias abertas", ocorrencias_metricas.total_abertas),
                     tone: "risk".to_string(),
+                },
+                OperationalSummaryItem {
+                    label: format!("{} urgentes", ocorrencias_metricas.urgentes),
+                    tone: "danger".to_string(),
                 },
                 OperationalSummaryItem {
                     label: "2 prazos proximos".to_string(),
@@ -1512,6 +1994,9 @@ impl AppStore {
         total_residents: u16,
     ) -> Vec<DashboardModule> {
         let accounting = self.accounting_summary();
+        let ocorrencias_metricas = self.ocorrencias_metricas();
+        let ocorrencias_urgentes =
+            self.ocorrencias_urgentes().len() + self.ocorrencias_abertas().len();
 
         vec![
             DashboardModule {
@@ -1526,7 +2011,7 @@ impl AppStore {
                     metric(self.condominiums.len().to_string(), "Predios", None),
                     metric(total_fractions.to_string(), "Fracoes", None),
                     metric(total_residents.to_string(), "Moradores", None),
-                    metric(self.tickets.len().to_string(), "Alertas", Some("urgent")),
+                    metric(ocorrencias_urgentes.to_string(), "Alertas", Some("urgent")),
                 ],
             },
             DashboardModule {
@@ -1562,24 +2047,28 @@ impl AppStore {
             },
             DashboardModule {
                 id: "administration".to_string(),
-                title: "Vistorias".to_string(),
-                subtitle: "Operacoes e manutencao".to_string(),
+                title: "Ocorrencias".to_string(),
+                subtitle: "Avarias e pedidos".to_string(),
                 tone: "purple".to_string(),
-                cta: "Gerir administracao".to_string(),
-                path: "/administracao".to_string(),
+                cta: "Gerir ocorrencias".to_string(),
+                path: "/tickets".to_string(),
                 visual: "tools".to_string(),
                 metrics: vec![
                     metric(
-                        self.tickets.len().to_string(),
-                        "Tickets abertos",
+                        ocorrencias_metricas.total_abertas.to_string(),
+                        "Abertas",
                         Some("urgent"),
+                    ),
+                    metric(
+                        ocorrencias_metricas.urgentes.to_string(),
+                        "Urgentes",
+                        Some("danger"),
                     ),
                     metric(
                         self.maintenance.len().to_string(),
                         "Manutencoes",
                         Some("warning"),
                     ),
-                    metric("2", "Seguros a expirar", Some("warning")),
                     metric(
                         self.suppliers.len().to_string(),
                         "Fornecedores",
@@ -1589,7 +2078,7 @@ impl AppStore {
             },
             DashboardModule {
                 id: "reports".to_string(),
-                title: "Tickets".to_string(),
+                title: "Relatorios".to_string(),
                 subtitle: "Analises e documentos".to_string(),
                 tone: "gold".to_string(),
                 cta: "Gerar relatorio".to_string(),
@@ -1614,13 +2103,31 @@ impl AppStore {
             icon: "EUR".to_string(),
         }];
 
-        alerts.extend(self.tickets.iter().take(2).map(|ticket| DashboardAlert {
-            kind: "ticket".to_string(),
-            title: ticket.title.clone(),
-            detail: format!("{} - {}", ticket.condominium, ticket.status),
-            tone: "gold".to_string(),
-            icon: "!".to_string(),
-        }));
+        alerts.extend(
+            self.ocorrencias
+                .iter()
+                .filter(|o| o.status != OcorrenciaStatus::Fechada)
+                .take(3)
+                .map(|o| {
+                    let tone = if o.prioridade == Prioridade::Urgente {
+                        "danger"
+                    } else {
+                        "gold"
+                    };
+                    DashboardAlert {
+                        kind: "ocorrencia".to_string(),
+                        title: o.titulo.clone(),
+                        detail: format!("{} - {}", o.tipo.as_str(), o.status.as_str()),
+                        tone: tone.to_string(),
+                        icon: if o.tipo == OcorrenciaTipo::Avaria {
+                            "!"
+                        } else {
+                            "?"
+                        }
+                        .to_string(),
+                    }
+                }),
+        );
 
         alerts
     }
@@ -1655,6 +2162,11 @@ fn now_utc() -> DateTime<Utc> {
     Utc::now()
 }
 
+fn now_utc_string() -> String {
+    Utc::now().to_rfc3339()
+}
+
+#[allow(dead_code)]
 fn is_critical_priority(priority: &str) -> bool {
     let normalized = priority.to_lowercase();
     normalized.contains("crit") || normalized.contains("tic") || normalized.contains("urg")
@@ -2005,18 +2517,20 @@ mod tests {
         AppStore::seed_from_demo(&demo, "password-hash".to_string())
     }
 
+    // ── Accounting ──
+
     #[test]
     fn accounting_summary_is_calculated_from_store_records() {
         let store = seeded_store();
-
         let summary = store.accounting_summary();
-
         assert_eq!(summary.paid_quota_percentage, 67);
         assert_eq!(summary.overdue_count, 2);
         assert_eq!(summary.overdue_amount, Decimal::new(27_500, 2));
         assert_eq!(summary.monthly_expenses, Decimal::new(235_000, 2));
         assert_eq!(summary.reserve_fund, Decimal::new(1_890_000, 2));
     }
+
+    // ── Dashboard ──
 
     #[test]
     fn dashboard_counts_accented_critical_priorities() {
@@ -2025,9 +2539,572 @@ mod tests {
         let user = store
             .public_user(&user_id)
             .expect("seeded store must include public demo admin");
-
         let dashboard = store.dashboard(user);
+        assert!(dashboard.operational_summary[0]
+            .label
+            .contains("ocorrencias abertas"));
+        assert!(dashboard.operational_summary[1].label.contains("urgentes"));
+    }
 
-        assert_eq!(dashboard.operational_summary[0].label, "1 avaria critica");
+    #[test]
+    fn dashboard_metricas_match_ocorrencias_metricas_direct_call() {
+        let store = seeded_store();
+        let user_id = store.users[0].id.clone();
+        let user = store.public_user(&user_id).unwrap();
+        let dashboard = store.dashboard(user);
+        let metricas = store.ocorrencias_metricas();
+        assert_eq!(
+            dashboard.operational_summary[0].label,
+            format!("{} ocorrencias abertas", metricas.total_abertas)
+        );
+        assert_eq!(
+            dashboard.operational_summary[1].label,
+            format!("{} urgentes", metricas.urgentes)
+        );
+    }
+
+    // ── State Machine — transition lists ──
+
+    #[test]
+    fn every_state_has_non_empty_transitions() {
+        for state in &[
+            OcorrenciaStatus::Nova,
+            OcorrenciaStatus::EmTriagem,
+            OcorrenciaStatus::AguardaPecas,
+            OcorrenciaStatus::EmCurso,
+            OcorrenciaStatus::Pendente,
+            OcorrenciaStatus::Resolvida,
+            OcorrenciaStatus::Fechada,
+            OcorrenciaStatus::Reaberta,
+        ] {
+            let transitions = state.transicoes_validas();
+            assert!(
+                !transitions.is_empty(),
+                "{:?} must have at least one transition",
+                state
+            );
+            // No duplicate entries
+            let mut dedup = transitions.clone();
+            dedup.sort();
+            dedup.dedup();
+            assert_eq!(
+                transitions.len(),
+                dedup.len(),
+                "{:?} transitions contain duplicates",
+                state
+            );
+        }
+    }
+
+    #[test]
+    fn all_transitions_are_to_different_states() {
+        for state in &[
+            OcorrenciaStatus::Nova,
+            OcorrenciaStatus::EmTriagem,
+            OcorrenciaStatus::AguardaPecas,
+            OcorrenciaStatus::EmCurso,
+            OcorrenciaStatus::Pendente,
+            OcorrenciaStatus::Resolvida,
+            OcorrenciaStatus::Fechada,
+            OcorrenciaStatus::Reaberta,
+        ] {
+            for target in state.transicoes_validas() {
+                assert_ne!(*state, target, "{:?} cannot transition to itself", state);
+            }
+        }
+    }
+
+    // ── State Machine — full 8×8 transition matrix ──
+
+    #[test]
+    fn transicao_valida_full_matrix() {
+        let states = [
+            OcorrenciaStatus::Nova,
+            OcorrenciaStatus::EmTriagem,
+            OcorrenciaStatus::AguardaPecas,
+            OcorrenciaStatus::EmCurso,
+            OcorrenciaStatus::Pendente,
+            OcorrenciaStatus::Resolvida,
+            OcorrenciaStatus::Fechada,
+            OcorrenciaStatus::Reaberta,
+        ];
+        for from in &states {
+            for to in &states {
+                let valid = AppStore::transicao_valida(from, to);
+                let listed = from != to && from.transicoes_validas().contains(to);
+                assert_eq!(
+                    valid, listed,
+                    "transicao {:?} -> {:?}: esperado={}, obtido={}",
+                    from, to, listed, valid
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn transicao_valida_rejects_all_same_status() {
+        for state in &[
+            OcorrenciaStatus::Nova,
+            OcorrenciaStatus::EmTriagem,
+            OcorrenciaStatus::AguardaPecas,
+            OcorrenciaStatus::EmCurso,
+            OcorrenciaStatus::Pendente,
+            OcorrenciaStatus::Resolvida,
+            OcorrenciaStatus::Fechada,
+            OcorrenciaStatus::Reaberta,
+        ] {
+            assert!(
+                !AppStore::transicao_valida(state, state),
+                "{:?} -> {:?} must be rejected",
+                state,
+                state
+            );
+        }
+    }
+
+    // ── OcorrenciasAbertas ──
+
+    #[test]
+    fn ocorrencias_abertas_excludes_resolved_and_closed() {
+        let mut store = AppStore::default();
+        for status in &[
+            OcorrenciaStatus::Nova,
+            OcorrenciaStatus::EmTriagem,
+            OcorrenciaStatus::AguardaPecas,
+            OcorrenciaStatus::EmCurso,
+            OcorrenciaStatus::Pendente,
+            OcorrenciaStatus::Resolvida,
+            OcorrenciaStatus::Fechada,
+            OcorrenciaStatus::Reaberta,
+        ] {
+            let mut o = Ocorrencia::default();
+            o.status = status.clone();
+            store.ocorrencias.push(o);
+        }
+        let abertas = store.ocorrencias_abertas();
+        assert_eq!(abertas.len(), 6); // Todas excepto Resolvida e Fechada
+        for o in &abertas {
+            assert!(o.status != OcorrenciaStatus::Resolvida);
+            assert!(o.status != OcorrenciaStatus::Fechada);
+        }
+    }
+
+    #[test]
+    fn ocorrencias_abertas_empty_when_all_closed_or_resolved() {
+        let mut store = AppStore::default();
+        for status in &[OcorrenciaStatus::Resolvida, OcorrenciaStatus::Fechada] {
+            let mut o = Ocorrencia::default();
+            o.status = status.clone();
+            store.ocorrencias.push(o);
+        }
+        assert!(store.ocorrencias_abertas().is_empty());
+    }
+
+    #[test]
+    fn ocorrencias_abertas_empty_on_empty_store() {
+        let store = AppStore::default();
+        assert!(store.ocorrencias_abertas().is_empty());
+    }
+
+    // ── OcorrenciasUrgentes ──
+
+    #[test]
+    fn ocorrencias_urgentes_includes_all_criteria() {
+        let mut store = AppStore::default();
+        let nova = OcorrenciaStatus::Nova;
+
+        let mut a1 = Ocorrencia::default();
+        a1.prioridade = Prioridade::Alta;
+        a1.status = nova.clone();
+        store.ocorrencias.push(a1);
+
+        let mut a2 = Ocorrencia::default();
+        a2.prioridade = Prioridade::Urgente;
+        a2.status = nova.clone();
+        store.ocorrencias.push(a2);
+
+        let mut a3 = Ocorrencia::default();
+        a3.impacto = Impacto::Critico;
+        a3.status = nova.clone();
+        store.ocorrencias.push(a3);
+
+        let mut a4 = Ocorrencia::default();
+        a4.urgencia = Urgencia::Imediata;
+        a4.status = nova.clone();
+        store.ocorrencias.push(a4);
+
+        assert_eq!(store.ocorrencias_urgentes().len(), 4);
+    }
+
+    #[test]
+    fn ocorrencias_urgentes_ignores_normal_prioridade() {
+        let mut store = AppStore::default();
+        let mut o = Ocorrencia::default();
+        o.prioridade = Prioridade::Normal;
+        o.impacto = Impacto::Medio;
+        o.urgencia = Urgencia::Media;
+        o.status = OcorrenciaStatus::Nova;
+        store.ocorrencias.push(o);
+        assert!(store.ocorrencias_urgentes().is_empty());
+    }
+
+    #[test]
+    fn ocorrencias_urgentes_excludes_fechada_and_resolvida() {
+        let mut store = AppStore::default();
+        for status in &[OcorrenciaStatus::Fechada, OcorrenciaStatus::Resolvida] {
+            let mut o = Ocorrencia::default();
+            o.prioridade = Prioridade::Urgente;
+            o.status = status.clone();
+            store.ocorrencias.push(o);
+        }
+        assert!(store.ocorrencias_urgentes().is_empty());
+    }
+
+    #[test]
+    fn ocorrencias_urgentes_empty_on_empty_store() {
+        let store = AppStore::default();
+        assert!(store.ocorrencias_urgentes().is_empty());
+    }
+
+    // ── OcorrenciasPorTipo ──
+
+    #[test]
+    fn ocorrencias_por_tipo_all_tipos() {
+        let mut store = AppStore::default();
+        for tipo in &[
+            OcorrenciaTipo::Avaria,
+            OcorrenciaTipo::Pedido,
+            OcorrenciaTipo::Reclamacao,
+            OcorrenciaTipo::Pergunta,
+            OcorrenciaTipo::TarefaInterna,
+        ] {
+            let mut o = Ocorrencia::default();
+            o.tipo = tipo.clone();
+            store.ocorrencias.push(o);
+        }
+        assert_eq!(store.ocorrencias_por_tipo(&OcorrenciaTipo::Avaria).len(), 1);
+        assert_eq!(store.ocorrencias_por_tipo(&OcorrenciaTipo::Pedido).len(), 1);
+        assert_eq!(
+            store
+                .ocorrencias_por_tipo(&OcorrenciaTipo::Reclamacao)
+                .len(),
+            1
+        );
+        assert_eq!(
+            store.ocorrencias_por_tipo(&OcorrenciaTipo::Pergunta).len(),
+            1
+        );
+        assert_eq!(
+            store
+                .ocorrencias_por_tipo(&OcorrenciaTipo::TarefaInterna)
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn ocorrencias_por_tipo_multiple_of_same() {
+        let mut store = AppStore::default();
+        for _ in 0..5 {
+            let mut o = Ocorrencia::default();
+            o.tipo = OcorrenciaTipo::Avaria;
+            store.ocorrencias.push(o);
+        }
+        for _ in 0..3 {
+            let mut o = Ocorrencia::default();
+            o.tipo = OcorrenciaTipo::Pedido;
+            store.ocorrencias.push(o);
+        }
+        assert_eq!(store.ocorrencias_por_tipo(&OcorrenciaTipo::Avaria).len(), 5);
+        assert_eq!(store.ocorrencias_por_tipo(&OcorrenciaTipo::Pedido).len(), 3);
+        assert_eq!(
+            store
+                .ocorrencias_por_tipo(&OcorrenciaTipo::Reclamacao)
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn ocorrencias_por_tipo_empty_on_empty_store() {
+        let store = AppStore::default();
+        assert!(store
+            .ocorrencias_por_tipo(&OcorrenciaTipo::Avaria)
+            .is_empty());
+    }
+
+    // ── MTTR ──
+
+    #[test]
+    fn metricas_mttr_zero_when_no_resolved() {
+        let mut store = AppStore::default();
+        let mut o = Ocorrencia::default();
+        o.status = OcorrenciaStatus::Nova;
+        o.criado_em = "2026-01-01T10:00:00+00:00".to_string();
+        store.ocorrencias.push(o);
+        assert_eq!(store.ocorrencias_mttr_segundos(), 0.0);
+    }
+
+    #[test]
+    fn metricas_mttr_zero_when_resolved_but_empty_dates() {
+        let mut store = AppStore::default();
+        let mut o = Ocorrencia::default();
+        o.status = OcorrenciaStatus::Resolvida;
+        // criado_em e resolvido_em vazios (Default)
+        store.ocorrencias.push(o);
+        assert_eq!(store.ocorrencias_mttr_segundos(), 0.0);
+    }
+
+    #[test]
+    fn metricas_mttr_zero_when_resolved_but_empty_criado_em() {
+        let mut store = AppStore::default();
+        let mut o = Ocorrencia::default();
+        o.status = OcorrenciaStatus::Resolvida;
+        o.criado_em = "".to_string();
+        o.resolvido_em = "2026-01-01T12:00:00+00:00".to_string();
+        store.ocorrencias.push(o);
+        assert_eq!(store.ocorrencias_mttr_segundos(), 0.0);
+    }
+
+    #[test]
+    fn metricas_mttr_zero_when_resolved_but_empty_resolvido_em() {
+        let mut store = AppStore::default();
+        let mut o = Ocorrencia::default();
+        o.status = OcorrenciaStatus::Resolvida;
+        o.criado_em = "2026-01-01T10:00:00+00:00".to_string();
+        o.resolvido_em = "".to_string();
+        store.ocorrencias.push(o);
+        assert_eq!(store.ocorrencias_mttr_segundos(), 0.0);
+    }
+
+    #[test]
+    fn metricas_mttr_with_multiple_resolved_filters_bad_dates() {
+        let mut store = AppStore::default();
+
+        // Válida: 2h = 7200s
+        let mut o1 = Ocorrencia::default();
+        o1.status = OcorrenciaStatus::Resolvida;
+        o1.criado_em = "2026-01-01T08:00:00+00:00".to_string();
+        o1.resolvido_em = "2026-01-01T10:00:00+00:00".to_string();
+        store.ocorrencias.push(o1);
+
+        // Inválida (vazia)
+        let mut o2 = Ocorrencia::default();
+        o2.status = OcorrenciaStatus::Resolvida;
+        store.ocorrencias.push(o2);
+
+        assert_eq!(store.ocorrencias_mttr_segundos(), 7200.0);
+    }
+
+    // ── Metricas ──
+
+    #[test]
+    fn metricas_mixed_states() {
+        let mut store = AppStore::default();
+
+        let mut o1 = Ocorrencia::default();
+        o1.status = OcorrenciaStatus::Nova;
+        o1.tipo = OcorrenciaTipo::Avaria;
+        o1.prioridade = Prioridade::Normal;
+        store.ocorrencias.push(o1);
+
+        let mut o2 = Ocorrencia::default();
+        o2.status = OcorrenciaStatus::EmCurso;
+        o2.tipo = OcorrenciaTipo::Pedido;
+        o2.prioridade = Prioridade::Alta;
+        store.ocorrencias.push(o2);
+
+        let mut o3 = Ocorrencia::default();
+        o3.status = OcorrenciaStatus::Resolvida;
+        o3.tipo = OcorrenciaTipo::Avaria;
+        o3.criado_em = "2026-01-01T08:00:00+00:00".to_string();
+        o3.resolvido_em = "2026-01-01T10:00:00+00:00".to_string();
+        store.ocorrencias.push(o3);
+
+        let mut o4 = Ocorrencia::default();
+        o4.status = OcorrenciaStatus::Fechada;
+        o4.tipo = OcorrenciaTipo::Avaria;
+        o4.prioridade = Prioridade::Urgente;
+        store.ocorrencias.push(o4);
+
+        let metricas = store.ocorrencias_metricas();
+        assert_eq!(metricas.total_abertas, 2); // Nova + EmCurso
+        assert_eq!(metricas.urgentes, 1); // So EmCurso com Alta
+        assert_eq!(metricas.total_avarias, 1); // So Nova (Resolvida e Fechada excluidas)
+        assert_eq!(metricas.mttr_segundos, 7200.0); // So o3
+    }
+
+    #[test]
+    fn metricas_all_closed_non_zero_mttr() {
+        let mut store = AppStore::default();
+
+        let mut o1 = Ocorrencia::default();
+        o1.status = OcorrenciaStatus::Resolvida;
+        o1.criado_em = "2026-01-01T08:00:00+00:00".to_string();
+        o1.resolvido_em = "2026-01-01T10:00:00+00:00".to_string();
+        store.ocorrencias.push(o1);
+
+        let mut o2 = Ocorrencia::default();
+        o2.status = OcorrenciaStatus::Fechada;
+        store.ocorrencias.push(o2);
+
+        let metricas = store.ocorrencias_metricas();
+        assert_eq!(metricas.total_abertas, 0);
+        assert_eq!(metricas.mttr_segundos, 7200.0);
+    }
+
+    // ── Aging ──
+
+    #[test]
+    fn metricas_aging_with_future_date_returns_zero() {
+        let mut store = AppStore::default();
+        let mut o = Ocorrencia::default();
+        o.status = OcorrenciaStatus::Nova;
+        o.criado_em = "2099-01-01T00:00:00+00:00".to_string();
+        store.ocorrencias.push(o);
+        let metricas = store.ocorrencias_metricas();
+        assert_eq!(metricas.aging_max_dias, 0);
+    }
+
+    #[test]
+    fn metricas_aging_with_invalid_date_is_skipped() {
+        let mut store = AppStore::default();
+        let mut o = Ocorrencia::default();
+        o.status = OcorrenciaStatus::Nova;
+        o.criado_em = "not-a-date".to_string();
+        store.ocorrencias.push(o);
+        let metricas = store.ocorrencias_metricas();
+        assert_eq!(metricas.aging_max_dias, 0);
+    }
+
+    // ── Seed data ──
+
+    #[test]
+    fn seed_cria_ocorrencias_validas() {
+        let store = seeded_store();
+        assert!(store.ocorrencias.len() >= 2);
+        for o in &store.ocorrencias {
+            assert!(!o.titulo.is_empty());
+            assert!(!o.id.is_empty());
+            assert!(!o.criado_em.is_empty());
+            assert!(!o.condominium_id.is_empty());
+        }
+    }
+
+    #[test]
+    fn seed_metricas_consistent() {
+        let store = seeded_store();
+        let metricas = store.ocorrencias_metricas();
+
+        let abertas: usize = store
+            .ocorrencias
+            .iter()
+            .filter(|o| {
+                o.status != OcorrenciaStatus::Resolvida && o.status != OcorrenciaStatus::Fechada
+            })
+            .count();
+        let urgentes: usize = store
+            .ocorrencias
+            .iter()
+            .filter(|o| {
+                (o.prioridade == Prioridade::Alta
+                    || o.prioridade == Prioridade::Urgente
+                    || o.impacto == Impacto::Critico
+                    || o.urgencia == Urgencia::Imediata)
+                    && o.status != OcorrenciaStatus::Fechada
+                    && o.status != OcorrenciaStatus::Resolvida
+            })
+            .count();
+        let avarias_abertas: usize = store
+            .ocorrencias
+            .iter()
+            .filter(|o| {
+                o.tipo == OcorrenciaTipo::Avaria
+                    && o.status != OcorrenciaStatus::Fechada
+                    && o.status != OcorrenciaStatus::Resolvida
+            })
+            .count();
+
+        assert_eq!(metricas.total_abertas, abertas);
+        assert_eq!(metricas.urgentes, urgentes);
+        assert_eq!(metricas.total_avarias, avarias_abertas);
+    }
+
+    // ── PublicUser ──
+
+    #[test]
+    fn public_user_returns_none_for_unknown() {
+        let store = seeded_store();
+        assert!(store.public_user("non-existent-id").is_none());
+    }
+
+    #[test]
+    fn public_user_returns_user_for_valid_id() {
+        let store = seeded_store();
+        let id = &store.users[0].id;
+        let user = store.public_user(id).unwrap();
+        assert_eq!(user.email, "admin@gestisac.pt");
+    }
+
+    // ── Ocorrencia status helper ──
+
+    #[test]
+    fn ocorrencia_status_as_str_roundtrip() {
+        use OcorrenciaStatus::*;
+        for (status, expected) in &[
+            (Nova, "Nova"),
+            (EmTriagem, "Em Triagem"),
+            (AguardaPecas, "Aguarda Pecas"),
+            (EmCurso, "Em Curso"),
+            (Pendente, "Pendente"),
+            (Resolvida, "Resolvida"),
+            (Fechada, "Fechada"),
+            (Reaberta, "Reaberta"),
+        ] {
+            assert_eq!(status.as_str(), *expected);
+        }
+    }
+
+    #[test]
+    fn ocorrencia_tipo_as_str_roundtrip() {
+        use OcorrenciaTipo::*;
+        for (tipo, expected) in &[
+            (Avaria, "Avaria"),
+            (Pedido, "Pedido"),
+            (Reclamacao, "Reclamacao"),
+            (Pergunta, "Pergunta"),
+            (TarefaInterna, "Tarefa Interna"),
+        ] {
+            assert_eq!(tipo.as_str(), *expected);
+        }
+    }
+
+    // ── Ocorrencia default values ──
+
+    #[test]
+    fn ocorrencia_default_tipo_is_avaria() {
+        let o = Ocorrencia::default();
+        assert_eq!(o.tipo, OcorrenciaTipo::Avaria);
+    }
+
+    #[test]
+    fn ocorrencia_default_status_is_nova() {
+        let o = Ocorrencia::default();
+        assert_eq!(o.status, OcorrenciaStatus::Nova);
+    }
+
+    // ── Ensure demo defaults ──
+
+    #[test]
+    fn ensure_demo_defaults_does_not_change_seeded_store() {
+        let mut store = seeded_store();
+        let demo: DemoData =
+            serde_json::from_str(include_str!("../../../../mock/demo-data.json")).unwrap();
+        let before = store.clone();
+        store.ensure_demo_defaults(&demo);
+        // Serialize both and compare — they should be identical
+        let before_json = serde_json::to_value(&before).unwrap();
+        let after_json = serde_json::to_value(&store).unwrap();
+        assert_eq!(before_json, after_json);
     }
 }

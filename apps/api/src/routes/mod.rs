@@ -5,13 +5,14 @@ pub mod condominiums;
 pub mod dashboard;
 pub mod documents;
 pub mod health;
+pub mod ocorrencias;
 pub mod reports;
 pub mod resources;
 pub mod version;
 
 use crate::{error::ApiError, state::AppState};
 use axum::{
-    routing::{get, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 
@@ -299,6 +300,36 @@ pub fn router(state: AppState) -> Router {
             put(administration::update_supplier).delete(administration::delete_supplier),
         )
         .route("/api/audit-log", get(administration::audit_log))
+        // ── Ocorrencias (Tickets & Avarias) ──
+        .route(
+            "/api/ocorrencias",
+            get(ocorrencias::listar).post(ocorrencias::criar),
+        )
+        .route("/api/ocorrencias/publica", post(ocorrencias::criar_publica))
+        .route("/api/ocorrencias/metricas", get(ocorrencias::metricas))
+        .route(
+            "/api/ocorrencias/{id}",
+            get(ocorrencias::detalhe)
+                .put(ocorrencias::atualizar)
+                .delete(ocorrencias::apagar),
+        )
+        .route(
+            "/api/ocorrencias/{id}/status",
+            patch(ocorrencias::transitar_status),
+        )
+        .route(
+            "/api/ocorrencias/{id}/comentarios",
+            get(ocorrencias::comentarios_listar).post(ocorrencias::comentarios_criar),
+        )
+        .route(
+            "/api/ocorrencias/{id}/anexos",
+            post(ocorrencias::anexos_upload),
+        )
+        .route(
+            "/api/ocorrencias/{id}/anexos/{anexo_id}",
+            delete(ocorrencias::anexos_apagar),
+        )
+        .route("/api/ocorrencias/{id}/reabrir", post(ocorrencias::reabrir))
         .fallback(|| async { ApiError::not_found("Route not found") })
         .with_state(state)
 }

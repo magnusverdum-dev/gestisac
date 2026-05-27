@@ -659,12 +659,132 @@ export type PermissionsResponse = {
   }>;
 };
 
+// ── Ocorrencia (Tickets & Avarias) ──
+
+export type OcorrenciaTipo = 'avaria' | 'pedido' | 'reclamacao' | 'pergunta' | 'tarefaInterna';
+export type OcorrenciaStatus = 'nova' | 'emTriagem' | 'aguardaPecas' | 'emCurso' | 'pendente' | 'resolvida' | 'fechada' | 'reaberta';
+export type Prioridade = 'baixa' | 'normal' | 'alta' | 'urgente';
+export type Impacto = 'baixo' | 'medio' | 'alto' | 'critico';
+export type Urgencia = 'baixa' | 'media' | 'alta' | 'imediata';
+export type Canal = 'portal' | 'email' | 'telefone' | 'presencial' | 'interno';
+export type ComentarioVisibilidade = 'interno' | 'publico';
+
+export type Ocorrencia = {
+  id: string;
+  titulo: string;
+  tipo: OcorrenciaTipo;
+  status: OcorrenciaStatus;
+  prioridade: Prioridade;
+  impacto: Impacto;
+  urgencia: Urgencia;
+  descricao: string;
+  condominiumId: string;
+  requisitanteNome: string;
+  requisitanteEmail: string;
+  requisitanteTelefone: string;
+  canal: Canal;
+  categoria: string;
+  atribuidoA: string;
+  tags: string[];
+  blocoId: string;
+  pisoId: string;
+  zonaId: string;
+  equipamentoId: string;
+  custoEstimado: string;
+  custoFinal: string;
+  fornecedorId: string;
+  referenciaContrato: string;
+  mediaIds: string[];
+  documentoIds: string[];
+  motivoResolucao: string;
+  slaRespostaEm: string;
+  slaResolucaoEm: string;
+  respondidoEm: string;
+  resolvidoEm: string;
+  fechadoEm: string;
+  tokenAcompanhamento: string;
+  criadoEm: string;
+  atualizadoEm: string;
+};
+
+export type OcorrenciaComentario = {
+  id: string;
+  ocorrenciaId: string;
+  autorId: string;
+  autorNome: string;
+  texto: string;
+  visibilidade: ComentarioVisibilidade;
+  criadoEm: string;
+};
+
+export type OcorrenciaAnexo = {
+  id: string;
+  ocorrenciaId: string;
+  nome: string;
+  mimeType: string;
+  tamanhoBytes: number;
+  storageKey: string;
+  uploadedPor: string;
+  criadoEm: string;
+};
+
+export type OcorrenciaHistoricoItem = {
+  timestamp: string;
+  autor: string;
+  acao: string;
+  descricao: string;
+};
+
+export type OcorrenciaDetalhe = {
+  ocorrencia: Ocorrencia;
+  comentarios: OcorrenciaComentario[];
+  anexos: OcorrenciaAnexo[];
+  historico: OcorrenciaHistoricoItem[];
+};
+
+export type OcorrenciasMetricas = {
+  totalAbertas: number;
+  urgentes: number;
+  totalAvarias: number;
+  mttrSegundos: number;
+  agingMaxDias: number;
+};
+
+export type PaginatedOcorrencias = {
+  data: Ocorrencia[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type OcorrenciaInput = {
+  titulo: string;
+  tipo: OcorrenciaTipo;
+  descricao?: string;
+  condominiumId?: string;
+  requisitanteNome?: string;
+  requisitanteEmail?: string;
+  requisitanteTelefone?: string;
+  canal?: Canal;
+  categoria?: string;
+  prioridade?: Prioridade;
+  impacto?: Impacto;
+  urgencia?: Urgencia;
+  blocoId?: string;
+  pisoId?: string;
+  zonaId?: string;
+  equipamentoId?: string;
+  atribuidoA?: string;
+  tags?: string[];
+};
+
 export type ResourceState = {
   condominiums: Condominium[];
   buildings: Building[];
   fractions: Fraction[];
   residents: Resident[];
   tickets: Ticket[];
+  ocorrencias: Ocorrencia[];
   suppliers: Supplier[];
   documents: DocumentItem[];
   reports: Report[];
@@ -697,6 +817,7 @@ export type CreateResource =
   | 'fractions'
   | 'residents'
   | 'tickets'
+  | 'ocorrencias'
   | 'suppliers'
   | 'documents'
   | 'reports'

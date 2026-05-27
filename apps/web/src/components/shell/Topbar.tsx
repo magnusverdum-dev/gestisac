@@ -1,4 +1,5 @@
 import { component$, useSignal, type PropFunction } from '@builder.io/qwik';
+import { ArrowLeftIcon } from 'lucide-qwik';
 import type { AlertItem, GlobalSearchResult, PublicUser } from '../../lib/api';
 
 export type ApiStatus = 'online' | 'offline' | 'checking';
@@ -33,6 +34,14 @@ export const Topbar = component$((props: TopbarProps) => {
 
   return (
     <header class="topbar">
+      <button
+        class="back-button"
+        type="button"
+        aria-label="Voltar atras"
+        onClick$={() => window.history.back()}
+      >
+        <ArrowLeftIcon size={18} />
+      </button>
       <div class="search-box">
         <span>?</span>
         <input

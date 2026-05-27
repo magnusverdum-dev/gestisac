@@ -1,6 +1,7 @@
 import { apiRequest } from './http';
 import { getAccounting } from './accounting';
 import { getResourcePage } from './pagination';
+import { listarOcorrencias } from './ocorrencias';
 import type {
   Assembly,
   AuditLogEntry,
@@ -10,6 +11,7 @@ import type {
   DocumentItem,
   Fraction,
   MaintenanceItem,
+  Ocorrencia,
   PermissionsResponse,
   Report,
   Resident,
@@ -25,6 +27,7 @@ export async function getResources(token: string): Promise<ResourceState> {
     fractions,
     residents,
     tickets,
+    ocorrencias,
     suppliers,
     documents,
     reports,
@@ -40,6 +43,7 @@ export async function getResources(token: string): Promise<ResourceState> {
     getResourcePage<Fraction>(token, '/api/fractions'),
     getResourcePage<Resident>(token, '/api/residents'),
     getResourcePage<Ticket>(token, '/api/tickets'),
+    listarOcorrencias(token).then((paginated) => paginated.data),
     getResourcePage<Supplier>(token, '/api/suppliers'),
     getResourcePage<DocumentItem>(token, '/api/documents'),
     getResourcePage<Report>(token, '/api/reports'),
@@ -57,6 +61,7 @@ export async function getResources(token: string): Promise<ResourceState> {
     fractions,
     residents,
     tickets,
+    ocorrencias,
     suppliers,
     documents,
     reports,

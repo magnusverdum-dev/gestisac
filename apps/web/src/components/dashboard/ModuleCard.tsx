@@ -21,7 +21,10 @@ export const ModuleCard = component$((props: ModuleCardProps) => {
   const shortcuts = module.id === 'condominiums' ? condominiumShortcuts : [];
 
   return (
-    <article class={`module-card ${module.tone}`}>
+    <article
+      class={`module-card ${module.tone}`}
+      onClick$={() => props.navigate$(module.path)}
+    >
       <div class="card-light" />
       <div class="module-content">
         <header class="module-header">
@@ -30,38 +33,7 @@ export const ModuleCard = component$((props: ModuleCardProps) => {
             <h2>{module.title}</h2>
             <p>{module.subtitle}</p>
           </div>
-          <button
-            class="card-menu"
-            type="button"
-            aria-label={`Mais opcoes de ${module.title}`}
-            onClick$={() => {
-              menuOpen.value = !menuOpen.value;
-            }}
-          >
-            ...
-          </button>
-          {menuOpen.value ? (
-            <div class="module-menu">
-              <button
-                type="button"
-                onClick$={() => {
-                  menuOpen.value = false;
-                  props.onModuleCommand$(module.id, 'open');
-                }}
-              >
-                Abrir modulo
-              </button>
-              <button
-                type="button"
-                onClick$={() => {
-                  menuOpen.value = false;
-                  props.onModuleCommand$(module.id, 'create');
-                }}
-              >
-                Criar registo
-              </button>
-            </div>
-          ) : null}
+
         </header>
 
         <div class="metrics-row">
@@ -80,18 +52,16 @@ export const ModuleCard = component$((props: ModuleCardProps) => {
                 class="module-shortcut"
                 key={`${module.id}-${shortcut.path}`}
                 type="button"
-                onClick$={() => props.navigate$(shortcut.path)}
+                onClick$={(event) => {
+                  event.stopPropagation();
+                  props.navigate$(shortcut.path);
+                }}
               >
                 {shortcut.label}
               </button>
             ))}
           </div>
         ) : null}
-
-        <button class="module-cta" type="button" onClick$={() => props.navigate$(module.path)}>
-          {module.cta}
-          <span>-&gt;</span>
-        </button>
       </div>
 
       <VisualAnchor visual={module.visual} />

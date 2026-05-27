@@ -24,6 +24,13 @@ export function buildGlobalSearchResults(resources: ResourceState): GlobalSearch
       path: entityPath('ticket', item.id),
       tone: 'danger'
     })),
+    ...resources.ocorrencias.map((item) => ({
+      id: `ocorrencia-${item.id}`,
+      title: item.titulo,
+      detail: `${item.tipo} - ${item.prioridade} - ${item.status}`,
+      path: entityPath('ticket', item.id),
+      tone: item.tipo === 'avaria' ? 'danger' : 'gold'
+    })),
     ...resources.maintenance.map((item) => ({
       id: `maintenance-${item.id}`,
       title: item.title,

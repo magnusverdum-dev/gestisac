@@ -213,6 +213,8 @@ export function pathForRecord(resource: ResourceEndpoint | undefined, id: string
   switch (resource) {
     case 'tickets':
       return entityPath('ticket', id);
+    case 'ocorrencias':
+      return entityPath('ticket', id);
     case 'maintenance':
       return entityPath('maintenance', id);
     case 'calendar-events':

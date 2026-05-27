@@ -8,6 +8,8 @@ export type {
   AuditLogEntry,
   Building,
   CalendarEvent,
+  Canal,
+  ComentarioVisibilidade,
   CompletenessReport,
   Condominium,
   CondominiumAddress,
@@ -36,13 +38,25 @@ export type {
   Fraction,
   GenerateDocumentPayload,
   GlobalSearchResult,
+  Impacto,
   ImportPreview,
   ImportReport,
   ImportRowInput,
   LoginResponse,
   MaintenanceItem,
+  Ocorrencia,
+  OcorrenciaAnexo,
+  OcorrenciaComentario,
+  OcorrenciaDetalhe,
+  OcorrenciaHistoricoItem,
+  OcorrenciaInput,
+  OcorrenciasMetricas,
+  OcorrenciaStatus,
+  OcorrenciaTipo,
+  PaginatedOcorrencias,
   PaginatedResponse,
   PermissionsResponse,
+  Prioridade,
   PublicUser,
   Quota,
   Receipt,
@@ -53,7 +67,8 @@ export type {
   ResourceEndpoint,
   ResourceState,
   Supplier,
-  Ticket
+  Ticket,
+  Urgencia
 } from './api/types';
 
 export {
@@ -105,5 +120,18 @@ export {
   exportReport,
   getReportPreview
 } from './api/reports';
+
+export {
+  apagarOcorrencia,
+  atualizarOcorrencia,
+  criarComentario,
+  criarOcorrencia,
+  listarComentarios,
+  listarOcorrencias,
+  obterMetricas,
+  obterOcorrencia,
+  reabrirOcorrencia,
+  transitarStatus
+} from './api/ocorrencias';
 
 export { getResources } from './api/resources';

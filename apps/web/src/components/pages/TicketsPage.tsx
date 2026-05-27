@@ -1,24 +1,21 @@
-import { component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
-import { EditIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, Trash2Icon } from 'lucide-qwik';
-import type { ResourceEndpoint, ResourceState, Ticket } from '../../lib/api';
+import { $, component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
+import { EditIcon, MessageSquareIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, Trash2Icon } from 'lucide-qwik';
+import type { Canal, Ocorrencia, OcorrenciaStatus, Prioridade, ResourceEndpoint, ResourceState } from '../../lib/api';
 import {
   condominiumPath,
   entityPath,
   isTicketClosed,
-  isTicketOpen,
-  isTicketPending,
-  personPath,
-  ticketMatchesGroup,
-  ticketStatusPath,
-  type TicketStatusGroup
+  normalize
 } from '../../lib/entity-navigation';
 import { EntityAction } from '../common/EntityAction';
+import { criarComentario, transitarStatus } from '../../lib/api/ocorrencias';
 
 type TicketsPageProps = {
   resources: ResourceState;
   isSaving: boolean;
+  token: string;
   createIntentVersion: number;
-  initialStatusGroup?: TicketStatusGroup | '';
+  initialStatusGroup?: string;
   initialPriority?: string;
   navigate$: PropFunction<(path: string) => void>;
   onCreate$: PropFunction<(resource: ResourceEndpoint, payload: Record<string, unknown>) => void>;
@@ -26,20 +23,45 @@ type TicketsPageProps = {
   onDelete$: PropFunction<(resource: ResourceEndpoint, id: string) => void>;
 };
 
-const STATUSES = ['Todos', 'Novo', 'Aberto', 'Em curso', 'Pendente', 'Em espera', 'Resolvido', 'Fechado'];
-const PRIORITIES = ['Todos', 'Baixa', 'Normal', 'Alta', 'Urgente'];
-const CHANNELS = ['Portal', 'Email', 'Telefone', 'Presencial', 'Interno'];
-const TYPES = ['Avaria', 'Pedido', 'Pergunta', 'Reclamacao', 'Tarefa interna'];
+const TIPO_TABS = ['todas', 'avaria', 'pedido'] as const;
+const STATUS_OPTS: OcorrenciaStatus[] = ['nova', 'emTriagem', 'aguardaPecas', 'emCurso', 'pendente', 'resolvida', 'fechada', 'reaberta'];
+const PRIORIDADE_OPTS: Prioridade[] = ['baixa', 'normal', 'alta', 'urgente'];
+const CANAIS: Canal[] = ['portal', 'email', 'telefone', 'presencial', 'interno'];
+
+const STATUS_MAP: Record<string, OcorrenciaStatus[]> = {
+  abertos: ['nova', 'emTriagem', 'aguardaPecas', 'emCurso', 'reaberta'],
+  pendentes: ['pendente'],
+  resolvidos: ['resolvida'],
+  fechados: ['fechada']
+};
+
+const TRANSICOES: Record<OcorrenciaStatus, OcorrenciaStatus[]> = {
+  nova: ['emTriagem', 'emCurso', 'fechada'],
+  emTriagem: ['emCurso', 'aguardaPecas', 'fechada'],
+  aguardaPecas: ['emCurso', 'pendente'],
+  emCurso: ['pendente', 'resolvida'],
+  pendente: ['emCurso', 'fechada'],
+  resolvida: ['fechada', 'reaberta'],
+  fechada: ['reaberta'],
+  reaberta: ['emCurso', 'emTriagem']
+};
 
 export const TicketsPage = component$((props: TicketsPageProps) => {
   const search = useSignal('');
-  const statusFilter = useSignal('Todos');
-  const statusGroup = useSignal<TicketStatusGroup | ''>(props.initialStatusGroup ?? '');
-  const priorityFilter = useSignal('Todos');
-  const condominiumFilter = useSignal('Geral');
-  const selectedId = useSignal(props.resources.tickets[0]?.id ?? '');
+  const tipoTab = useSignal<'todas' | 'avaria' | 'pedido'>('todas');
+  const statusFiltro = useSignal<string>('');
+  const prioridadeFiltro = useSignal<string>('');
+  const condominiumFiltro = useSignal('Geral');
+  const selectedId = useSignal(props.resources.ocorrencias[0]?.id ?? '');
   const isCreating = useSignal(false);
   const editingId = useSignal('');
+  const detailTab = useSignal<'timeline' | 'ficheiros' | 'custos'>('timeline');
+  const showCommentForm = useSignal(false);
+  const commentText = useSignal('');
+  const commentVisibility = useSignal<'interno' | 'publico'>('interno');
+  const pageError = useSignal('');
+  const transitioningId = useSignal('');
+
   useTask$(({ track }) => {
     track(() => props.createIntentVersion);
     if (props.createIntentVersion > 0) {
@@ -47,88 +69,96 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
       editingId.value = '';
     }
   });
+
   useTask$(({ track }) => {
     const routedGroup = track(() => props.initialStatusGroup);
-    statusGroup.value = routedGroup ?? '';
-    if (routedGroup) {
-      statusFilter.value = 'Todos';
+    if (routedGroup && STATUS_MAP[routedGroup]) {
+      statusFiltro.value = routedGroup;
+      tipoTab.value = 'todas';
       selectedId.value = '';
     }
   });
+
   useTask$(({ track }) => {
     const routedPriority = track(() => props.initialPriority);
     if (routedPriority) {
-      priorityFilter.value = routedPriority;
-      statusGroup.value = '';
+      prioridadeFiltro.value = routedPriority.toLowerCase();
+      statusFiltro.value = '';
       selectedId.value = '';
     }
   });
 
   const condominiumOptions = ['Geral', ...props.resources.condominiums.map((item) => item.name)];
+  const condominiumNameToId: Record<string, string> = {};
+  const condominiumIdToName: Record<string, string> = {};
+  for (const c of props.resources.condominiums) {
+    condominiumNameToId[c.name] = c.id;
+    condominiumIdToName[c.id] = c.name;
+  }
   const normalizedSearch = search.value.trim().toLowerCase();
-  const tickets = props.resources.tickets
-    .filter((ticket) => condominiumFilter.value === 'Geral' || ticket.condominium === condominiumFilter.value)
-    .filter((ticket) =>
-      statusGroup.value ? ticketMatchesGroup(ticket.status, statusGroup.value) : statusFilter.value === 'Todos' || ticket.status === statusFilter.value
-    )
-    .filter((ticket) => priorityFilter.value === 'Todos' || ticket.priority === priorityFilter.value)
-    .filter((ticket) => {
-      if (!normalizedSearch) {
-        return true;
-      }
 
-      return `${ticket.title} ${ticket.detail} ${ticket.condominium} ${ticket.requesterName ?? ''} ${ticket.assignee ?? ''}`
-        .toLowerCase()
-        .includes(normalizedSearch);
-    });
-  const selected = tickets.find((ticket) => ticket.id === selectedId.value) ?? tickets[0];
-  const editingTicket = props.resources.tickets.find((ticket) => ticket.id === editingId.value);
-  const openCount = props.resources.tickets.filter((ticket) => isTicketOpen(ticket.status)).length;
-  const urgentCount = props.resources.tickets.filter((ticket) => ticket.priority === 'Urgente').length;
-  const pendingCount = props.resources.tickets.filter((ticket) => isTicketPending(ticket.status)).length;
-  const linkedMaintenance = selected
-    ? props.resources.maintenance.find((item) => item.id === selected.linkedMaintenanceId || item.ticketId === selected.id)
-    : undefined;
-  const linkedEvent = selected
-    ? props.resources.calendarEvents.find((item) => item.id === selected.linkedCalendarEventId || item.linkedEntityId === selected.id)
-    : undefined;
-  const relatedAudit = selected
-    ? props.resources.auditLog.filter((entry) => entry.recordId === selected.id || entry.summary.includes(selected.title)).slice(0, 4)
-    : [];
+  const filtered = props.resources.ocorrencias.filter((oc) => {
+    if (condominiumFiltro.value !== 'Geral') {
+      const targetId = condominiumNameToId[condominiumFiltro.value] || condominiumFiltro.value;
+      if (oc.condominiumId !== targetId) return false;
+    }
+    if (tipoTab.value === 'avaria' && oc.tipo !== 'avaria') return false;
+    if (tipoTab.value === 'pedido' && oc.tipo !== 'pedido') return false;
+    if (statusFiltro.value) {
+      const statuses = STATUS_MAP[statusFiltro.value];
+      if (statuses && !statuses.includes(oc.status)) return false;
+      if (!statuses && oc.status !== statusFiltro.value) return false;
+    }
+    if (prioridadeFiltro.value && oc.prioridade !== prioridadeFiltro.value) return false;
+    if (normalizedSearch) {
+      const condName = condominiumIdToName[oc.condominiumId] || '';
+      const haystack = `${oc.titulo} ${oc.descricao} ${oc.requisitanteNome} ${oc.atribuidoA} ${condName}`.toLowerCase();
+      if (!haystack.includes(normalizedSearch)) return false;
+    }
+    return true;
+  });
+
+  const selected = filtered.find((oc) => oc.id === selectedId.value) ?? filtered[0];
+  const editingOcorrencia = props.resources.ocorrencias.find((oc) => oc.id === editingId.value);
+  const abertas = props.resources.ocorrencias.filter((oc) => !isTicketClosed(oc.status)).length;
+  const urgentes = props.resources.ocorrencias.filter((oc) => oc.prioridade === 'urgente').length;
 
   return (
     <section class="page-view operational-page cmt-page">
       <header class="page-header compact-page-header calendar-header">
         <div>
           <span class="page-eyebrow">GESTISAC - CMT</span>
-          <h1>Tickets</h1>
-          <p>Customer/Condominium Ticket Management com prioridade, estado, responsavel e ligacoes.</p>
+          <h1>Ocorrências</h1>
+          <p>Gestão de avarias, pedidos e reclamações com prioridades, estado e responsável.</p>
         </div>
         <button
           type="button"
           class="primary-action action-with-icon"
           onClick$={() => {
+            pageError.value = '';
             isCreating.value = true;
             editingId.value = '';
           }}
         >
           <PlusIcon size={16} />
-          Abrir ticket
+          Nova ocorrência
         </button>
       </header>
 
+      {pageError.value ? <div class="app-error glass-panel">{pageError.value}</div> : null}
+
       <div class="summary-grid simple-summary-grid">
-        <button class={`summary-card red ${statusGroup.value === 'abertos' ? 'active' : ''}`} type="button" onClick$={() => props.navigate$(ticketStatusPath('abertos'))}>
-          <span>Abertos</span><strong>{openCount}</strong><small>{urgentCount} urgente</small>
+        <button class={`summary-card red ${statusFiltro.value === 'abertos' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'abertos'; tipoTab.value = 'todas'; }}>
+          <span>Abertas</span><strong>{abertas}</strong><small>{urgentes} urgente</small>
         </button>
-        <button class={`summary-card gold ${statusGroup.value === 'pendentes' ? 'active' : ''}`} type="button" onClick$={() => props.navigate$(ticketStatusPath('pendentes'))}>
-          <span>Pendentes</span><strong>{pendingCount}</strong><small>A aguardar decisao</small>
+        <button class={`summary-card gold ${statusFiltro.value === 'pendentes' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'pendentes'; tipoTab.value = 'todas'; }}>
+          <span>Pendentes</span><strong>{props.resources.ocorrencias.filter((oc) => oc.status === 'pendente').length}</strong><small>A aguardar decisão</small>
         </button>
-        <button class="summary-card blue" type="button" onClick$={() => props.navigate$('/tickets')}>
-          <span>Filtrados</span><strong>{tickets.length}</strong><small>Vista atual</small>
+        <button class="summary-card blue" type="button" onClick$={() => { statusFiltro.value = ''; prioridadeFiltro.value = ''; }}>
+          <span>Filtradas</span><strong>{filtered.length}</strong><small>Vista atual</small>
         </button>
-        <button class={`summary-card green ${statusGroup.value === 'resolvidos' ? 'active' : ''}`} type="button" onClick$={() => props.navigate$(ticketStatusPath('resolvidos'))}>
-          <span>Resolvidos</span><strong>{props.resources.tickets.filter((ticket) => isTicketClosed(ticket.status)).length}</strong><small>Historico operacional</small>
+        <button class={`summary-card green ${statusFiltro.value === 'resolvidos' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'resolvidos'; tipoTab.value = 'todas'; }}>
+          <span>Resolvidas</span><strong>{props.resources.ocorrencias.filter((oc) => isTicketClosed(oc.status)).length}</strong><small>Histórico operacional</small>
         </button>
       </div>
 
@@ -139,71 +169,81 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
             <h2>Registos CMT</h2>
           </div>
           <div class="ops-toolbar calendar-filters">
+            <nav class="detail-tabs" style="margin-bottom:0">
+              {TIPO_TABS.map((t) => (
+                <button key={t} type="button" class={`tab-btn ${tipoTab.value === t ? 'active' : ''}`} onClick$={() => { tipoTab.value = t; statusFiltro.value = ''; }}>
+                  {t === 'todas' ? 'Todas' : t === 'avaria' ? 'Avarias' : 'Pedidos'}
+                </button>
+              ))}
+            </nav>
             <label class="ops-search">
               <SearchIcon size={16} />
-              <input
-                value={search.value}
-                placeholder="Pesquisar por nome, estado, condominio ou responsavel"
-                onInput$={(event) => (search.value = (event.target as HTMLInputElement).value)}
-              />
+              <input value={search.value} placeholder="Pesquisar por título, condomínio ou responsável" onInput$={(e) => (search.value = (e.target as HTMLInputElement).value)} />
             </label>
-            <select value={condominiumFilter.value} onChange$={(event) => (condominiumFilter.value = (event.target as HTMLSelectElement).value)}>
-              {condominiumOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            <select value={condominiumFiltro.value} onChange$={(e) => (condominiumFiltro.value = (e.target as HTMLSelectElement).value)}>
+              {condominiumOptions.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
-            <select value={statusFilter.value} onChange$={(event) => { statusFilter.value = (event.target as HTMLSelectElement).value; statusGroup.value = ''; }}>
-              {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+            <select value={statusFiltro.value} onChange$={(e) => { statusFiltro.value = (e.target as HTMLSelectElement).value; tipoTab.value = 'todas'; }}>
+              <option value="">Todos os estados</option>
+              {STATUS_OPTS.map((s) => <option key={s} value={s}>{rotuloStatus(s)}</option>)}
             </select>
-            <select value={priorityFilter.value} onChange$={(event) => (priorityFilter.value = (event.target as HTMLSelectElement).value)}>
-              {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+            <select value={prioridadeFiltro.value} onChange$={(e) => (prioridadeFiltro.value = (e.target as HTMLSelectElement).value)}>
+              <option value="">Todas as prioridades</option>
+              {PRIORIDADE_OPTS.map((p) => <option key={p} value={p}>{rotuloPri(p)}</option>)}
             </select>
           </div>
         </div>
 
         <div class="ops-detail-layout">
           <div class="ops-list-column">
-            {tickets.length ? tickets.map((ticket) => (
-              <article class={`ops-ticket-card ${selected?.id === ticket.id ? 'active' : ''}`} key={ticket.id}>
-                <button type="button" class="ops-ticket-main" onClick$={() => props.navigate$(entityPath('ticket', ticket.id))}>
-                  <span class={`priority-rail ${priorityTone(ticket.priority)}`} />
+            {filtered.length ? filtered.map((oc) => (
+              <article class={`ops-ticket-card ${selected?.id === oc.id ? 'active' : ''}`} key={oc.id}>
+                <button type="button" class="ops-ticket-main" onClick$={() => { selectedId.value = oc.id; detailTab.value = 'timeline'; }}>
+                  <span class={`priority-rail ${tomPrioridade(oc.prioridade)}`} />
                   <div>
-                    <strong>{ticket.title}</strong>
-                    <span>{ticket.condominium} - {ticket.requesterName || 'Requerente por definir'}</span>
-                    <p>{ticket.detail}</p>
+                    <strong><span class={`tipo-badge ${oc.tipo}`}>{iconeTipo(oc.tipo)}</span> {oc.titulo}</strong>
+                    <span>{oc.requisitanteNome || 'Requerente por definir'} {oc.condominiumId ? `- ${oc.condominiumId}` : ''}</span>
+                    <p>{oc.descricao}</p>
                   </div>
                   <div class="ticket-card-meta">
-                    <small class={`status-chip ${statusTone(ticket.status)}`}>{ticket.status}</small>
-                    <small>{ticket.priority}</small>
+                    <small class={`status-chip ${tomStatus(oc.status)}`}>{rotuloStatus(oc.status)}</small>
+                    <small>{rotuloPri(oc.prioridade)}</small>
                   </div>
                 </button>
                 <details class="simple-more-menu">
                   <summary><MoreHorizontalIcon size={16} /></summary>
-                  <button type="button" onClick$={() => { editingId.value = ticket.id; isCreating.value = false; }}>
+                  <button type="button" onClick$={() => { editingId.value = oc.id; isCreating.value = false; }}>
                     <EditIcon size={14} /> Editar
                   </button>
-                  {!isTicketClosed(ticket.status) ? (
-                    <button
-                      type="button"
-                      onClick$={async () => props.onUpdate$('tickets', ticket.id, { ...ticket, status: 'Resolvido', resolvedAt: new Date().toISOString(), priority: 'Normal' })}
-                    >
-                      Resolver
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    class="danger-action"
-                    onClick$={async () => {
-                      if (confirm(`Apagar ${ticket.title}?`)) {
-                        await props.onDelete$('tickets', ticket.id);
-                        selectedId.value = '';
+                  {TRANSICOES[oc.status]?.length ? TRANSICOES[oc.status].map((dest) => (
+                    <button key={dest} type="button" disabled={transitioningId.value === oc.id} onClick$={async () => {
+                      if (!props.token) return;
+                      transitioningId.value = oc.id;
+                      pageError.value = '';
+                      try {
+                        await transitarStatus(props.token, oc.id, dest);
+                        window.location.reload();
+                      } catch (e) {
+                        pageError.value = e instanceof Error ? e.message : 'Erro ao transitar estado';
+                      } finally {
+                        transitioningId.value = '';
                       }
-                    }}
-                  >
+                    }}>
+                      {acaoTransicao(dest)}
+                    </button>
+                  )) : null}
+                  <button type="button" class="danger-action" onClick$={async () => {
+                    if (confirm(`Apagar ${oc.titulo}?`)) {
+                      await props.onDelete$('ocorrencias', oc.id);
+                      selectedId.value = '';
+                    }
+                  }}>
                     <Trash2Icon size={14} /> Apagar
                   </button>
                 </details>
               </article>
             )) : (
-              <div class="simple-empty-state"><strong>Sem tickets</strong><span>Ajusta os filtros ou abre um ticket novo.</span></div>
+              <div class="simple-empty-state"><strong>Sem ocorrências</strong><span>Ajusta os filtros ou abre uma nova ocorrência.</span></div>
             )}
           </div>
 
@@ -212,84 +252,158 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
               <div class="simple-detail-panel">
                 <div class="simple-detail-header">
                   <div>
-                    <span class="page-eyebrow">{selected.type || 'Ticket'}</span>
-                    <h2>{selected.title}</h2>
-                    <p>{selected.condominium} - {selected.priority} - {selected.status}</p>
+                    <span class="page-eyebrow">{rotuloTipo(selected.tipo)}</span>
+                    <h2>{selected.titulo}</h2>
+                    <p>
+                      <small class={`status-chip ${tomStatus(selected.status)}`}>{rotuloStatus(selected.status)}</small>
+                      {' '}<small class={`pri-chip ${tomPrioridade(selected.prioridade)}`}>{rotuloPri(selected.prioridade)}</small>
+                      {selected.custoEstimado ? <small> Custo estimado: {selected.custoEstimado}€</small> : null}
+                    </p>
                   </div>
                   <button type="button" class="secondary-action" onClick$={() => { editingId.value = selected.id; isCreating.value = false; }}>
                     Editar
                   </button>
                 </div>
+
                 <div class="detail-kv-grid">
-                  <EntityAction
-                    class="detail-link-card"
-                    path={selected.requesterName || selected.requesterEmail ? personPath(props.resources, selected.requesterName, selected.requesterEmail) : ''}
-                    navigate$={props.navigate$}
-                    disabled={!selected.requesterName && !selected.requesterEmail}
-                  >
-                    <span>Requerente</span><strong>{selected.requesterName || 'Por definir'}</strong><small>{selected.requesterEmail || selected.channel || 'Sem contacto'}</small>
+                  <article>
+                    <span>Requerente</span>
+                    <strong>{selected.requisitanteNome || 'Por definir'}</strong>
+                    <small>{selected.requisitanteEmail || selected.requisitanteTelefone || selected.canal || 'Sem contacto'}</small>
+                  </article>
+                  <EntityAction class="detail-link-card" path={selected.atribuidoA ? entityPath('profile', `perfil-${selected.atribuidoA}`) : ''} navigate$={props.navigate$}>
+                    <span>Atribuído a</span>
+                    <strong>{selected.atribuidoA || 'Por atribuir'}</strong>
+                    <small>{selected.categoria || 'Sem categoria'}</small>
                   </EntityAction>
-                  <EntityAction class="detail-link-card" path={selected.assignee ? personPath(props.resources, selected.assignee) : ''} navigate$={props.navigate$} disabled={!selected.assignee}>
-                    <span>Responsavel</span><strong>{selected.assignee || 'Por atribuir'}</strong><small>{selected.dueAt || 'Sem prazo'}</small>
-                  </EntityAction>
-                  <article><span>Categoria</span><strong>{selected.category || 'Operacional'}</strong><small>{selected.channel || 'Portal'}</small></article>
-                  <article><span>Atualizado</span><strong>{selected.updatedAt || 'Agora'}</strong><small>{selected.createdAt || 'Sem data de criacao'}</small></article>
+                  <article>
+                    <span>Tipo</span>
+                    <strong>{rotuloTipo(selected.tipo)}</strong>
+                    <small>Canal: {rotuloCanal(selected.canal)}</small>
+                  </article>
+                  <article>
+                    <span>Impacto / Urgência</span>
+                    <strong>{rotuloImpacto(selected.impacto)}</strong>
+                    <small>{rotuloUrgencia(selected.urgencia)}</small>
+                  </article>
+                  {selected.blocoId ? <article><span>Localização</span><strong>Bloco {selected.blocoId}{selected.pisoId ? `, Piso ${selected.pisoId}` : ''}{selected.zonaId ? `, ${selected.zonaId}` : ''}</strong></article> : null}
+                  {selected.equipamentoId ? <article><span>Equipamento</span><strong>{selected.equipamentoId}</strong></article> : null}
+                  <article><span>Criado em</span><strong>{selected.criadoEm}</strong><small>Atualizado: {selected.atualizadoEm}</small></article>
                 </div>
-                <EntityAction class="entity-inline-link" path={condominiumPath(props.resources, selected.condominium)} navigate$={props.navigate$}>
-                  Abrir condominio: {selected.condominium || 'Geral'}
+
+                <EntityAction class="entity-inline-link" path={condominiumPath(props.resources, selected.condominiumId)} navigate$={props.navigate$}>
+                  Abrir condomínio: {selected.condominiumId || 'Geral'}
                 </EntityAction>
-                <p>{selected.detail}</p>
+
+                <p>{selected.descricao}</p>
+
                 {selected.tags?.length ? <div class="calendar-badges">{selected.tags.map((tag) => <span key={tag}>{tag}</span>)}</div> : null}
 
-                <div class="linked-strip">
-                  <EntityAction class="linked-strip-card" path={linkedMaintenance ? entityPath('maintenance', linkedMaintenance.id) : ''} navigate$={props.navigate$} disabled={!linkedMaintenance}>
-                    <span>Manutencao ligada</span>
-                    <strong>{linkedMaintenance?.title || selected.linkedMaintenanceId || 'Sem manutencao ligada'}</strong>
-                  </EntityAction>
-                  <EntityAction class="linked-strip-card" path={linkedEvent ? entityPath('calendarEvent', linkedEvent.id) : ''} navigate$={props.navigate$} disabled={!linkedEvent}>
-                    <span>Evento ligado</span>
-                    <strong>{linkedEvent?.title || selected.linkedCalendarEventId || 'Sem evento ligado'}</strong>
-                  </EntityAction>
-                </div>
+                {selected.motivoResolucao ? (
+                  <div class="ops-history">
+                    <strong>Motivo de resolução</strong>
+                    <p>{selected.motivoResolucao}</p>
+                  </div>
+                ) : null}
 
-                <div class="ops-history">
-                  <strong>Historico operacional</strong>
-                  {relatedAudit.length ? relatedAudit.map((entry) => (
-                    <article key={entry.id}>
-                      <span>{entry.action}</span>
-                      <p>{entry.summary}</p>
-                      <small>{entry.createdAt}</small>
+                <nav class="detail-tabs" style="margin-top:1rem">
+                  {(['timeline', 'ficheiros', 'custos'] as const).map((t) => (
+                    <button key={t} type="button" class={`tab-btn ${detailTab.value === t ? 'active' : ''}`} onClick$={() => (detailTab.value = t)}>
+                      {t === 'timeline' ? 'Timeline' : t === 'ficheiros' ? 'Ficheiros' : 'Custos'}
+                    </button>
+                  ))}
+                </nav>
+
+                {detailTab.value === 'timeline' ? (
+                  <div class="ops-history">
+                    <div class="simple-header-actions">
+                      <button type="button" class="primary-action action-with-icon" onClick$={() => (showCommentForm.value = !showCommentForm.value)}>
+                        <MessageSquareIcon size={14} /> Comentar
+                      </button>
+                    </div>
+                    {showCommentForm.value ? (
+                      <form preventdefault:submit onSubmit$={async () => {
+                        if (!commentText.value.trim() || !props.token) return;
+                        pageError.value = '';
+                        try {
+                          await criarComentario(props.token, selected.id, commentText.value, commentVisibility.value);
+                          commentText.value = '';
+                          showCommentForm.value = false;
+                        } catch (e) {
+                          pageError.value = e instanceof Error ? e.message : 'Erro ao enviar comentário';
+                        }
+                      }}>
+                        <textarea value={commentText.value} onInput$={(e) => (commentText.value = (e.target as HTMLTextAreaElement).value)} placeholder="Escreve um comentário..." rows={3} />
+                        <div class="simple-header-actions">
+                          <select value={commentVisibility.value} onChange$={(e) => (commentVisibility.value = (e.target as HTMLSelectElement).value as 'interno' | 'publico')}>
+                            <option value="interno">Interno</option>
+                            <option value="publico">Público</option>
+                          </select>
+                          <button type="submit" class="primary-action" disabled={!commentText.value.trim()}>Enviar</button>
+                        </div>
+                      </form>
+                    ) : null}
+                    <article class="audit-entry">
+                      <span>Criação</span>
+                      <p>{selected.titulo} - {selected.descricao}</p>
+                      <small>{selected.criadoEm} por {selected.requisitanteNome || 'Sistema'}</small>
                     </article>
-                  )) : (
-                    <article>
-                      <span>Registo CMT</span>
-                      <p>{selected.status} - {selected.detail}</p>
-                      <small>{selected.updatedAt || selected.createdAt || 'Sem data'}</small>
-                    </article>
-                  )}
-                </div>
+                    {selected.status === 'resolvida' ? (
+                      <article class="audit-entry">
+                        <span>Resolução</span>
+                        <p>{selected.motivoResolucao || 'Resolvida sem motivo registado'}</p>
+                        <small>{selected.resolvidoEm || selected.atualizadoEm}</small>
+                      </article>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {detailTab.value === 'ficheiros' ? (
+                  <div class="ops-history">
+                    <div class="simple-empty-state">
+                      <strong>Sem ficheiros</strong>
+                      <span>Anexa documentos ou imagens à ocorrência.</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                {detailTab.value === 'custos' ? (
+                  <div class="ops-history">
+                    <div class="detail-kv-grid">
+                      <article><span>Custo estimado</span><strong>{selected.custoEstimado ? `${selected.custoEstimado}€` : 'Por definir'}</strong></article>
+                      <article><span>Custo final</span><strong>{selected.custoFinal ? `${selected.custoFinal}€` : 'Por definir'}</strong></article>
+                      <article><span>Fornecedor</span><strong>{selected.fornecedorId || 'Por definir'}</strong></article>
+                      <article><span>Contrato</span><strong>{selected.referenciaContrato || 'Sem referência'}</strong></article>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : (
-              <div class="simple-empty-state"><strong>Seleciona um ticket</strong><span>O detalhe aparece aqui.</span></div>
+              <div class="simple-empty-state"><strong>Seleciona uma ocorrência</strong><span>O detalhe aparece aqui.</span></div>
             )}
           </aside>
         </div>
       </section>
 
-      {isCreating.value || editingTicket ? (
-        <TicketForm
-          ticket={editingTicket}
+      {isCreating.value || editingOcorrencia ? (
+        <OcorrenciaForm
+          ocorrencia={editingOcorrencia}
           condominiumOptions={condominiumOptions}
           isSaving={props.isSaving}
-          onClose$={() => { isCreating.value = false; editingId.value = ''; }}
+          onClose$={() => { isCreating.value = false; editingId.value = ''; pageError.value = ''; }}
           onSubmit$={async (payload) => {
-            if (editingTicket) {
-              await props.onUpdate$('tickets', editingTicket.id, payload);
-            } else {
-              await props.onCreate$('tickets', payload);
+            pageError.value = '';
+            try {
+              if (editingOcorrencia) {
+                await props.onUpdate$('ocorrencias', editingOcorrencia.id, payload);
+              } else {
+                await props.onCreate$('ocorrencias', payload);
+              }
+              isCreating.value = false;
+              editingId.value = '';
+            } catch (e) {
+              pageError.value = e instanceof Error ? e.message : 'Erro ao guardar';
             }
-            isCreating.value = false;
-            editingId.value = '';
           }}
         />
       ) : null}
@@ -297,8 +411,8 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
   );
 });
 
-const TicketForm = component$((props: {
-  ticket?: Ticket;
+const OcorrenciaForm = component$((props: {
+  ocorrencia?: Ocorrencia;
   condominiumOptions: string[];
   isSaving: boolean;
   onClose$: PropFunction<() => void>;
@@ -307,8 +421,8 @@ const TicketForm = component$((props: {
   <section class="glass-panel simple-form-panel calendar-form-panel">
     <div class="simple-content-header">
       <div>
-        <span class="page-eyebrow">{props.ticket ? 'Editar ticket' : 'Novo ticket'}</span>
-        <h2>{props.ticket?.title ?? 'Abrir ticket'}</h2>
+        <span class="page-eyebrow">{props.ocorrencia ? 'Editar ocorrência' : 'Nova ocorrência'}</span>
+        <h2>{props.ocorrencia?.titulo ?? 'Registar ocorrência'}</h2>
       </div>
       <button type="button" class="secondary-action" onClick$={props.onClose$}>Fechar</button>
     </div>
@@ -316,57 +430,83 @@ const TicketForm = component$((props: {
       preventdefault:submit
       onSubmit$={async (event) => {
         const form = event.target as HTMLFormElement;
-        await props.onSubmit$(ticketPayloadFromForm(form, props.ticket));
+        await props.onSubmit$(payloadFromForm(form, props.ocorrencia));
       }}
     >
       <div class="ops-form-grid">
-        <label>Titulo<input name="title" value={props.ticket?.title ?? ''} placeholder="Avaria no elevador" required /></label>
-        <label>Condominio<select name="condominium" value={props.ticket?.condominium || props.condominiumOptions[1] || 'Geral'}>
-          {props.condominiumOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+        <label>Título<input name="titulo" value={props.ocorrencia?.titulo ?? ''} placeholder="Avaria no elevador" required /></label>
+        <label>Condomínio<select name="condominiumId" value={props.ocorrencia?.condominiumId || props.condominiumOptions[1] || 'Geral'}>
+          {props.condominiumOptions.map((n) => <option key={n} value={n}>{n}</option>)}
         </select></label>
-        <label>Requerente<input name="requesterName" value={props.ticket?.requesterName ?? ''} placeholder="Carlos Almeida" /></label>
-        <label>Email<input name="requesterEmail" value={props.ticket?.requesterEmail ?? ''} placeholder="morador@example.pt" /></label>
-        <label>Canal<select name="channel" value={props.ticket?.channel || 'Portal'}>{CHANNELS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <label>Tipo<select name="type" value={props.ticket?.type || 'Avaria'}>{TYPES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <label>Categoria<input name="category" value={props.ticket?.category ?? ''} placeholder="Elevadores" /></label>
-        <label>Prioridade<select name="priority" value={props.ticket?.priority || 'Normal'}>{PRIORITIES.filter((item) => item !== 'Todos').map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <label>Estado<select name="status" value={props.ticket?.status || 'Novo'}>{STATUSES.filter((item) => item !== 'Todos').map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-        <label>Responsavel<input name="assignee" value={props.ticket?.assignee ?? ''} placeholder="Joao Silva" /></label>
-        <label>Prazo<input type="datetime-local" name="dueAt" value={toInputDateTime(props.ticket?.dueAt)} /></label>
-        <label>Tags<input name="tags" value={props.ticket?.tags?.join(', ') ?? ''} placeholder="elevador, urgente" /></label>
-        <label>ID manutencao<input name="linkedMaintenanceId" value={props.ticket?.linkedMaintenanceId ?? ''} placeholder="maint-001" /></label>
-        <label>ID evento<input name="linkedCalendarEventId" value={props.ticket?.linkedCalendarEventId ?? ''} placeholder="cal-001" /></label>
-        <label class="wide">Detalhe<textarea name="detail" value={props.ticket?.detail ?? ''} placeholder="Descricao operacional" /></label>
+        <label>Tipo<select name="tipo" value={props.ocorrencia?.tipo || 'avaria'}>
+          <option value="avaria">Avaria</option><option value="pedido">Pedido</option>
+          <option value="reclamacao">Reclamação</option><option value="pergunta">Pergunta</option>
+          <option value="tarefaInterna">Tarefa interna</option>
+        </select></label>
+        <label>Prioridade<select name="prioridade" value={props.ocorrencia?.prioridade || 'normal'}>
+          {PRIORIDADE_OPTS.map((p) => <option key={p} value={p}>{rotuloPri(p)}</option>)}
+        </select></label>
+        <label>Impacto<select name="impacto" value={props.ocorrencia?.impacto || 'medio'}>
+          <option value="baixo">Baixo</option><option value="medio">Médio</option>
+          <option value="alto">Alto</option><option value="critico">Crítico</option>
+        </select></label>
+        <label>Urgência<select name="urgencia" value={props.ocorrencia?.urgencia || 'media'}>
+          <option value="baixa">Baixa</option><option value="media">Média</option>
+          <option value="alta">Alta</option><option value="imediata">Imediata</option>
+        </select></label>
+        <label>Canal<select name="canal" value={props.ocorrencia?.canal || 'portal'}>
+          {CANAIS.map((c) => <option key={c} value={c}>{rotuloCanal(c)}</option>)}
+        </select></label>
+        <label>Categoria<input name="categoria" value={props.ocorrencia?.categoria ?? ''} placeholder="Elevadores" /></label>
+        <label>Estado<select name="status" value={props.ocorrencia?.status || 'nova'}>
+          {STATUS_OPTS.map((s) => <option key={s} value={s}>{rotuloStatus(s)}</option>)}
+        </select></label>
+        <label>Requerente<input name="requisitanteNome" value={props.ocorrencia?.requisitanteNome ?? ''} placeholder="Carlos Almeida" /></label>
+        <label>Email<input name="requisitanteEmail" value={props.ocorrencia?.requisitanteEmail ?? ''} placeholder="morador@example.pt" /></label>
+        <label>Telefone<input name="requisitanteTelefone" value={props.ocorrencia?.requisitanteTelefone ?? ''} placeholder="+351 900 000 000" /></label>
+        <label>Atribuído a<input name="atribuidoA" value={props.ocorrencia?.atribuidoA ?? ''} placeholder="João Silva" /></label>
+        <label>Bloco<input name="blocoId" value={props.ocorrencia?.blocoId ?? ''} placeholder="A" /></label>
+        <label>Piso<input name="pisoId" value={props.ocorrencia?.pisoId ?? ''} placeholder="3" /></label>
+        <label>Zona<input name="zonaId" value={props.ocorrencia?.zonaId ?? ''} placeholder="Entrada nascente" /></label>
+        <label>Equipamento<input name="equipamentoId" value={props.ocorrencia?.equipamentoId ?? ''} placeholder="Elevador 1" /></label>
+        <label>Custo estimado (€)<input name="custoEstimado" value={props.ocorrencia?.custoEstimado ?? ''} placeholder="250" /></label>
+        <label>Fornecedor<input name="fornecedorId" value={props.ocorrencia?.fornecedorId ?? ''} placeholder="Fornecedor" /></label>
+        <label>Contrato<input name="referenciaContrato" value={props.ocorrencia?.referenciaContrato ?? ''} placeholder="CT-2024-001" /></label>
+        <label>Tags<input name="tags" value={props.ocorrencia?.tags?.join(', ') ?? ''} placeholder="elevador, urgente" /></label>
+        <label class="wide">Descrição<textarea name="descricao" value={props.ocorrencia?.descricao ?? ''} placeholder="Descrição operacional" /></label>
       </div>
       <div class="simple-header-actions">
-        <button type="submit" class="primary-action" disabled={props.isSaving}>{props.isSaving ? 'A guardar...' : 'Guardar ticket'}</button>
+        <button type="submit" class="primary-action" disabled={props.isSaving}>{props.isSaving ? 'A guardar...' : 'Guardar ocorrência'}</button>
       </div>
     </form>
   </section>
 ));
 
-function ticketPayloadFromForm(form: HTMLFormElement, current?: Ticket): Record<string, unknown> {
+function payloadFromForm(form: HTMLFormElement, current?: Ocorrencia): Record<string, unknown> {
   const data = new FormData(form);
-  const status = stringField(data, 'status') || current?.status || 'Novo';
   return {
-    title: stringField(data, 'title'),
-    condominium: stringField(data, 'condominium') || 'Geral',
-    requesterName: stringField(data, 'requesterName'),
-    requesterEmail: stringField(data, 'requesterEmail'),
-    channel: stringField(data, 'channel') || 'Portal',
-    type: stringField(data, 'type') || 'Avaria',
-    category: stringField(data, 'category') || 'Operacional',
-    priority: stringField(data, 'priority') || 'Normal',
-    status,
-    assignee: stringField(data, 'assignee'),
-    dueAt: stringField(data, 'dueAt'),
-    detail: stringField(data, 'detail') || 'Ocorrencia registada',
-    tags: splitList(stringField(data, 'tags')),
-    linkedMaintenanceId: stringField(data, 'linkedMaintenanceId'),
-    linkedCalendarEventId: stringField(data, 'linkedCalendarEventId'),
-    createdAt: current?.createdAt || new Date().toISOString(),
-    resolvedAt: isTicketClosed(status) ? current?.resolvedAt || new Date().toISOString() : '',
-    updatedAt: new Date().toLocaleString('pt-PT')
+    titulo: stringField(data, 'titulo'),
+    tipo: stringField(data, 'tipo') || 'avaria',
+    condominiumId: stringField(data, 'condominiumId'),
+    prioridade: stringField(data, 'prioridade') || 'normal',
+    impacto: stringField(data, 'impacto') || 'medio',
+    urgencia: stringField(data, 'urgencia') || 'media',
+    canal: stringField(data, 'canal') || 'portal',
+    categoria: stringField(data, 'categoria'),
+    status: stringField(data, 'status') || 'nova',
+    requisitanteNome: stringField(data, 'requisitanteNome'),
+    requisitanteEmail: stringField(data, 'requisitanteEmail'),
+    requisitanteTelefone: stringField(data, 'requisitanteTelefone'),
+    atribuidoA: stringField(data, 'atribuidoA'),
+    blocoId: stringField(data, 'blocoId'),
+    pisoId: stringField(data, 'pisoId'),
+    zonaId: stringField(data, 'zonaId'),
+    equipamentoId: stringField(data, 'equipamentoId'),
+    custoEstimado: stringField(data, 'custoEstimado'),
+    fornecedorId: stringField(data, 'fornecedorId'),
+    referenciaContrato: stringField(data, 'referenciaContrato'),
+    descricao: stringField(data, 'descricao'),
+    tags: splitList(stringField(data, 'tags'))
   };
 }
 
@@ -378,21 +518,66 @@ function splitList(value: string): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-function priorityTone(priority: string): string {
-  if (priority === 'Urgente') return 'red';
-  if (priority === 'Alta') return 'gold';
-  if (priority === 'Baixa') return 'green';
+function rotuloStatus(s: OcorrenciaStatus): string {
+  const m: Record<OcorrenciaStatus, string> = { nova: 'Nova', emTriagem: 'Triagem', aguardaPecas: 'Aguarda peças', emCurso: 'Em curso', pendente: 'Pendente', resolvida: 'Resolvida', fechada: 'Fechada', reaberta: 'Reaberta' };
+  return m[s] || s;
+}
+
+function rotuloPri(p: Prioridade): string {
+  const m: Record<Prioridade, string> = { baixa: 'Baixa', normal: 'Normal', alta: 'Alta', urgente: 'Urgente' };
+  return m[p] || p;
+}
+
+function rotuloTipo(t: string): string {
+  const m: Record<string, string> = { avaria: 'Avaria', pedido: 'Pedido', reclamacao: 'Reclamação', pergunta: 'Pergunta', tarefaInterna: 'Tarefa interna' };
+  return m[t] || t;
+}
+
+function rotuloCanal(c: Canal): string {
+  const m: Record<Canal, string> = { portal: 'Portal', email: 'Email', telefone: 'Telefone', presencial: 'Presencial', interno: 'Interno' };
+  return m[c] || c;
+}
+
+function rotuloImpacto(i: string): string {
+  const m: Record<string, string> = { baixo: 'Baixo', medio: 'Médio', alto: 'Alto', critico: 'Crítico' };
+  return m[i] || i;
+}
+
+function rotuloUrgencia(u: string): string {
+  const m: Record<string, string> = { baixa: 'Baixa', media: 'Média', alta: 'Alta', imediata: 'Imediata' };
+  return m[u] || u;
+}
+
+function iconeTipo(t: string): string {
+  return t === 'avaria' ? '⚡' : t === 'pedido' ? '📋' : '📌';
+}
+
+function tomPrioridade(p: string): string {
+  if (p === 'urgente') return 'red';
+  if (p === 'alta') return 'gold';
+  if (p === 'baixa') return 'green';
   return 'blue';
 }
 
-function statusTone(status: string): string {
-  const normalized = status.toLowerCase();
-  if (normalized.includes('resolvido') || normalized.includes('fechado')) return 'green';
-  if (normalized.includes('pend') || normalized.includes('espera')) return 'gold';
-  if (normalized.includes('curso')) return 'blue';
+function tomStatus(s: string): string {
+  const n = normalize(s);
+  if (n.includes('resolvida') || n.includes('fechada')) return 'green';
+  if (n.includes('pendente') || n.includes('pecas')) return 'gold';
+  if (n.includes('curso') || n.includes('triagem')) return 'blue';
+  if (n.includes('reaberta')) return 'purple';
   return 'red';
 }
 
-function toInputDateTime(value: string | undefined): string {
-  return value ? value.slice(0, 16) : '';
+function acaoTransicao(dest: OcorrenciaStatus): string {
+  const m: Record<OcorrenciaStatus, string> = {
+    nova: 'Marcar como nova',
+    emTriagem: 'Iniciar triagem',
+    aguardaPecas: 'Aguardar peças',
+    emCurso: 'Iniciar reparação',
+    pendente: 'Marcar pendente',
+    resolvida: 'Resolver',
+    fechada: 'Fechar',
+    reaberta: 'Reabrir'
+  };
+  return m[dest] || dest;
 }
