@@ -437,6 +437,8 @@ export type Ticket = {
   updatedAt: string;
 };
 
+export type AppContext = 'hq' | 'worker' | 'client';
+
 export type Supplier = {
   id: string;
   name: string;
@@ -703,6 +705,10 @@ export type Ocorrencia = {
   resolvidoEm: string;
   fechadoEm: string;
   tokenAcompanhamento: string;
+  originChannel: AppContext;
+  publicStatusText: string;
+  technicalNotes: string;
+  assignedWorkerId: string;
   criadoEm: string;
   atualizadoEm: string;
 };
@@ -776,6 +782,10 @@ export type OcorrenciaInput = {
   equipamentoId?: string;
   atribuidoA?: string;
   tags?: string[];
+  originChannel?: AppContext;
+  publicStatusText?: string;
+  technicalNotes?: string;
+  assignedWorkerId?: string;
 };
 
 export type ResourceState = {
@@ -809,6 +819,7 @@ export type LoginResponse = {
   refreshToken: string;
   expiresAt: string;
   user: PublicUser;
+  appContext: AppContext;
 };
 
 export type CreateResource =

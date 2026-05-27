@@ -1,4 +1,5 @@
 import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
+import { AppEntryPage } from './components/auth/AppEntryPage';
 import { LoginPage } from './components/auth/LoginPage';
 import { DashboardPage } from './components/dashboard/DashboardPage';
 import { CalendarPage } from './components/pages/CalendarPage';
@@ -20,6 +21,7 @@ import {
   SESSION_TOKEN_KEY,
   SESSION_EXPIRES_KEY,
   SESSION_REFRESH_KEY,
+  SESSION_APP_CONTEXT_KEY,
   createResource,
   deleteResource,
   downloadDocument,
@@ -37,6 +39,7 @@ import {
   uploadDocument,
   updateResource,
   type ApiStatus,
+  type AppContext,
   type CreateResource,
   type DocumentPreview,
   type GenerateDocumentPayload,
@@ -46,11 +49,36 @@ import {
 } from './lib/api';
 import { matchEntityRoute } from './lib/entity-navigation';
 
-const normalizePath = (path: string) => {
-  const basePath = path === '/' ? '/dashboard' : path;
-  const [withoutHash = '/dashboard'] = basePath.split('#', 1);
+const normalizeInnerPath = (path: string) => {
+  const [withoutHash = '/dashboard'] = path.split('#', 1);
   const [pathname = '/dashboard'] = withoutHash.split('?', 1);
   return pathname || '/dashboard';
+};
+
+const normalizeAppContext = (value: string): AppContext => {
+  if (value === 'worker' || value === 'client') return value;
+  return 'hq';
+};
+
+const parseRouteContext = (rawPath: string): { appContext: AppContext; path: string; showEntry: boolean } => {
+  if (rawPath === '/' || rawPath === '') {
+    return { appContext: 'hq', path: '/dashboard', showEntry: true };
+  }
+  const [pathname = '/'] = rawPath.split('?', 1);
+  const parts = pathname.split('/').filter(Boolean);
+  const first = parts[0] ?? '';
+  if (first === 'hq' || first === 'worker' || first === 'client') {
+    const appContext = normalizeAppContext(first);
+    const remaining = `/${parts.slice(1).join('/')}`;
+    const path = normalizeInnerPath(remaining === '/' ? '/dashboard' : remaining);
+    return { appContext, path, showEntry: false };
+  }
+  return { appContext: 'hq', path: normalizeInnerPath(pathname), showEntry: false };
+};
+
+const buildAppPath = (appContext: AppContext, innerPath: string) => {
+  const normalized = innerPath.startsWith('/') ? innerPath : `/${innerPath}`;
+  return `/${appContext}${normalized}`;
 };
 
 const dashboardShortcutAreas: CondoAreaId[] = ['general', 'inspections', 'timeline', 'avarias'];
@@ -81,6 +109,8 @@ const triggerBrowserDownload = (blob: Blob, filename: string) => {
 
 export const App = component$(() => {
   const currentPath = useSignal('/dashboard');
+  const appContext = useSignal<AppContext>('hq');
+  const showEntry = useSignal(false);
   const condominiumShortcutArea = useSignal<CondoAreaId | ''>('');
   const apiStatus = useSignal<ApiStatus>('checking');
   const dashboard = useSignal(fallbackDashboard);
@@ -98,10 +128,12 @@ export const App = component$(() => {
     ready: boolean;
     token: string;
     user: PublicUser | null;
+    appContext: AppContext;
   }>({
     ready: false,
     token: '',
-    user: null
+    user: null,
+    appContext: 'hq'
   });
   const createIntent = useStore<{
     path: string;
@@ -134,7 +166,7 @@ export const App = component$(() => {
 
   const navigate$ = $((path: string) => {
     const targetPath = path === '/' ? '/dashboard' : path;
-    const normalizedPath = normalizePath(targetPath);
+    const normalizedPath = normalizeInnerPath(targetPath);
     condominiumShortcutArea.value =
       normalizedPath === '/condominios' ? readCondominiumShortcutArea(targetPath) : '';
     const navigationStartedAt =
@@ -150,7 +182,7 @@ export const App = component$(() => {
       documentPreview.value = null;
     }
     currentPath.value = normalizedPath;
-    window.history.pushState({}, '', targetPath);
+    window.history.pushState({}, '', buildAppPath(appContext.value, targetPath));
     window.scrollTo({ top: 0, behavior: 'auto' });
     if (navigationStartedAt && typeof requestAnimationFrame !== 'undefined') {
       requestAnimationFrame(() => {
@@ -163,26 +195,31 @@ export const App = component$(() => {
     }
   });
 
-  const login$ = $(async (email: string, password: string) => {
+  const login$ = $(async (email: string, password: string, context: AppContext) => {
     error.value = '';
     notice.value = '';
     isLoading.value = true;
     try {
-      const auth = await login(email.trim(), password);
+      const auth = await login(email.trim(), password, context);
       session.token = auth.token;
       session.user = auth.user;
+      session.appContext = auth.appContext || context;
+      appContext.value = auth.appContext || context;
       localStorage.setItem(SESSION_TOKEN_KEY, auth.token);
       localStorage.setItem(SESSION_REFRESH_KEY, auth.refreshToken);
       localStorage.setItem(SESSION_EXPIRES_KEY, auth.expiresAt);
+      localStorage.setItem(SESSION_APP_CONTEXT_KEY, auth.appContext || context);
       await loadWorkspace$(auth.token);
       await navigate$('/dashboard');
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Nao foi possivel iniciar sessao';
       session.token = '';
       session.user = null;
+      session.appContext = context;
       localStorage.removeItem(SESSION_TOKEN_KEY);
       localStorage.removeItem(SESSION_REFRESH_KEY);
       localStorage.removeItem(SESSION_EXPIRES_KEY);
+      localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
     } finally {
       isLoading.value = false;
       session.ready = true;
@@ -195,6 +232,8 @@ export const App = component$(() => {
     error.value = '';
     session.token = '';
     session.user = null;
+    session.appContext = 'hq';
+    appContext.value = 'hq';
     dashboard.value = fallbackDashboard;
     resources.value = emptyResources;
     pageCache.value = buildPages(emptyResources, fallbackDashboard);
@@ -202,6 +241,7 @@ export const App = component$(() => {
     localStorage.removeItem(SESSION_TOKEN_KEY);
     localStorage.removeItem(SESSION_REFRESH_KEY);
     localStorage.removeItem(SESSION_EXPIRES_KEY);
+    localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
     if (token) {
       await logout(token).catch(() => undefined);
     }
@@ -489,10 +529,12 @@ export const App = component$(() => {
   useVisibleTask$(({ cleanup }) => {
     const syncPath = () => {
       const rawPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      const normalizedPath = normalizePath(rawPath);
-      currentPath.value = normalizedPath;
+      const route = parseRouteContext(rawPath);
+      showEntry.value = route.showEntry;
+      appContext.value = route.appContext;
+      currentPath.value = route.path;
       condominiumShortcutArea.value =
-        normalizedPath === '/condominios' ? readCondominiumShortcutArea(rawPath) : '';
+        route.path === '/condominios' ? readCondominiumShortcutArea(rawPath) : '';
     };
 
     syncPath();
@@ -509,9 +551,13 @@ export const App = component$(() => {
     }
 
     let storedToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    const storedAppContext = normalizeAppContext(localStorage.getItem(SESSION_APP_CONTEXT_KEY) ?? 'hq');
+    session.appContext = storedAppContext;
+    appContext.value = storedAppContext;
     const storedExpiry = localStorage.getItem(SESSION_EXPIRES_KEY);
     if (storedToken && storedExpiry && Date.parse(storedExpiry) <= Date.now() + 15_000) {
       localStorage.removeItem(SESSION_TOKEN_KEY);
+      localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
       storedToken = '';
     }
 
@@ -519,17 +565,21 @@ export const App = component$(() => {
       const storedRefreshToken = localStorage.getItem(SESSION_REFRESH_KEY);
       if (storedRefreshToken) {
         try {
-          const refreshed = await refreshSession(storedRefreshToken);
+          const refreshed = await refreshSession(storedRefreshToken, storedAppContext);
           storedToken = refreshed.token;
           session.token = refreshed.token;
           session.user = refreshed.user;
+          session.appContext = refreshed.appContext || storedAppContext;
+          appContext.value = refreshed.appContext || storedAppContext;
           localStorage.setItem(SESSION_TOKEN_KEY, refreshed.token);
           localStorage.setItem(SESSION_REFRESH_KEY, refreshed.refreshToken);
           localStorage.setItem(SESSION_EXPIRES_KEY, refreshed.expiresAt);
+          localStorage.setItem(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
           await loadWorkspace$(refreshed.token);
         } catch {
           localStorage.removeItem(SESSION_REFRESH_KEY);
           localStorage.removeItem(SESSION_EXPIRES_KEY);
+          localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
           session.token = '';
           session.user = null;
         } finally {
@@ -550,22 +600,27 @@ export const App = component$(() => {
       const storedRefreshToken = localStorage.getItem(SESSION_REFRESH_KEY);
       if (storedRefreshToken) {
         try {
-          const refreshed = await refreshSession(storedRefreshToken);
+          const refreshed = await refreshSession(storedRefreshToken, storedAppContext);
           session.token = refreshed.token;
           session.user = refreshed.user;
+          session.appContext = refreshed.appContext || storedAppContext;
+          appContext.value = refreshed.appContext || storedAppContext;
           localStorage.setItem(SESSION_TOKEN_KEY, refreshed.token);
           localStorage.setItem(SESSION_REFRESH_KEY, refreshed.refreshToken);
           localStorage.setItem(SESSION_EXPIRES_KEY, refreshed.expiresAt);
+          localStorage.setItem(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
           await loadWorkspace$(refreshed.token);
         } catch {
           localStorage.removeItem(SESSION_TOKEN_KEY);
           localStorage.removeItem(SESSION_REFRESH_KEY);
           localStorage.removeItem(SESSION_EXPIRES_KEY);
+          localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
           session.token = '';
           session.user = null;
         }
       } else {
         localStorage.removeItem(SESSION_TOKEN_KEY);
+        localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
         session.token = '';
         session.user = null;
       }
@@ -574,24 +629,50 @@ export const App = component$(() => {
     }
   });
 
+  useVisibleTask$(({ cleanup }) => {
+    const timer = window.setInterval(() => {
+      if (!session.token) return;
+      loadWorkspace$(session.token).catch(() => undefined);
+    }, 5000);
+    cleanup(() => window.clearInterval(timer));
+  });
+
   if (!session.ready || !session.token) {
+    if (showEntry.value) {
+      return (
+        <AppEntryPage
+          onChoose$={(context) => {
+            appContext.value = context;
+            session.appContext = context;
+            window.history.pushState({}, '', buildAppPath(context, '/login'));
+            showEntry.value = false;
+            currentPath.value = '/login';
+          }}
+        />
+      );
+    }
     return (
       <LoginPage
         apiStatus={apiStatus.value}
         error={error.value}
         isLoading={isLoading.value || !session.ready}
+        appContext={appContext.value}
         onLogin$={login$}
       />
     );
   }
 
-  const route = matchEntityRoute(currentPath.value);
+  const safePath = currentPath.value === '/login' ? '/dashboard' : currentPath.value;
+  const route = matchEntityRoute(safePath);
   const page = getPageByPath(pageCache.value, route.basePath);
+  const isWorkerContext = appContext.value === 'worker';
+  const isClientContext = appContext.value === 'client';
 
   return (
     <AppShell
       currentPath={page.path}
       apiStatus={apiStatus.value}
+      appContext={appContext.value}
       dashboard={dashboard.value}
       searchResults={searchResultCache.value}
       navigate$={navigate$}
@@ -599,7 +680,48 @@ export const App = component$(() => {
     >
       {error.value ? <div class="app-error glass-panel">{error.value}</div> : null}
       {notice.value ? <div class="app-success glass-panel">{notice.value}</div> : null}
-      {route.kind === 'detail' ? (
+      {isClientContext ? (
+        <TicketsPage
+          appContext={appContext.value}
+          resources={resources.value}
+          isSaving={isSaving.value}
+          token={session.token}
+          createIntentVersion={createIntent.path === '/tickets' ? createIntent.version : 0}
+          initialStatusGroup={route.kind === 'ticketStatus' ? route.group : ''}
+          initialPriority={route.kind === 'ticketPriority' ? route.priority : ''}
+          navigate$={navigate$}
+          onCreate$={createRecord$}
+          onUpdate$={updateRecord$}
+          onDelete$={deleteRecord$}
+        />
+      ) : isWorkerContext ? (
+        page.path === '/manutencao' ? (
+          <MaintenancePage
+            resources={resources.value}
+            isSaving={isSaving.value}
+            createIntentVersion={createIntent.path === page.path ? createIntent.version : 0}
+            initialStatus={route.kind === 'maintenanceStatus' ? route.status : ''}
+            navigate$={navigate$}
+            onCreate$={createRecord$}
+            onUpdate$={updateRecord$}
+            onDelete$={deleteRecord$}
+          />
+        ) : (
+          <TicketsPage
+            appContext={appContext.value}
+            resources={resources.value}
+            isSaving={isSaving.value}
+            token={session.token}
+            createIntentVersion={createIntent.path === '/tickets' ? createIntent.version : 0}
+            initialStatusGroup={route.kind === 'ticketStatus' ? route.group : ''}
+            initialPriority={route.kind === 'ticketPriority' ? route.priority : ''}
+            navigate$={navigate$}
+            onCreate$={createRecord$}
+            onUpdate$={updateRecord$}
+            onDelete$={deleteRecord$}
+          />
+        )
+      ) : route.kind === 'detail' ? (
         <EntityDetailPage
           route={route}
           resources={resources.value}
@@ -633,6 +755,7 @@ export const App = component$(() => {
         />
       ) : page.path === '/tickets' ? (
         <TicketsPage
+          appContext={appContext.value}
           resources={resources.value}
           isSaving={isSaving.value}
           token={session.token}

@@ -93,6 +93,14 @@ pub struct OcorrenciaInput {
     pub custo_final: Option<String>,
     #[serde(default)]
     pub fornecedor_id: Option<String>,
+    #[serde(default)]
+    pub origin_channel: Option<String>,
+    #[serde(default)]
+    pub public_status_text: Option<String>,
+    #[serde(default)]
+    pub technical_notes: Option<String>,
+    #[serde(default)]
+    pub assigned_worker_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -268,6 +276,12 @@ pub async fn criar(
         custo_estimado: input.custo_estimado.unwrap_or_default(),
         custo_final: input.custo_final.unwrap_or_default(),
         fornecedor_id: input.fornecedor_id.unwrap_or_default(),
+        origin_channel: normalize_origin_channel(input.origin_channel.as_deref()),
+        public_status_text: input
+            .public_status_text
+            .unwrap_or_else(|| "Avaria recebida".to_string()),
+        technical_notes: input.technical_notes.unwrap_or_default(),
+        assigned_worker_id: input.assigned_worker_id.unwrap_or_default(),
         sla_resposta_em: String::new(),
         sla_resolucao_em: String::new(),
         referencia_contrato: String::new(),
@@ -374,6 +388,18 @@ pub async fn atualizar(
     }
     if let Some(v) = non_empty_string(input.fornecedor_id) {
         item.fornecedor_id = v;
+    }
+    if let Some(v) = non_empty_string(input.origin_channel) {
+        item.origin_channel = normalize_origin_channel(Some(&v));
+    }
+    if let Some(v) = non_empty_string(input.public_status_text) {
+        item.public_status_text = v;
+    }
+    if let Some(v) = non_empty_string(input.technical_notes) {
+        item.technical_notes = v;
+    }
+    if let Some(v) = non_empty_string(input.assigned_worker_id) {
+        item.assigned_worker_id = v;
     }
     item.atualizado_em = Utc::now().to_rfc3339();
 
@@ -763,6 +789,10 @@ pub async fn criar_publica(
         custo_estimado: String::new(),
         custo_final: String::new(),
         fornecedor_id: String::new(),
+        origin_channel: "client".to_string(),
+        public_status_text: "Avaria recebida".to_string(),
+        technical_notes: String::new(),
+        assigned_worker_id: String::new(),
         referencia_contrato: String::new(),
         media_ids: vec![],
         documento_ids: vec![],
@@ -933,6 +963,14 @@ fn parse_canal(value: Option<&str>) -> Option<Canal> {
     }
 }
 
+fn normalize_origin_channel(value: Option<&str>) -> String {
+    match value.unwrap_or("hq").trim().to_lowercase().as_str() {
+        "worker" => "worker".to_string(),
+        "client" => "client".to_string(),
+        _ => "hq".to_string(),
+    }
+}
+
 fn validate_required(value: &str, label: &str) -> Result<(), ApiError> {
     if value.trim().is_empty() {
         return Err(ApiError::validation(format!("{label} e obrigatorio")));
@@ -990,6 +1028,7 @@ mod tests {
             expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
             created_at: chrono::Utc::now(),
             active_condominium: demo.active_condominium.clone(),
+            app_context: "hq".to_string(),
             refresh_expires_at: chrono::Utc::now() + chrono::Duration::hours(48),
         });
 
@@ -1471,6 +1510,7 @@ mod tests {
             expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
             created_at: chrono::Utc::now(),
             active_condominium: demo.active_condominium.clone(),
+            app_context: "hq".to_string(),
             refresh_expires_at: chrono::Utc::now() + chrono::Duration::hours(48),
         });
 

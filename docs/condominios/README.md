@@ -10,6 +10,8 @@ do estado atual da implementacao.
 - `02-auditoria-gap-condominios.md`: verificacao do que existe hoje na branch
   atual e do que ainda falta implementar.
 - `03-entrega-v4-v6-condominios.md`: resumo da entrega implementada e QA manual.
+- `04-prompts-completas-importado.md`: versao integral importada do PDF
+  `Gestisac_Condominios_Prompts_Completas.pdf`.
 
 ## Nota de estado
 

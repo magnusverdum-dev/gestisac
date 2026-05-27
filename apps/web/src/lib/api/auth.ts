@@ -1,25 +1,26 @@
 import { apiRequest } from './http';
-import type { DashboardResponse, LoginResponse, PublicUser } from './types';
+import type { AppContext, DashboardResponse, LoginResponse, PublicUser } from './types';
 
 export const SESSION_TOKEN_KEY = 'gestisac.sessionToken';
 export const SESSION_REFRESH_KEY = 'gestisac.refreshToken';
 export const SESSION_EXPIRES_KEY = 'gestisac.expiresAt';
+export const SESSION_APP_CONTEXT_KEY = 'gestisac.appContext';
 
 export async function getApiHealth(): Promise<{ service: string; status: 'online' }> {
   return apiRequest('/api/health');
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
+export async function login(email: string, password: string, appContext: AppContext): Promise<LoginResponse> {
   return apiRequest('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ email, password, appContext })
   });
 }
 
-export async function refreshSession(refreshToken: string): Promise<LoginResponse> {
+export async function refreshSession(refreshToken: string, appContext?: AppContext): Promise<LoginResponse> {
   return apiRequest('/api/auth/refresh', {
     method: 'POST',
-    body: JSON.stringify({ refreshToken })
+    body: JSON.stringify({ refreshToken, appContext })
   });
 }
 

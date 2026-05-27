@@ -1641,11 +1641,12 @@ fn make_floor(input: CondominiumFloorInput, _: &Condominium) -> Result<Condomini
 fn apply_floor(
     item: &mut CondominiumFloor,
     input: CondominiumFloorInput,
-    _: &Condominium,
+    condominium: &Condominium,
 ) -> Result<(), ApiError> {
     validate_required(&input.name, "Nome do piso")?;
     validate_required(&input.number, "Numero do piso")?;
     set_string(&mut item.block_id, input.block_id);
+    validate_block_reference(condominium, &item.block_id, "blockId")?;
     item.name = clean(input.name);
     item.number = clean(input.number);
     set_string(&mut item.floor_type, input.floor_type);
@@ -1684,6 +1685,9 @@ fn apply_zone(
     validate_required(&input.name, "Nome da zona")?;
     set_string(&mut item.block_id, input.block_id);
     set_string(&mut item.floor_id, input.floor_id);
+    validate_block_reference(condominium, &item.block_id, "blockId")?;
+    validate_floor_reference(condominium, &item.floor_id, "floorId")?;
+    validate_floor_block_consistency(condominium, &item.floor_id, &item.block_id)?;
     item.name = clean(input.name);
     set_string(&mut item.zone_type, input.zone_type);
     set_string(&mut item.description, input.description);
@@ -1719,13 +1723,18 @@ fn make_equipment(
 fn apply_equipment(
     item: &mut CondominiumEquipment,
     input: CondominiumEquipmentInput,
-    _: &Condominium,
+    condominium: &Condominium,
 ) -> Result<(), ApiError> {
     validate_required(&input.name, "Nome do equipamento")?;
     item.name = clean(input.name);
     set_string(&mut item.block_id, input.block_id);
     set_string(&mut item.floor_id, input.floor_id);
     set_string(&mut item.zone_id, input.zone_id);
+    validate_block_reference(condominium, &item.block_id, "blockId")?;
+    validate_floor_reference(condominium, &item.floor_id, "floorId")?;
+    validate_zone_reference(condominium, &item.zone_id, "zoneId")?;
+    validate_floor_block_consistency(condominium, &item.floor_id, &item.block_id)?;
+    validate_zone_consistency(condominium, &item.zone_id, &item.floor_id, &item.block_id)?;
     set_string(&mut item.equipment_type, input.equipment_type);
     set_string(&mut item.brand, input.brand);
     set_string(&mut item.model, input.model);
@@ -1807,7 +1816,7 @@ fn make_document(
 fn apply_document(
     item: &mut CondominiumManagedDocument,
     input: CondominiumManagedDocumentInput,
-    _: &Condominium,
+    condominium: &Condominium,
 ) -> Result<(), ApiError> {
     validate_required(&input.title, "Titulo do documento")?;
     item.title = clean(input.title);
@@ -1818,6 +1827,9 @@ fn apply_document(
     set_string(&mut item.block_id, input.block_id);
     set_string(&mut item.zone_id, input.zone_id);
     set_string(&mut item.equipment_id, input.equipment_id);
+    validate_block_reference(condominium, &item.block_id, "blockId")?;
+    validate_zone_reference(condominium, &item.zone_id, "zoneId")?;
+    validate_equipment_reference(condominium, &item.equipment_id, "equipmentId")?;
     set_string(&mut item.document_date, input.document_date);
     set_string(&mut item.expiry_date, input.expiry_date);
     set_string(&mut item.version, input.version);
@@ -1844,7 +1856,7 @@ fn make_media(input: CondominiumMediaInput, _: &Condominium) -> Result<Condomini
 fn apply_media(
     item: &mut CondominiumMedia,
     input: CondominiumMediaInput,
-    _: &Condominium,
+    condominium: &Condominium,
 ) -> Result<(), ApiError> {
     validate_required(&input.title, "Titulo da imagem/planta")?;
     item.title = clean(input.title);
@@ -1854,6 +1866,11 @@ fn apply_media(
     set_string(&mut item.block_id, input.block_id);
     set_string(&mut item.floor_id, input.floor_id);
     set_string(&mut item.zone_id, input.zone_id);
+    validate_block_reference(condominium, &item.block_id, "blockId")?;
+    validate_floor_reference(condominium, &item.floor_id, "floorId")?;
+    validate_zone_reference(condominium, &item.zone_id, "zoneId")?;
+    validate_floor_block_consistency(condominium, &item.floor_id, &item.block_id)?;
+    validate_zone_consistency(condominium, &item.zone_id, &item.floor_id, &item.block_id)?;
     set_string(&mut item.description, input.description);
     set_bool(&mut item.is_primary, input.is_primary);
     Ok(())
@@ -2108,6 +2125,132 @@ fn validate_required(value: &str, label: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+fn validate_block_reference(
+    condominium: &Condominium,
+    block_id: &str,
+    field: &str,
+) -> Result<(), ApiError> {
+    if block_id.trim().is_empty() {
+        return Ok(());
+    }
+    if condominium
+        .blocks_detailed
+        .iter()
+        .any(|block| block.id == block_id)
+    {
+        return Ok(());
+    }
+    Err(ApiError::validation(format!(
+        "{field} invalido para este condominio"
+    )))
+}
+
+fn validate_floor_reference(
+    condominium: &Condominium,
+    floor_id: &str,
+    field: &str,
+) -> Result<(), ApiError> {
+    if floor_id.trim().is_empty() {
+        return Ok(());
+    }
+    if condominium
+        .floors_detailed
+        .iter()
+        .any(|floor| floor.id == floor_id)
+    {
+        return Ok(());
+    }
+    Err(ApiError::validation(format!(
+        "{field} invalido para este condominio"
+    )))
+}
+
+fn validate_zone_reference(
+    condominium: &Condominium,
+    zone_id: &str,
+    field: &str,
+) -> Result<(), ApiError> {
+    if zone_id.trim().is_empty() {
+        return Ok(());
+    }
+    if condominium.zones.iter().any(|zone| zone.id == zone_id) {
+        return Ok(());
+    }
+    Err(ApiError::validation(format!(
+        "{field} invalido para este condominio"
+    )))
+}
+
+fn validate_equipment_reference(
+    condominium: &Condominium,
+    equipment_id: &str,
+    field: &str,
+) -> Result<(), ApiError> {
+    if equipment_id.trim().is_empty() {
+        return Ok(());
+    }
+    if condominium
+        .equipment
+        .iter()
+        .any(|equipment| equipment.id == equipment_id)
+    {
+        return Ok(());
+    }
+    Err(ApiError::validation(format!(
+        "{field} invalido para este condominio"
+    )))
+}
+
+fn validate_floor_block_consistency(
+    condominium: &Condominium,
+    floor_id: &str,
+    block_id: &str,
+) -> Result<(), ApiError> {
+    if floor_id.trim().is_empty() || block_id.trim().is_empty() {
+        return Ok(());
+    }
+    let Some(floor) = condominium
+        .floors_detailed
+        .iter()
+        .find(|floor| floor.id == floor_id)
+    else {
+        return Ok(());
+    };
+    if floor.block_id.trim().is_empty() || floor.block_id == block_id {
+        return Ok(());
+    }
+    Err(ApiError::validation(
+        "floorId e blockId nao pertencem a mesma estrutura",
+    ))
+}
+
+fn validate_zone_consistency(
+    condominium: &Condominium,
+    zone_id: &str,
+    floor_id: &str,
+    block_id: &str,
+) -> Result<(), ApiError> {
+    if zone_id.trim().is_empty() {
+        return Ok(());
+    }
+    let Some(zone) = condominium.zones.iter().find(|zone| zone.id == zone_id) else {
+        return Ok(());
+    };
+    if !floor_id.trim().is_empty() && !zone.floor_id.trim().is_empty() && zone.floor_id != floor_id
+    {
+        return Err(ApiError::validation(
+            "zoneId e floorId nao pertencem a mesma estrutura",
+        ));
+    }
+    if !block_id.trim().is_empty() && !zone.block_id.trim().is_empty() && zone.block_id != block_id
+    {
+        return Err(ApiError::validation(
+            "zoneId e blockId nao pertencem a mesma estrutura",
+        ));
+    }
+    Ok(())
+}
+
 fn clean(value: impl Into<String>) -> String {
     value.into().trim().to_string()
 }
@@ -2165,5 +2308,108 @@ mod tests {
 
         assert_eq!(rows.len(), 1);
         assert!(validate_import_row(&rows[0]).is_empty());
+    }
+
+    #[test]
+    fn equipment_validation_rejects_inconsistent_zone_floor() {
+        let condominium = Condominium {
+            blocks_detailed: vec![CondominiumBlock {
+                id: "block-a".to_string(),
+                ..Default::default()
+            }],
+            floors_detailed: vec![CondominiumFloor {
+                id: "floor-1".to_string(),
+                block_id: "block-a".to_string(),
+                ..Default::default()
+            }],
+            zones: vec![CondominiumZone {
+                id: "zone-1".to_string(),
+                block_id: "block-a".to_string(),
+                floor_id: "floor-1".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let mut equipment = CondominiumEquipment {
+            id: "equip-1".to_string(),
+            name: "Bomba".to_string(),
+            ..Default::default()
+        };
+
+        let result = apply_equipment(
+            &mut equipment,
+            CondominiumEquipmentInput {
+                block_id: Some("block-a".to_string()),
+                floor_id: Some("floor-other".to_string()),
+                zone_id: Some("zone-1".to_string()),
+                name: "Bomba".to_string(),
+                equipment_type: None,
+                brand: None,
+                model: None,
+                serial_number: None,
+                internal_reference: None,
+                supplier: None,
+                maintenance_company: None,
+                installation_date: None,
+                last_maintenance_date: None,
+                next_maintenance_date: None,
+                maintenance_frequency: None,
+                status: None,
+                criticality: None,
+                warranty_until: None,
+                contract_reference: None,
+                technical_notes: None,
+                document_ids: None,
+                media_ids: None,
+            },
+            &condominium,
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn zone_validation_accepts_matching_floor_and_block() {
+        let condominium = Condominium {
+            blocks_detailed: vec![CondominiumBlock {
+                id: "block-a".to_string(),
+                ..Default::default()
+            }],
+            floors_detailed: vec![CondominiumFloor {
+                id: "floor-1".to_string(),
+                block_id: "block-a".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let mut zone = CondominiumZone {
+            id: "zone-1".to_string(),
+            name: "Hall".to_string(),
+            ..Default::default()
+        };
+
+        let result = apply_zone(
+            &mut zone,
+            CondominiumZoneInput {
+                block_id: Some("block-a".to_string()),
+                floor_id: Some("floor-1".to_string()),
+                name: "Hall".to_string(),
+                zone_type: None,
+                description: None,
+                operational_status: None,
+                alert_level: None,
+                qr_code_reference: None,
+                internal_location: None,
+                access_notes: None,
+                technical_notes: None,
+                image_url: None,
+                plan_url: None,
+            },
+            &condominium,
+        );
+
+        assert!(result.is_ok());
     }
 }

@@ -1,11 +1,12 @@
 import { component$, Slot, type PropFunction } from '@builder.io/qwik';
-import type { DashboardResponse, GlobalSearchResult } from '../../lib/api';
+import type { AppContext, DashboardResponse, GlobalSearchResult } from '../../lib/api';
 import { Sidebar } from './Sidebar';
 import { Topbar, type ApiStatus } from './Topbar';
 
 type AppShellProps = {
   currentPath: string;
   apiStatus: ApiStatus;
+  appContext: AppContext;
   dashboard: DashboardResponse;
   searchResults: GlobalSearchResult[];
   navigate$: PropFunction<(path: string) => void>;
@@ -20,6 +21,7 @@ export const AppShell = component$((props: AppShellProps) => {
       <Sidebar
         currentPath={props.currentPath}
         user={props.dashboard.user}
+        appContext={props.appContext}
         navigate$={props.navigate$}
       />
       <section class="main-stage">

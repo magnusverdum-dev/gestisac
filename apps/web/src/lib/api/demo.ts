@@ -284,7 +284,8 @@ function buildDemoLogin(store: DemoStore): LoginResponse {
     token: DEMO_TOKEN,
     refreshToken: DEMO_REFRESH_TOKEN,
     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 8).toISOString(),
-    user: store.user
+    user: store.user,
+    appContext: 'hq'
   };
 }
 

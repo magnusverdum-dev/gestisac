@@ -106,11 +106,17 @@ pub struct Session {
     pub tenant_id: String,
     #[serde(default)]
     pub active_condominium: String,
+    #[serde(default = "default_app_context")]
+    pub app_context: String,
     pub created_at: DateTime<Utc>,
     #[serde(default = "now_utc")]
     pub expires_at: DateTime<Utc>,
     #[serde(default = "now_utc")]
     pub refresh_expires_at: DateTime<Utc>,
+}
+
+fn default_app_context() -> String {
+    "hq".to_string()
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -951,11 +957,23 @@ pub struct Ocorrencia {
     pub fechado_em: String,
     #[serde(default)]
     pub token_acompanhamento: String,
+    #[serde(default = "default_origin_channel")]
+    pub origin_channel: String,
+    #[serde(default)]
+    pub public_status_text: String,
+    #[serde(default)]
+    pub technical_notes: String,
+    #[serde(default)]
+    pub assigned_worker_id: String,
     // ── Timestamps ──
     #[serde(default = "now_utc_string")]
     pub criado_em: String,
     #[serde(default = "now_utc_string")]
     pub atualizado_em: String,
+}
+
+fn default_origin_channel() -> String {
+    "hq".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1563,6 +1581,10 @@ impl AppStore {
                         resolvido_em: resolved_at,
                         fechado_em: String::new(),
                         token_acompanhamento: String::new(),
+                        origin_channel: "hq".to_string(),
+                        public_status_text: "Em analise".to_string(),
+                        technical_notes: String::new(),
+                        assigned_worker_id: String::new(),
                         criado_em: item.updated_at.clone(),
                         atualizado_em: item.updated_at.clone(),
                     }

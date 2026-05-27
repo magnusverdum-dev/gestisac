@@ -1,6 +1,6 @@
 import { $, component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
 import { EditIcon, MessageSquareIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, Trash2Icon } from 'lucide-qwik';
-import type { Canal, Ocorrencia, OcorrenciaStatus, Prioridade, ResourceEndpoint, ResourceState } from '../../lib/api';
+import type { AppContext, Canal, Ocorrencia, OcorrenciaStatus, Prioridade, ResourceEndpoint, ResourceState } from '../../lib/api';
 import {
   condominiumPath,
   entityPath,
@@ -11,6 +11,7 @@ import { EntityAction } from '../common/EntityAction';
 import { criarComentario, transitarStatus } from '../../lib/api/ocorrencias';
 
 type TicketsPageProps = {
+  appContext: AppContext;
   resources: ResourceState;
   isSaving: boolean;
   token: string;
@@ -61,6 +62,9 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
   const commentVisibility = useSignal<'interno' | 'publico'>('interno');
   const pageError = useSignal('');
   const transitioningId = useSignal('');
+  const isClientContext = props.appContext === 'client';
+  const isWorkerContext = props.appContext === 'worker';
+  const isHqContext = props.appContext === 'hq';
 
   useTask$(({ track }) => {
     track(() => props.createIntentVersion);
@@ -98,6 +102,13 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
   const normalizedSearch = search.value.trim().toLowerCase();
 
   const filtered = props.resources.ocorrencias.filter((oc) => {
+    if (isClientContext && oc.tipo !== 'avaria') return false;
+    if (isWorkerContext) {
+      const assigned = (oc.assignedWorkerId || oc.atribuidoA || '').toLowerCase();
+      if (!assigned.includes('worker') && !assigned.includes('tecnico') && !assigned.includes('funcionario')) {
+        return false;
+      }
+    }
     if (condominiumFiltro.value !== 'Geral') {
       const targetId = condominiumNameToId[condominiumFiltro.value] || condominiumFiltro.value;
       if (oc.condominiumId !== targetId) return false;
@@ -129,20 +140,22 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
         <div>
           <span class="page-eyebrow">GESTISAC - CMT</span>
           <h1>Ocorrências</h1>
-          <p>Gestão de avarias, pedidos e reclamações com prioridades, estado e responsável.</p>
+          <p>{isClientContext ? 'Reportar avarias e acompanhar estado.' : isWorkerContext ? 'Avarias atribuídas para execução técnica.' : 'Gestão central de avarias, pedidos e atribuição.'}</p>
         </div>
-        <button
-          type="button"
-          class="primary-action action-with-icon"
-          onClick$={() => {
-            pageError.value = '';
-            isCreating.value = true;
-            editingId.value = '';
-          }}
-        >
-          <PlusIcon size={16} />
-          Nova ocorrência
-        </button>
+        {!isWorkerContext ? (
+          <button
+            type="button"
+            class="primary-action action-with-icon"
+            onClick$={() => {
+              pageError.value = '';
+              isCreating.value = true;
+              editingId.value = '';
+            }}
+          >
+            <PlusIcon size={16} />
+            {isClientContext ? 'Reportar avaria' : 'Nova ocorrência'}
+          </button>
+        ) : null}
       </header>
 
       {pageError.value ? <div class="app-error glass-panel">{pageError.value}</div> : null}
@@ -212,10 +225,12 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                 </button>
                 <details class="simple-more-menu">
                   <summary><MoreHorizontalIcon size={16} /></summary>
-                  <button type="button" onClick$={() => { editingId.value = oc.id; isCreating.value = false; }}>
-                    <EditIcon size={14} /> Editar
-                  </button>
-                  {TRANSICOES[oc.status]?.length ? TRANSICOES[oc.status].map((dest) => (
+                  {isHqContext ? (
+                    <button type="button" onClick$={() => { editingId.value = oc.id; isCreating.value = false; }}>
+                      <EditIcon size={14} /> Editar
+                    </button>
+                  ) : null}
+                  {(isHqContext ? TRANSICOES[oc.status] : allowedTransitionsForContext(props.appContext, oc.status))?.length ? (isHqContext ? TRANSICOES[oc.status] : allowedTransitionsForContext(props.appContext, oc.status)).map((dest) => (
                     <button key={dest} type="button" disabled={transitioningId.value === oc.id} onClick$={async () => {
                       if (!props.token) return;
                       transitioningId.value = oc.id;
@@ -232,14 +247,16 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                       {acaoTransicao(dest)}
                     </button>
                   )) : null}
-                  <button type="button" class="danger-action" onClick$={async () => {
-                    if (confirm(`Apagar ${oc.titulo}?`)) {
-                      await props.onDelete$('ocorrencias', oc.id);
-                      selectedId.value = '';
-                    }
-                  }}>
-                    <Trash2Icon size={14} /> Apagar
-                  </button>
+                  {isHqContext ? (
+                    <button type="button" class="danger-action" onClick$={async () => {
+                      if (confirm(`Apagar ${oc.titulo}?`)) {
+                        await props.onDelete$('ocorrencias', oc.id);
+                        selectedId.value = '';
+                      }
+                    }}>
+                      <Trash2Icon size={14} /> Apagar
+                    </button>
+                  ) : null}
                 </details>
               </article>
             )) : (
@@ -260,9 +277,11 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                       {selected.custoEstimado ? <small> Custo estimado: {selected.custoEstimado}€</small> : null}
                     </p>
                   </div>
-                  <button type="button" class="secondary-action" onClick$={() => { editingId.value = selected.id; isCreating.value = false; }}>
-                    Editar
-                  </button>
+                  {isHqContext ? (
+                    <button type="button" class="secondary-action" onClick$={() => { editingId.value = selected.id; isCreating.value = false; }}>
+                      Editar
+                    </button>
+                  ) : null}
                 </div>
 
                 <div class="detail-kv-grid">
@@ -271,9 +290,9 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                     <strong>{selected.requisitanteNome || 'Por definir'}</strong>
                     <small>{selected.requisitanteEmail || selected.requisitanteTelefone || selected.canal || 'Sem contacto'}</small>
                   </article>
-                  <EntityAction class="detail-link-card" path={selected.atribuidoA ? entityPath('profile', `perfil-${selected.atribuidoA}`) : ''} navigate$={props.navigate$}>
+                  <EntityAction class="detail-link-card" path={(selected.assignedWorkerId || selected.atribuidoA) ? entityPath('profile', `perfil-${selected.assignedWorkerId || selected.atribuidoA}`) : ''} navigate$={props.navigate$}>
                     <span>Atribuído a</span>
-                    <strong>{selected.atribuidoA || 'Por atribuir'}</strong>
+                    <strong>{selected.assignedWorkerId || selected.atribuidoA || 'Por atribuir'}</strong>
                     <small>{selected.categoria || 'Sem categoria'}</small>
                   </EntityAction>
                   <article>
@@ -295,7 +314,13 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                   Abrir condomínio: {selected.condominiumId || 'Geral'}
                 </EntityAction>
 
-                <p>{selected.descricao}</p>
+                <p>{isClientContext ? (selected.publicStatusText || selected.descricao) : selected.descricao}</p>
+                {!isClientContext && selected.technicalNotes ? (
+                  <div class="ops-history">
+                    <strong>Notas técnicas</strong>
+                    <p>{selected.technicalNotes}</p>
+                  </div>
+                ) : null}
 
                 {selected.tags?.length ? <div class="calendar-badges">{selected.tags.map((tag) => <span key={tag}>{tag}</span>)}</div> : null}
 
@@ -385,8 +410,9 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
         </div>
       </section>
 
-      {isCreating.value || editingOcorrencia ? (
+      {(isCreating.value || editingOcorrencia) && !isWorkerContext ? (
         <OcorrenciaForm
+          appContext={props.appContext}
           ocorrencia={editingOcorrencia}
           condominiumOptions={condominiumOptions}
           isSaving={props.isSaving}
@@ -412,6 +438,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
 });
 
 const OcorrenciaForm = component$((props: {
+  appContext: AppContext;
   ocorrencia?: Ocorrencia;
   condominiumOptions: string[];
   isSaving: boolean;
@@ -430,7 +457,7 @@ const OcorrenciaForm = component$((props: {
       preventdefault:submit
       onSubmit$={async (event) => {
         const form = event.target as HTMLFormElement;
-        await props.onSubmit$(payloadFromForm(form, props.ocorrencia));
+        await props.onSubmit$(payloadFromForm(form, props.ocorrencia, props.appContext));
       }}
     >
       <div class="ops-form-grid">
@@ -465,6 +492,7 @@ const OcorrenciaForm = component$((props: {
         <label>Email<input name="requisitanteEmail" value={props.ocorrencia?.requisitanteEmail ?? ''} placeholder="morador@example.pt" /></label>
         <label>Telefone<input name="requisitanteTelefone" value={props.ocorrencia?.requisitanteTelefone ?? ''} placeholder="+351 900 000 000" /></label>
         <label>Atribuído a<input name="atribuidoA" value={props.ocorrencia?.atribuidoA ?? ''} placeholder="João Silva" /></label>
+        <label>Worker ID<input name="assignedWorkerId" value={props.ocorrencia?.assignedWorkerId ?? ''} placeholder="worker-demo-1" /></label>
         <label>Bloco<input name="blocoId" value={props.ocorrencia?.blocoId ?? ''} placeholder="A" /></label>
         <label>Piso<input name="pisoId" value={props.ocorrencia?.pisoId ?? ''} placeholder="3" /></label>
         <label>Zona<input name="zonaId" value={props.ocorrencia?.zonaId ?? ''} placeholder="Entrada nascente" /></label>
@@ -473,6 +501,8 @@ const OcorrenciaForm = component$((props: {
         <label>Fornecedor<input name="fornecedorId" value={props.ocorrencia?.fornecedorId ?? ''} placeholder="Fornecedor" /></label>
         <label>Contrato<input name="referenciaContrato" value={props.ocorrencia?.referenciaContrato ?? ''} placeholder="CT-2024-001" /></label>
         <label>Tags<input name="tags" value={props.ocorrencia?.tags?.join(', ') ?? ''} placeholder="elevador, urgente" /></label>
+        <label>Estado público<input name="publicStatusText" value={props.ocorrencia?.publicStatusText ?? ''} placeholder="Avaria recebida e em análise" /></label>
+        <label class="wide">Notas técnicas<textarea name="technicalNotes" value={props.ocorrencia?.technicalNotes ?? ''} placeholder="Notas internas para HQ/Funcionários" /></label>
         <label class="wide">Descrição<textarea name="descricao" value={props.ocorrencia?.descricao ?? ''} placeholder="Descrição operacional" /></label>
       </div>
       <div class="simple-header-actions">
@@ -482,11 +512,12 @@ const OcorrenciaForm = component$((props: {
   </section>
 ));
 
-function payloadFromForm(form: HTMLFormElement, current?: Ocorrencia): Record<string, unknown> {
+function payloadFromForm(form: HTMLFormElement, current?: Ocorrencia, appContext: AppContext = 'hq'): Record<string, unknown> {
   const data = new FormData(form);
+  const isClient = appContext === 'client';
   return {
     titulo: stringField(data, 'titulo'),
-    tipo: stringField(data, 'tipo') || 'avaria',
+    tipo: isClient ? 'avaria' : (stringField(data, 'tipo') || 'avaria'),
     condominiumId: stringField(data, 'condominiumId'),
     prioridade: stringField(data, 'prioridade') || 'normal',
     impacto: stringField(data, 'impacto') || 'medio',
@@ -498,6 +529,7 @@ function payloadFromForm(form: HTMLFormElement, current?: Ocorrencia): Record<st
     requisitanteEmail: stringField(data, 'requisitanteEmail'),
     requisitanteTelefone: stringField(data, 'requisitanteTelefone'),
     atribuidoA: stringField(data, 'atribuidoA'),
+    assignedWorkerId: stringField(data, 'assignedWorkerId'),
     blocoId: stringField(data, 'blocoId'),
     pisoId: stringField(data, 'pisoId'),
     zonaId: stringField(data, 'zonaId'),
@@ -506,6 +538,9 @@ function payloadFromForm(form: HTMLFormElement, current?: Ocorrencia): Record<st
     fornecedorId: stringField(data, 'fornecedorId'),
     referenciaContrato: stringField(data, 'referenciaContrato'),
     descricao: stringField(data, 'descricao'),
+    publicStatusText: stringField(data, 'publicStatusText') || (isClient ? 'Avaria recebida' : ''),
+    technicalNotes: stringField(data, 'technicalNotes'),
+    originChannel: appContext,
     tags: splitList(stringField(data, 'tags'))
   };
 }
@@ -580,4 +615,26 @@ function acaoTransicao(dest: OcorrenciaStatus): string {
     reaberta: 'Reabrir'
   };
   return m[dest] || dest;
+}
+
+function allowedTransitionsForContext(context: AppContext, status: OcorrenciaStatus): OcorrenciaStatus[] {
+  if (context === 'worker') {
+    if (status === 'emTriagem' || status === 'aguardaPecas' || status === 'pendente' || status === 'reaberta') {
+      return ['emCurso'];
+    }
+    if (status === 'emCurso') {
+      return ['resolvida'];
+    }
+    return [];
+  }
+  if (context === 'client') {
+    if (status === 'resolvida') {
+      return ['fechada', 'reaberta'];
+    }
+    if (status === 'fechada') {
+      return ['reaberta'];
+    }
+    return [];
+  }
+  return TRANSICOES[status] ?? [];
 }

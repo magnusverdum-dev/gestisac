@@ -4,6 +4,7 @@ export type {
   AccountingSummary,
   AlertItem,
   ApiStatus,
+  AppContext,
   Assembly,
   AuditLogEntry,
   Building,
@@ -73,6 +74,7 @@ export type {
 
 export {
   SESSION_EXPIRES_KEY,
+  SESSION_APP_CONTEXT_KEY,
   SESSION_REFRESH_KEY,
   SESSION_TOKEN_KEY,
   getApiHealth,

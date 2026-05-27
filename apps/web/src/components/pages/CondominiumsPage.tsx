@@ -140,7 +140,11 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
     const matchesSearch = !search.value.trim() || haystack.includes(search.value.trim().toLowerCase());
     const matchesStatus =
       statusFilter.value === 'todos' || item.status?.toLowerCase() === statusFilter.value;
-    return matchesSearch && matchesStatus && !item.archived;
+    return (
+      matchesSearch &&
+      matchesStatus &&
+      !item.archived
+    );
   });
   const activeCount = props.resources.condominiums.filter((item) => !item.archived).length;
   const relatedTickets = props.resources.tickets.filter((ticket) =>
@@ -201,6 +205,15 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
 
   const submitQuickCreate$ = $(async (form: HTMLFormElement) => {
     const formData = new FormData(form);
+    const selectedTemplates = formData
+      .getAll('presetEquipment')
+      .map((entry) => String(entry).trim())
+      .filter(Boolean);
+    const customEquipment = String(formData.get('otherEquipment') ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const equipmentToCreate = [...selectedTemplates, ...customEquipment];
     localSaving.value = true;
     localError.value = '';
     localNotice.value = '';
@@ -219,8 +232,18 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
       await props.onRefresh$();
       if (id) {
         selectedId.value = id;
+        for (const equipmentName of equipmentToCreate) {
+          await createCondominiumSubresource(props.token, id, 'equipment', {
+            name: equipmentName,
+            equipmentType: equipmentName,
+            status: 'operacional',
+            criticality: 'media'
+          });
+        }
       }
-      localNotice.value = 'Condominio criado em onboarding.';
+      localNotice.value = equipmentToCreate.length
+        ? `Condominio criado com ${equipmentToCreate.length} equipamentos genericos.`
+        : 'Condominio criado em onboarding.';
       form.reset();
     } catch (err) {
       localError.value = err instanceof Error ? err.message : 'Nao foi possivel criar condominio';
@@ -592,7 +615,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                 </div>
                 <div class="simple-header-actions">
                   <button
-                    class="primary-action"
+                    class="primary-action condo-cta-secondary"
                     type="button"
                     onClick$={() => {
                       search.value = contextName;
@@ -601,7 +624,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                     Extrato de Conta
                   </button>
                   <button
-                    class="primary-action"
+                    class="primary-action condo-cta-main"
                     type="button"
                     onClick$={() => {
                       creationOpen.value = !creationOpen.value;
@@ -645,6 +668,21 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                     <Field name="condominiumType" label="Tipo" value="residencial" />
                     <Field name="status" label="Estado" value="em onboarding" />
                   </div>
+                  <fieldset class="condo-equipment-presets">
+                    <legend>Equipamentos base (predefinidos)</legend>
+                    <label><input type="checkbox" name="presetEquipment" value="Elevador" /> Elevador</label>
+                    <label><input type="checkbox" name="presetEquipment" value="Portao garagem" /> Portao garagem</label>
+                    <label><input type="checkbox" name="presetEquipment" value="Bomba de agua" /> Bomba de agua</label>
+                    <label><input type="checkbox" name="presetEquipment" value="CCTV" /> CCTV</label>
+                    <label><input type="checkbox" name="presetEquipment" value="Intercomunicador" /> Intercomunicador</label>
+                    <label><input type="checkbox" name="presetEquipment" value="Detecao incendio" /> Deteccao incendio</label>
+                    <label><input type="checkbox" name="presetEquipment" value="Iluminacao emergencia" /> Iluminacao emergencia</label>
+                    <label><input type="checkbox" name="presetEquipment" value="Gerador" /> Gerador</label>
+                  </fieldset>
+                  <label class="condo-other-equipment">
+                    <span>Outros (separados por virgula)</span>
+                    <input name="otherEquipment" placeholder="Ex: Painel solar, Sistema de rega" />
+                  </label>
                   <button class="primary-action" type="submit" disabled={props.isSaving || localSaving.value}>
                     Criar
                   </button>
@@ -674,7 +712,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                 </form>
               ) : null}
 
-              <div class="simple-search-row">
+              <div class="simple-search-row condo-filter-grid">
                 <input
                   value={search.value}
                   placeholder="Pesquisar por nome, codigo, rua ou gestor..."
@@ -688,6 +726,9 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   <option value="arquivo">Arquivo</option>
                 </select>
               </div>
+              <small class="condo-helper-note">
+                Para gerir equipamentos: abre o condominio e entra na aba <strong>Equipamentos</strong>.
+              </small>
 
               <section class="simple-detail-panel compact">
                 <strong>Extrato de Conta dos utilizadores</strong>
@@ -717,11 +758,23 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                     <small>{localCompleteness(item).percentage}% completo</small>
                     <div class="simple-card-actions">
                       <button
-                        class="primary-action"
+                        class="primary-action condo-cta-main"
                         type="button"
                         onClick$={() => props.navigate$(entityPath('condominium', item.id))}
                       >
                         Abrir
+                      </button>
+                      <button
+                        class="primary-action condo-cta-secondary"
+                        type="button"
+                        onClick$={() => {
+                          selectedId.value = item.id;
+                          contextId.value = item.id;
+                          detailOpen.value = true;
+                          activeTab.value = 'equipment';
+                        }}
+                      >
+                        Gerir equipamentos
                       </button>
                       <details class="simple-more-menu">
                         <summary>Mais</summary>

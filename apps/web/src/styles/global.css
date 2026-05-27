@@ -2767,6 +2767,38 @@ kbd {
   }
 }
 
+.ecosystem-entry {
+  max-width: 980px;
+}
+
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.entry-card {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  min-height: 140px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  background: rgba(15, 23, 42, 0.7);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.entry-card strong {
+  font-size: 18px;
+}
+
+.entry-card span {
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
 @media (max-width: 760px) {
   body {
     background:
@@ -3402,8 +3434,69 @@ kbd {
 
 .simple-search-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
+}
+
+.simple-search-row input {
+  grid-column: 1 / -1;
+}
+
+.condo-filter-grid {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(3, 7, 18, 0.18);
+}
+
+.condo-cta-main {
+  min-width: 180px;
+  min-height: 46px;
+  font-weight: 800;
+}
+
+.condo-cta-secondary {
+  min-height: 46px;
+  border-color: rgba(75, 163, 255, 0.26);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(75, 163, 255, 0.18), transparent 8rem),
+    rgba(47, 125, 246, 0.1);
+}
+
+.condo-helper-note {
+  display: block;
+  color: #93c5fd;
+  font-size: 12px;
+}
+
+.condo-equipment-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 12px;
+  margin: 4px 0 0;
+  padding: 10px 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+}
+
+.condo-equipment-presets legend {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 6px;
+}
+
+.condo-equipment-presets label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.condo-other-equipment {
+  display: grid;
+  gap: 6px;
 }
 
 .simple-search-row input,

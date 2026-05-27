@@ -1,17 +1,25 @@
 import { component$, type PropFunction } from '@builder.io/qwik';
-import type { ApiStatus } from '../../lib/api';
+import type { ApiStatus, AppContext } from '../../lib/api';
 import { PwaInstallPanel } from '../dashboard/PwaInstallPanel';
 
 type LoginPageProps = {
   apiStatus: ApiStatus;
   error: string;
   isLoading: boolean;
-  onLogin$: PropFunction<(email: string, password: string) => void>;
+  appContext: AppContext;
+  onLogin$: PropFunction<(email: string, password: string, appContext: AppContext) => void>;
 };
 
 export const LoginPage = component$((props: LoginPageProps) => {
   const demoEmail = 'admin@gestisac.pt';
   const demoPassword = 'Gestisac2026!';
+
+  const appLabel =
+    props.appContext === 'worker'
+      ? 'App Funcionarios'
+      : props.appContext === 'client'
+        ? 'App Clientes'
+        : 'GESTISAC HQ';
 
   return (
     <main class="login-screen">
@@ -26,7 +34,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
           </div>
           <div>
             <strong>GESTISAC</strong>
-            <small>Gestao de Condominios</small>
+            <small>{appLabel}</small>
           </div>
         </div>
 
@@ -34,8 +42,8 @@ export const LoginPage = component$((props: LoginPageProps) => {
           <span class={`system-status ${props.apiStatus}`}>
             {props.apiStatus === 'online' ? 'API Rust online' : 'A ligar ao backend'}
           </span>
-          <h1>Entrar na plataforma</h1>
-          <p>Ambiente de teste preparado com conta de administrador.</p>
+          <h1>Entrar</h1>
+          <p>Autenticacao de teste para demonstracao do ecossistema.</p>
         </div>
 
         <form
@@ -46,7 +54,8 @@ export const LoginPage = component$((props: LoginPageProps) => {
             const formData = new FormData(form);
             props.onLogin$(
               String(formData.get('email') ?? ''),
-              String(formData.get('password') ?? '')
+              String(formData.get('password') ?? ''),
+              props.appContext
             );
           }}
         >
@@ -78,6 +87,14 @@ export const LoginPage = component$((props: LoginPageProps) => {
 
           <button class="primary-action" type="submit" disabled={props.isLoading}>
             {props.isLoading ? 'A entrar...' : 'Entrar'}
+          </button>
+          <button
+            class="secondary-action"
+            type="button"
+            disabled={props.isLoading}
+            onClick$={() => props.onLogin$(demoEmail, demoPassword, props.appContext)}
+          >
+            Entrar rapido (demo)
           </button>
         </form>
 

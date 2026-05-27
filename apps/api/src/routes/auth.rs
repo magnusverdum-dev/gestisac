@@ -20,6 +20,8 @@ use serde::{Deserialize, Serialize};
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+    #[serde(default)]
+    pub app_context: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -29,12 +31,15 @@ pub struct AuthResponse {
     pub refresh_token: String,
     pub expires_at: String,
     pub user: PublicUser,
+    pub app_context: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RefreshRequest {
     pub refresh_token: String,
+    #[serde(default)]
+    pub app_context: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -101,6 +106,7 @@ pub async fn login(
         user_id: user.id.clone(),
         tenant_id: user.tenant_id.clone(),
         active_condominium: active_condominium.clone(),
+        app_context: normalize_app_context(&input.app_context),
         created_at: now,
         expires_at,
         refresh_expires_at,
@@ -118,6 +124,7 @@ pub async fn login(
         refresh_token,
         expires_at: expires_at.to_rfc3339(),
         user: public_user,
+        app_context: normalize_app_context(&input.app_context),
     }))
 }
 
@@ -157,6 +164,11 @@ pub async fn refresh(
         user_id: user.id.clone(),
         tenant_id: current_session.tenant_id,
         active_condominium: current_session.active_condominium,
+        app_context: if input.app_context.trim().is_empty() {
+            current_session.app_context.clone()
+        } else {
+            normalize_app_context(&input.app_context)
+        },
         created_at: now,
         expires_at,
         refresh_expires_at,
@@ -166,6 +178,7 @@ pub async fn refresh(
         .public_user(&user.id)
         .ok_or_else(|| ApiError::internal("Utilizador autenticado nao encontrado"))?;
     public_user.active_condominium = store.sessions[session_index].active_condominium.clone();
+    let response_app_context = store.sessions[session_index].app_context.clone();
     drop(store);
     persist(&state).await?;
 
@@ -174,6 +187,7 @@ pub async fn refresh(
         refresh_token,
         expires_at: expires_at.to_rfc3339(),
         user: public_user,
+        app_context: response_app_context,
     }))
 }
 
@@ -269,6 +283,14 @@ pub async fn current_context(
         active_condominium: session.active_condominium.clone(),
         user,
     })
+}
+
+fn normalize_app_context(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
+        "worker" => "worker".to_string(),
+        "client" => "client".to_string(),
+        _ => "hq".to_string(),
+    }
 }
 
 pub async fn require_write(
