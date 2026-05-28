@@ -529,6 +529,9 @@ function linkedPathForEvent(event: CalendarEvent): string {
   if (normalized.includes('maintenance') || normalized.includes('manutencao')) {
     return entityPath('maintenance', event.linkedEntityId);
   }
+  if (normalized.includes('inspection') || normalized.includes('vistoria')) {
+    return entityPath('inspection', event.linkedEntityId);
+  }
   if (normalized.includes('document')) {
     return entityPath('document', event.linkedEntityId);
   }

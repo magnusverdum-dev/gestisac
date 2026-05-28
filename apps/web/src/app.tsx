@@ -6,6 +6,7 @@ import { CalendarPage } from './components/pages/CalendarPage';
 import { CondominiumsPage, type CondoAreaId } from './components/pages/CondominiumsPage';
 import { DocumentsPage } from './components/pages/DocumentsPage';
 import { EntityDetailPage } from './components/pages/EntityDetailPage';
+import { InspectionsPage } from './components/pages/InspectionsPage';
 import { MaintenancePage } from './components/pages/MaintenancePage';
 import { PageOverview } from './components/pages/PageOverview';
 import { TicketsPage } from './components/pages/TicketsPage';
@@ -74,6 +75,12 @@ const parseRouteContext = (rawPath: string): { appContext: AppContext; path: str
     return { appContext, path, showEntry: false };
   }
   return { appContext: 'hq', path: normalizeInnerPath(pathname), showEntry: false };
+};
+
+const hasExplicitAppContext = (rawPath: string): boolean => {
+  const [pathname = '/'] = rawPath.split('?', 1);
+  const first = pathname.split('/').filter(Boolean)[0] ?? '';
+  return first === 'hq' || first === 'worker' || first === 'client';
 };
 
 const buildAppPath = (appContext: AppContext, innerPath: string) => {
@@ -228,12 +235,15 @@ export const App = component$(() => {
 
   const logout$ = $(async () => {
     const token = session.token;
+    const context = appContext.value;
     notice.value = '';
     error.value = '';
     session.token = '';
     session.user = null;
-    session.appContext = 'hq';
-    appContext.value = 'hq';
+    session.appContext = context;
+    appContext.value = context;
+    currentPath.value = '/login';
+    showEntry.value = false;
     dashboard.value = fallbackDashboard;
     resources.value = emptyResources;
     pageCache.value = buildPages(emptyResources, fallbackDashboard);
@@ -245,6 +255,7 @@ export const App = component$(() => {
     if (token) {
       await logout(token).catch(() => undefined);
     }
+    window.history.replaceState({}, '', buildAppPath(context, '/login'));
   });
 
   const openCreateFor$ = $(async (path: string, resource: CreateResource) => {
@@ -532,6 +543,11 @@ export const App = component$(() => {
       const route = parseRouteContext(rawPath);
       showEntry.value = route.showEntry;
       appContext.value = route.appContext;
+      if (session.token && route.path === '/login') {
+        currentPath.value = '/dashboard';
+        window.history.replaceState({}, '', buildAppPath(route.appContext, '/dashboard'));
+        return;
+      }
       currentPath.value = route.path;
       condominiumShortcutArea.value =
         route.path === '/condominios' ? readCondominiumShortcutArea(rawPath) : '';
@@ -550,10 +566,16 @@ export const App = component$(() => {
       apiStatus.value = 'offline';
     }
 
+    const rawPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const route = parseRouteContext(rawPath);
     let storedToken = localStorage.getItem(SESSION_TOKEN_KEY);
-    const storedAppContext = normalizeAppContext(localStorage.getItem(SESSION_APP_CONTEXT_KEY) ?? 'hq');
+    const storedAppContext = hasExplicitAppContext(rawPath)
+      ? route.appContext
+      : normalizeAppContext(localStorage.getItem(SESSION_APP_CONTEXT_KEY) ?? 'hq');
     session.appContext = storedAppContext;
     appContext.value = storedAppContext;
+    currentPath.value = route.path;
+    showEntry.value = route.showEntry;
     const storedExpiry = localStorage.getItem(SESSION_EXPIRES_KEY);
     if (storedToken && storedExpiry && Date.parse(storedExpiry) <= Date.now() + 15_000) {
       localStorage.removeItem(SESSION_TOKEN_KEY);
@@ -576,6 +598,10 @@ export const App = component$(() => {
           localStorage.setItem(SESSION_EXPIRES_KEY, refreshed.expiresAt);
           localStorage.setItem(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
           await loadWorkspace$(refreshed.token);
+          if (route.path === '/login') {
+            currentPath.value = '/dashboard';
+            window.history.replaceState({}, '', buildAppPath(refreshed.appContext || storedAppContext, '/dashboard'));
+          }
         } catch {
           localStorage.removeItem(SESSION_REFRESH_KEY);
           localStorage.removeItem(SESSION_EXPIRES_KEY);
@@ -596,6 +622,10 @@ export const App = component$(() => {
       session.token = storedToken;
       session.user = current.user;
       await loadWorkspace$(storedToken);
+      if (route.path === '/login') {
+        currentPath.value = '/dashboard';
+        window.history.replaceState({}, '', buildAppPath(storedAppContext, '/dashboard'));
+      }
     } catch {
       const storedRefreshToken = localStorage.getItem(SESSION_REFRESH_KEY);
       if (storedRefreshToken) {
@@ -610,6 +640,10 @@ export const App = component$(() => {
           localStorage.setItem(SESSION_EXPIRES_KEY, refreshed.expiresAt);
           localStorage.setItem(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
           await loadWorkspace$(refreshed.token);
+          if (route.path === '/login') {
+            currentPath.value = '/dashboard';
+            window.history.replaceState({}, '', buildAppPath(refreshed.appContext || storedAppContext, '/dashboard'));
+          }
         } catch {
           localStorage.removeItem(SESSION_TOKEN_KEY);
           localStorage.removeItem(SESSION_REFRESH_KEY);
@@ -681,19 +715,43 @@ export const App = component$(() => {
       {error.value ? <div class="app-error glass-panel">{error.value}</div> : null}
       {notice.value ? <div class="app-success glass-panel">{notice.value}</div> : null}
       {isClientContext ? (
-        <TicketsPage
-          appContext={appContext.value}
-          resources={resources.value}
-          isSaving={isSaving.value}
-          token={session.token}
-          createIntentVersion={createIntent.path === '/tickets' ? createIntent.version : 0}
-          initialStatusGroup={route.kind === 'ticketStatus' ? route.group : ''}
-          initialPriority={route.kind === 'ticketPriority' ? route.priority : ''}
-          navigate$={navigate$}
-          onCreate$={createRecord$}
-          onUpdate$={updateRecord$}
-          onDelete$={deleteRecord$}
-        />
+        page.path === '/documentos' ? (
+          <DocumentsPage
+            page={page}
+            isSaving={isSaving.value}
+            isPreviewLoading={isPreviewLoading.value}
+            reportPreview={reportPreview.value}
+            documentPreview={documentPreview.value}
+            createIntentResource={createIntent.path === page.path ? createIntent.resource : ''}
+            createIntentVersion={createIntent.version}
+            navigate$={navigate$}
+            onCreate$={createRecord$}
+            onUpdate$={updateRecord$}
+            onDelete$={deleteRecord$}
+            onUploadDocument$={uploadDocument$}
+            onGenerateDocument$={generateDocument$}
+            onPreviewReport$={previewReport$}
+            onExportReport$={exportReport$}
+            onPreviewDocument$={previewDocument$}
+            onDownloadDocument$={downloadDocument$}
+            onCloseReportPreview$={closeReportPreview$}
+            onCloseDocumentPreview$={closeDocumentPreview$}
+          />
+        ) : (
+          <TicketsPage
+            appContext={appContext.value}
+            resources={resources.value}
+            isSaving={isSaving.value}
+            token={session.token}
+            createIntentVersion={createIntent.path === '/tickets' ? createIntent.version : 0}
+            initialStatusGroup={route.kind === 'ticketStatus' ? route.group : ''}
+            initialPriority={route.kind === 'ticketPriority' ? route.priority : ''}
+            navigate$={navigate$}
+            onCreate$={createRecord$}
+            onUpdate$={updateRecord$}
+            onDelete$={deleteRecord$}
+          />
+        )
       ) : isWorkerContext ? (
         page.path === '/manutencao' ? (
           <MaintenancePage
@@ -701,6 +759,27 @@ export const App = component$(() => {
             isSaving={isSaving.value}
             createIntentVersion={createIntent.path === page.path ? createIntent.version : 0}
             initialStatus={route.kind === 'maintenanceStatus' ? route.status : ''}
+            navigate$={navigate$}
+            onCreate$={createRecord$}
+            onUpdate$={updateRecord$}
+            onDelete$={deleteRecord$}
+          />
+        ) : page.path === '/vistorias' ? (
+          <InspectionsPage
+            appContext={appContext.value}
+            resources={resources.value}
+            isSaving={isSaving.value}
+            navigate$={navigate$}
+            onCreate$={createRecord$}
+            onUpdate$={updateRecord$}
+            onDelete$={deleteRecord$}
+            onGenerateDocument$={generateDocument$}
+          />
+        ) : page.path === '/calendario' ? (
+          <CalendarPage
+            resources={resources.value}
+            isSaving={isSaving.value}
+            initialType={route.kind === 'calendarType' ? route.eventType : ''}
             navigate$={navigate$}
             onCreate$={createRecord$}
             onUpdate$={updateRecord$}
@@ -777,6 +856,17 @@ export const App = component$(() => {
           onCreate$={createRecord$}
           onUpdate$={updateRecord$}
           onDelete$={deleteRecord$}
+        />
+      ) : page.path === '/vistorias' ? (
+        <InspectionsPage
+          appContext={appContext.value}
+          resources={resources.value}
+          isSaving={isSaving.value}
+          navigate$={navigate$}
+          onCreate$={createRecord$}
+          onUpdate$={updateRecord$}
+          onDelete$={deleteRecord$}
+          onGenerateDocument$={generateDocument$}
         />
       ) : page.path === '/documentos' ? (
         <DocumentsPage

@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-const DEMO_DATA: &str = include_str!("../../../mock/demo-data.json");
+const DEMO_DATA: &str = include_str!("../mock/demo-data.json");
 const DEFAULT_ADMIN_PASSWORD: &str = "Gestisac2026!";
 const SESSION_SECRET_PREFIX: &str = "sha256:";
 
@@ -131,6 +131,7 @@ impl AppState {
                     &tenant_id,
                     &snapshot.tickets,
                     &snapshot.maintenance,
+                    &snapshot.inspections,
                     &snapshot.calendar_events,
                     &snapshot.assemblies,
                 )
@@ -271,6 +272,7 @@ async fn hydrate_store_from_postgres(
         .context("failed to load operational snapshots from postgres")?;
     if operational_snapshot.tickets.is_empty()
         && operational_snapshot.maintenance.is_empty()
+        && operational_snapshot.inspections.is_empty()
         && operational_snapshot.calendar_events.is_empty()
         && operational_snapshot.assemblies.is_empty()
     {
@@ -279,6 +281,7 @@ async fn hydrate_store_from_postgres(
                 &tenant_id,
                 &store.tickets,
                 &store.maintenance,
+                &store.inspections,
                 &store.calendar_events,
                 &store.assemblies,
             )
@@ -287,6 +290,7 @@ async fn hydrate_store_from_postgres(
     } else {
         store.tickets = operational_snapshot.tickets;
         store.maintenance = operational_snapshot.maintenance;
+        store.inspections = operational_snapshot.inspections;
         store.calendar_events = operational_snapshot.calendar_events;
         store.assemblies = operational_snapshot.assemblies;
     }

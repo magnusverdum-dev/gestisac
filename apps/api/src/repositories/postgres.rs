@@ -1,7 +1,7 @@
 use crate::models::store::{
     AccountingPayment, Assembly, AuditLogEntry, CalendarEvent, Condominium, Debt, Document,
-    Expense, MaintenanceItem, Ocorrencia, OcorrenciaAnexo, OcorrenciaComentario, Quota, Receipt,
-    Report, ReserveFund, Session, Supplier, Tenant, Ticket, UserAccount,
+    Expense, Inspection, MaintenanceItem, Ocorrencia, OcorrenciaAnexo, OcorrenciaComentario, Quota,
+    Receipt, Report, ReserveFund, Session, Supplier, Tenant, Ticket, UserAccount,
 };
 use anyhow::Context;
 use chrono::Utc;
@@ -34,6 +34,7 @@ pub struct IdentitySnapshot {
 pub struct OperationalSnapshot {
     pub tickets: Vec<Ticket>,
     pub maintenance: Vec<MaintenanceItem>,
+    pub inspections: Vec<Inspection>,
     pub calendar_events: Vec<CalendarEvent>,
     pub assemblies: Vec<Assembly>,
 }
@@ -674,6 +675,19 @@ impl PostgresRepository {
         .await
         .context("failed to load maintenance snapshots from postgres")?;
 
+        let inspection_rows: Vec<SnapshotRow> = sqlx::query_as(
+            r#"
+            SELECT payload
+            FROM inspection_snapshots
+            WHERE tenant_id = $1
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to load inspection snapshots from postgres")?;
+
         let calendar_rows: Vec<SnapshotRow> = sqlx::query_as(
             r#"
             SELECT payload
@@ -716,6 +730,14 @@ impl PostgresRepository {
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
+        let inspections = inspection_rows
+            .into_iter()
+            .map(|row| {
+                serde_json::from_value::<Inspection>(row.payload)
+                    .context("failed to decode inspection snapshot payload")
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
         let calendar_events = calendar_rows
             .into_iter()
             .map(|row| {
@@ -735,6 +757,7 @@ impl PostgresRepository {
         Ok(OperationalSnapshot {
             tickets,
             maintenance,
+            inspections,
             calendar_events,
             assemblies,
         })
@@ -745,6 +768,7 @@ impl PostgresRepository {
         tenant_id: &str,
         tickets: &[Ticket],
         maintenance: &[MaintenanceItem],
+        inspections: &[Inspection],
         calendar_events: &[CalendarEvent],
         assemblies: &[Assembly],
     ) -> anyhow::Result<()> {
@@ -764,6 +788,11 @@ impl PostgresRepository {
             .execute(&mut *tx)
             .await
             .context("failed to clear maintenance snapshots in postgres")?;
+        sqlx::query("DELETE FROM inspection_snapshots WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .context("failed to clear inspection snapshots in postgres")?;
         sqlx::query("DELETE FROM calendar_event_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
@@ -832,6 +861,36 @@ impl PostgresRepository {
                 format!(
                     "failed to persist maintenance snapshot {} in postgres",
                     item.id
+                )
+            })?;
+        }
+
+        for inspection in inspections {
+            let payload = serde_json::to_value(inspection)
+                .context("failed to encode inspection payload for postgres")?;
+            sqlx::query(
+                r#"
+                INSERT INTO inspection_snapshots
+                    (id, tenant_id, status, required_date, condominium,
+                     payload, created_at, updated_at)
+                VALUES
+                    ($1, $2, $3, $4, $5, $6, $7, $8)
+                "#,
+            )
+            .bind(&inspection.id)
+            .bind(tenant_id)
+            .bind(&inspection.status)
+            .bind(&inspection.required_date)
+            .bind(&inspection.condominium)
+            .bind(payload)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to persist inspection snapshot {} in postgres",
+                    inspection.id
                 )
             })?;
         }

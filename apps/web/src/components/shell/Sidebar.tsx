@@ -14,7 +14,7 @@ export const Sidebar = component$((props: SidebarProps) => {
   const navItems = navPages.filter((page) => {
     if (props.appContext === 'hq') return true;
     if (props.appContext === 'worker') {
-      return ['/dashboard', '/tickets', '/manutencao', '/calendario'].includes(page.path);
+      return ['/dashboard', '/tickets', '/manutencao', '/calendario', '/vistorias'].includes(page.path);
     }
     return ['/dashboard', '/tickets', '/documentos'].includes(page.path);
   });

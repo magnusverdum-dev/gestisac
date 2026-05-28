@@ -38,6 +38,13 @@ export function buildGlobalSearchResults(resources: ResourceState): GlobalSearch
       path: entityPath('maintenance', item.id),
       tone: 'gold'
     })),
+    ...resources.inspections.map((item) => ({
+      id: `inspection-${item.id}`,
+      title: item.title,
+      detail: `${item.condominium || 'Geral'} - ${item.status} - ${item.requiredDate}`,
+      path: entityPath('inspection', item.id),
+      tone: 'blue'
+    })),
     ...resources.calendarEvents.map((item) => ({
       id: `calendar-${item.id}`,
       title: item.title,

@@ -1,0 +1,10 @@
+apps/api/target
+**/target
+node_modules
+**/*.log
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.mp4
+**/*.zip
+mock

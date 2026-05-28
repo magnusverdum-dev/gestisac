@@ -523,6 +523,7 @@ export type GenerateDocumentPayload = {
   resident?: string;
   fraction?: string;
   notes?: string;
+  inspectionId?: string;
   format?: 'pdf' | 'txt';
 };
 
@@ -572,6 +573,23 @@ export type MaintenanceItem = {
   completedAt?: string;
   costEstimate?: string;
   notes?: string;
+};
+
+export type InspectionItem = {
+  id: string;
+  title: string;
+  condominium: string;
+  location: string;
+  requiredDate: string;
+  status: string;
+  result: string;
+  checklist: string[];
+  workerNotes: string;
+  hqNotes: string;
+  submittedAt: string;
+  confirmedAt: string;
+  confirmedBy: string;
+  calendarEventId: string;
 };
 
 export type CalendarEvent = {
@@ -840,6 +858,7 @@ export type ResourceState = {
   documents: DocumentItem[];
   reports: Report[];
   maintenance: MaintenanceItem[];
+  inspections: InspectionItem[];
   calendarEvents: CalendarEvent[];
   assemblies: Assembly[];
   accounting: AccountingState;
@@ -875,6 +894,7 @@ export type CreateResource =
   | 'reports'
   | 'assemblies'
   | 'maintenance'
+  | 'inspections'
   | 'calendar-events'
   | 'accounting/quotas'
   | 'accounting/payments'

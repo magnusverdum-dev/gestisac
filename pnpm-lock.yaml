@@ -6,7 +6,7 @@ settings:
 
 overrides:
   esbuild: 0.25.12
-  vite: 5.4.14
+  vite: 6.4.2
 
 importers:
 
@@ -22,10 +22,10 @@ importers:
     dependencies:
       '@builder.io/qwik':
         specifier: ^1.20.0
-        version: 1.20.0(vite@5.4.14(@types/node@20.19.41))
+        version: 1.20.0(vite@6.4.2(@types/node@20.19.41)(jiti@1.21.7))
       '@builder.io/qwik-city':
         specifier: ^1.20.0
-        version: 1.20.0(@types/node@20.19.41)(rollup@4.60.3)(typescript@5.9.3)
+        version: 1.20.0(@types/node@20.19.41)(jiti@1.21.7)(rollup@4.60.3)(typescript@5.9.3)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -55,11 +55,11 @@ importers:
         specifier: ^5.4.5
         version: 5.9.3
       vite:
-        specifier: 5.4.14
-        version: 5.4.14(@types/node@20.19.41)
+        specifier: 6.4.2
+        version: 6.4.2(@types/node@20.19.41)(jiti@1.21.7)
       vite-tsconfig-paths:
         specifier: ^4.3.2
-        version: 4.3.2(typescript@5.9.3)(vite@5.4.14(@types/node@20.19.41))
+        version: 4.3.2(typescript@5.9.3)(vite@6.4.2(@types/node@20.19.41)(jiti@1.21.7))
 
   packages/config: {}
 
@@ -86,7 +86,7 @@ packages:
     engines: {node: '>=16.8.0 <18.0.0 || >=18.11'}
     hasBin: true
     peerDependencies:
-      vite: 5.4.14
+      vite: 6.4.2
 
   '@dimforge/rapier3d-compat@0.12.0':
     resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
@@ -1497,26 +1497,31 @@ packages:
   vite-tsconfig-paths@4.3.2:
     resolution: {integrity: sha512-0Vd/a6po6Q+86rPlntHye7F31zA2URZMbH8M3saAZ/xR9QoGN/L21bxEGfXdWmFdNkqPpRdxFT7nmNe12e9/uA==}
     peerDependencies:
-      vite: 5.4.14
+      vite: 6.4.2
     peerDependenciesMeta:
       vite:
         optional: true
 
-  vite@5.4.14:
-    resolution: {integrity: sha512-EK5cY7Q1D8JNhSaPKVK4pwBFvaTmZxEnoKXLG/U9gmdDcihQGNzFlgIvaxezFR4glP1LsuiedwMBqCXH3wZccA==}
-    engines: {node: ^18.0.0 || >=20.0.0}
+  vite@6.4.2:
+    resolution: {integrity: sha512-2N/55r4JDJ4gdrCvGgINMy+HH3iRpNIz8K6SFwVsA+JbQScLiC+clmAxBgwiSPgcG9U15QmvqCGWzMbqda5zGQ==}
+    engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
-      '@types/node': ^18.0.0 || >=20.0.0
+      '@types/node': ^18.0.0 || ^20.0.0 || >=22.0.0
+      jiti: '>=1.21.0'
       less: '*'
       lightningcss: ^1.21.0
       sass: '*'
       sass-embedded: '*'
       stylus: '*'
       sugarss: '*'
-      terser: ^5.4.0
+      terser: ^5.16.0
+      tsx: ^4.8.1
+      yaml: ^2.4.2
     peerDependenciesMeta:
       '@types/node':
+        optional: true
+      jiti:
         optional: true
       less:
         optional: true
@@ -1531,6 +1536,10 @@ packages:
       sugarss:
         optional: true
       terser:
+        optional: true
+      tsx:
+        optional: true
+      yaml:
         optional: true
 
   wrap-ansi@7.0.0:
@@ -1561,7 +1570,7 @@ snapshots:
 
   '@babel/runtime@7.29.2': {}
 
-  '@builder.io/qwik-city@1.20.0(@types/node@20.19.41)(rollup@4.60.3)(typescript@5.9.3)':
+  '@builder.io/qwik-city@1.20.0(@types/node@20.19.41)(jiti@1.21.7)(rollup@4.60.3)(typescript@5.9.3)':
     dependencies:
       '@mdx-js/mdx': 3.1.1
       '@types/mdx': 2.0.13
@@ -1570,11 +1579,12 @@ snapshots:
       undici: 8.2.0
       valibot: 1.4.0(typescript@5.9.3)
       vfile: 6.0.3
-      vite: 5.4.14(@types/node@20.19.41)
+      vite: 6.4.2(@types/node@20.19.41)(jiti@1.21.7)
       vite-imagetools: 9.0.3(rollup@4.60.3)
       zod: 3.25.48
     transitivePeerDependencies:
       - '@types/node'
+      - jiti
       - less
       - lightningcss
       - rollup
@@ -1584,14 +1594,16 @@ snapshots:
       - sugarss
       - supports-color
       - terser
+      - tsx
       - typescript
+      - yaml
 
-  '@builder.io/qwik@1.20.0(vite@5.4.14(@types/node@20.19.41))':
+  '@builder.io/qwik@1.20.0(vite@6.4.2(@types/node@20.19.41)(jiti@1.21.7))':
     dependencies:
       csstype: 3.2.3
       launch-editor: 2.13.2
       rollup: 4.60.3
-      vite: 5.4.14(@types/node@20.19.41)
+      vite: 6.4.2(@types/node@20.19.41)(jiti@1.21.7)
 
   '@dimforge/rapier3d-compat@0.12.0': {}
 
@@ -3139,25 +3151,29 @@ snapshots:
     transitivePeerDependencies:
       - rollup
 
-  vite-tsconfig-paths@4.3.2(typescript@5.9.3)(vite@5.4.14(@types/node@20.19.41)):
+  vite-tsconfig-paths@4.3.2(typescript@5.9.3)(vite@6.4.2(@types/node@20.19.41)(jiti@1.21.7)):
     dependencies:
       debug: 4.4.3
       globrex: 0.1.2
       tsconfck: 3.1.6(typescript@5.9.3)
     optionalDependencies:
-      vite: 5.4.14(@types/node@20.19.41)
+      vite: 6.4.2(@types/node@20.19.41)(jiti@1.21.7)
     transitivePeerDependencies:
       - supports-color
       - typescript
 
-  vite@5.4.14(@types/node@20.19.41):
+  vite@6.4.2(@types/node@20.19.41)(jiti@1.21.7):
     dependencies:
       esbuild: 0.25.12
+      fdir: 6.5.0(picomatch@4.0.4)
+      picomatch: 4.0.4
       postcss: 8.5.14
       rollup: 4.60.3
+      tinyglobby: 0.2.16
     optionalDependencies:
       '@types/node': 20.19.41
       fsevents: 2.3.3
+      jiti: 1.21.7
 
   wrap-ansi@7.0.0:
     dependencies:

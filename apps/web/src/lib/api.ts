@@ -46,6 +46,7 @@ export type {
   ImportPreview,
   ImportReport,
   ImportRowInput,
+  InspectionItem,
   LoginResponse,
   MaintenanceItem,
   Ocorrencia,

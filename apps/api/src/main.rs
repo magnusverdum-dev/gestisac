@@ -1,34 +1,15 @@
-mod config;
-mod error;
-mod models;
-#[allow(dead_code)]
-mod repositories;
-mod routes;
-mod state;
-
-use state::AppState;
-use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use gestisac_api::{build_app, init_tracing};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "gestisac_api=debug,tower_http=debug".into()),
-        ))
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-
-    let state = AppState::load().await?;
-    let bind_addr = state.config.bind_addr();
-    let cors = state.config.cors_layer()?;
-    let app = routes::router(state)
-        .layer(cors)
-        .layer(TraceLayer::new_for_http());
+    init_tracing();
+    let app = build_app().await?;
+    let host = std::env::var("GESTISAC_API_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let port = std::env::var("GESTISAC_API_PORT").unwrap_or_else(|_| "3000".to_string());
+    let bind_addr = format!("{host}:{port}");
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
-    tracing::info!("GESTISAC API listening on {}", bind_addr);
+    tracing::info!("GESTISAC API listening on {}", listener.local_addr()?);
 
     axum::serve(listener, app).await?;
 

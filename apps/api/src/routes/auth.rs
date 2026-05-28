@@ -11,9 +11,13 @@ use axum::{
     http::{header::AUTHORIZATION, HeaderMap},
     Json,
 };
-use chrono::{Duration, Utc};
-use rand_core::{OsRng, RngCore};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+const SIGNED_TOKEN_PREFIX: &str = "gestisac:v1";
+const ACCESS_TOKEN_KIND: &str = "access";
+const REFRESH_TOKEN_KIND: &str = "refresh";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,11 +94,11 @@ pub async fn login(
             .map_err(|_| ApiError::internal("Nao foi possivel proteger a password"))?;
     }
 
-    let token = new_session_secret();
-    let refresh_token = new_session_secret();
     let now = Utc::now();
     let expires_at = now + Duration::hours(2);
     let refresh_expires_at = now + Duration::days(30);
+    let token = new_signed_session_token(ACCESS_TOKEN_KIND, &user.id, expires_at);
+    let refresh_token = new_signed_session_token(REFRESH_TOKEN_KIND, &user.id, refresh_expires_at);
     let active_condominium = if user.active_condominium.is_empty() {
         store.active_condominium.clone()
     } else {
@@ -144,41 +148,71 @@ pub async fn refresh(
     let session_index = store
         .sessions
         .iter()
-        .position(|session| session_secret_matches(&session.refresh_token, &input.refresh_token))
-        .ok_or_else(|| ApiError::unauthorized("Refresh token invalido ou expirado"))?;
-    let current_session = store.sessions[session_index].clone();
-    let user = store
-        .users
-        .iter()
-        .find(|user| user.id == current_session.user_id)
-        .cloned()
-        .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
-
-    let token = new_session_secret();
-    let refresh_token = new_session_secret();
-    let expires_at = now + Duration::hours(2);
-    let refresh_expires_at = now + Duration::days(30);
-    store.sessions[session_index] = Session {
-        token: protect_session_secret(&token),
-        refresh_token: protect_session_secret(&refresh_token),
-        user_id: user.id.clone(),
-        tenant_id: current_session.tenant_id,
-        active_condominium: current_session.active_condominium,
-        app_context: if input.app_context.trim().is_empty() {
+        .position(|session| session_secret_matches(&session.refresh_token, &input.refresh_token));
+    let (user, active_condominium, response_app_context) = if let Some(session_index) =
+        session_index
+    {
+        let current_session = store.sessions[session_index].clone();
+        let user = store
+            .users
+            .iter()
+            .find(|user| user.id == current_session.user_id)
+            .cloned()
+            .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
+        let response_app_context = if input.app_context.trim().is_empty() {
             current_session.app_context.clone()
         } else {
             normalize_app_context(&input.app_context)
-        },
+        };
+
+        (
+            user,
+            current_session.active_condominium,
+            response_app_context,
+        )
+    } else {
+        let signed_token = parse_signed_session_token(&input.refresh_token, REFRESH_TOKEN_KIND)?;
+        let user = store
+            .users
+            .iter()
+            .find(|user| user.id == signed_token.user_id)
+            .cloned()
+            .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
+        let active_condominium = if user.active_condominium.is_empty() {
+            store.active_condominium.clone()
+        } else {
+            user.active_condominium.clone()
+        };
+        let response_app_context = normalize_app_context(&input.app_context);
+
+        (user, active_condominium, response_app_context)
+    };
+
+    let expires_at = now + Duration::hours(2);
+    let refresh_expires_at = now + Duration::days(30);
+    let token = new_signed_session_token(ACCESS_TOKEN_KIND, &user.id, expires_at);
+    let refresh_token = new_signed_session_token(REFRESH_TOKEN_KIND, &user.id, refresh_expires_at);
+    let replacement_session = Session {
+        token: protect_session_secret(&token),
+        refresh_token: protect_session_secret(&refresh_token),
+        user_id: user.id.clone(),
+        tenant_id: user.tenant_id.clone(),
+        active_condominium: active_condominium.clone(),
+        app_context: response_app_context.clone(),
         created_at: now,
         expires_at,
         refresh_expires_at,
     };
+    if let Some(session_index) = session_index {
+        store.sessions[session_index] = replacement_session;
+    } else {
+        store.sessions.push(replacement_session);
+    }
 
     let mut public_user = store
         .public_user(&user.id)
         .ok_or_else(|| ApiError::internal("Utilizador autenticado nao encontrado"))?;
-    public_user.active_condominium = store.sessions[session_index].active_condominium.clone();
-    let response_app_context = store.sessions[session_index].app_context.clone();
+    public_user.active_condominium = active_condominium;
     drop(store);
     persist(&state).await?;
 
@@ -255,6 +289,7 @@ pub struct AuthContext {
     pub user: PublicUser,
     pub tenant_id: String,
     pub active_condominium: String,
+    pub app_context: String,
 }
 
 pub async fn current_context(
@@ -263,25 +298,46 @@ pub async fn current_context(
 ) -> Result<AuthContext, ApiError> {
     let token = bearer_token(headers)?;
     let store = state.store.read().await;
-    let session = store
+    if let Some(session) = store
         .sessions
         .iter()
         .find(|session| session_secret_matches(&session.token, &token))
-        .ok_or_else(|| ApiError::unauthorized("Sessao invalida ou expirada"))?;
-    if session.expires_at <= Utc::now() {
-        return Err(ApiError::unauthorized("Sessao expirada"));
+    {
+        if session.expires_at <= Utc::now() {
+            return Err(ApiError::unauthorized("Sessao expirada"));
+        }
+
+        let mut user = store
+            .public_user(&session.user_id)
+            .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
+        user.active_condominium = session.active_condominium.clone();
+
+        return Ok(AuthContext {
+            token: session.token.clone(),
+            tenant_id: session.tenant_id.clone(),
+            active_condominium: session.active_condominium.clone(),
+            user,
+            app_context: session.app_context.clone(),
+        });
     }
 
+    let signed_token = parse_signed_session_token(&token, ACCESS_TOKEN_KIND)?;
     let mut user = store
-        .public_user(&session.user_id)
+        .public_user(&signed_token.user_id)
         .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
-    user.active_condominium = session.active_condominium.clone();
+    let active_condominium = if user.active_condominium.is_empty() {
+        store.active_condominium.clone()
+    } else {
+        user.active_condominium.clone()
+    };
+    user.active_condominium = active_condominium.clone();
 
     Ok(AuthContext {
-        token: session.token.clone(),
-        tenant_id: session.tenant_id.clone(),
-        active_condominium: session.active_condominium.clone(),
+        token,
+        tenant_id: user.tenant_id.clone(),
+        active_condominium,
         user,
+        app_context: "hq".to_string(),
     })
 }
 
@@ -352,10 +408,75 @@ fn bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
         .ok_or_else(|| ApiError::unauthorized("Authorization bearer token invalido"))
 }
 
+#[cfg(test)]
 fn new_session_secret() -> String {
+    use rand_core::{OsRng, RngCore};
+
     let mut bytes = [0_u8; 32];
     OsRng.fill_bytes(&mut bytes);
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[derive(Debug, Clone)]
+struct SignedSessionToken {
+    user_id: String,
+}
+
+fn new_signed_session_token(kind: &str, user_id: &str, expires_at: DateTime<Utc>) -> String {
+    let unsigned = signed_session_payload(kind, user_id, expires_at.timestamp());
+    let signature = sign_session_payload(&unsigned);
+    format!("{unsigned}:{signature}")
+}
+
+fn parse_signed_session_token(
+    token: &str,
+    expected_kind: &str,
+) -> Result<SignedSessionToken, ApiError> {
+    let parts = token.split(':').collect::<Vec<_>>();
+    if parts.len() != 6 || parts[0] != "gestisac" || parts[1] != "v1" {
+        return Err(ApiError::unauthorized("Sessao invalida ou expirada"));
+    }
+
+    let kind = parts[2];
+    if kind != expected_kind {
+        return Err(ApiError::unauthorized("Sessao invalida ou expirada"));
+    }
+
+    let user_id = parts[3];
+    let expires_at_timestamp = parts[4]
+        .parse::<i64>()
+        .map_err(|_| ApiError::unauthorized("Sessao invalida ou expirada"))?;
+    let unsigned = signed_session_payload(kind, user_id, expires_at_timestamp);
+    let expected_signature = sign_session_payload(&unsigned);
+    if expected_signature != parts[5] {
+        return Err(ApiError::unauthorized("Sessao invalida ou expirada"));
+    }
+
+    let expires_at = DateTime::from_timestamp(expires_at_timestamp, 0)
+        .ok_or_else(|| ApiError::unauthorized("Sessao invalida ou expirada"))?;
+    if expires_at <= Utc::now() {
+        return Err(ApiError::unauthorized("Sessao expirada"));
+    }
+
+    Ok(SignedSessionToken {
+        user_id: user_id.to_string(),
+    })
+}
+
+fn signed_session_payload(kind: &str, user_id: &str, expires_at_timestamp: i64) -> String {
+    format!("{SIGNED_TOKEN_PREFIX}:{kind}:{user_id}:{expires_at_timestamp}")
+}
+
+fn sign_session_payload(payload: &str) -> String {
+    let secret = std::env::var("JWT_SECRET")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "gestisac-local-dev-session-secret".to_string());
+    let mut hasher = Sha256::new();
+    hasher.update(secret.as_bytes());
+    hasher.update(b":");
+    hasher.update(payload.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 async fn persist(state: &AppState) -> Result<(), ApiError> {

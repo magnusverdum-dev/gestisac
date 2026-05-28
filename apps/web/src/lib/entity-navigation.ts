@@ -3,6 +3,7 @@
 export type EntityType =
   | 'ticket'
   | 'maintenance'
+  | 'inspection'
   | 'calendarEvent'
   | 'condominium'
   | 'resident'
@@ -53,6 +54,8 @@ export function entityPath(type: EntityType, id: string, subtype = ''): string {
       return `/tickets/registo/${safeId}`;
     case 'maintenance':
       return `/manutencao/registo/${safeId}`;
+    case 'inspection':
+      return `/vistorias/registo/${safeId}`;
     case 'calendarEvent':
       return `/calendario/evento/${safeId}`;
     case 'condominium':
@@ -104,6 +107,9 @@ export function matchEntityRoute(path: string): EntityRouteMatch {
   }
   if (parts[0] === 'manutencao' && parts[1] === 'registo' && parts[2]) {
     return { kind: 'detail', entityType: 'maintenance', id: parts[2], basePath: '/manutencao' };
+  }
+  if (parts[0] === 'vistorias' && parts[1] === 'registo' && parts[2]) {
+    return { kind: 'detail', entityType: 'inspection', id: parts[2], basePath: '/vistorias' };
   }
   if (parts[0] === 'manutencao' && parts[1] === 'estado' && parts[2]) {
     return { kind: 'maintenanceStatus', status: titleFromSlug(parts[2]), basePath: '/manutencao' };
@@ -217,6 +223,8 @@ export function pathForRecord(resource: ResourceEndpoint | undefined, id: string
       return entityPath('ticket', id);
     case 'maintenance':
       return entityPath('maintenance', id);
+    case 'inspections':
+      return entityPath('inspection', id);
     case 'calendar-events':
       return entityPath('calendarEvent', id);
     case 'condominiums':

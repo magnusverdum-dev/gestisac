@@ -14,7 +14,7 @@
   "pnpm": {
     "overrides": {
       "esbuild": "0.25.12",
-      "vite": "5.4.14"
+      "vite": "6.4.2"
     }
   },
   "scripts": {
@@ -23,7 +23,7 @@
     "build:web": "pnpm --dir apps/web build",
     "typecheck:web": "pnpm --dir apps/web typecheck",
     "preview:web": "pnpm --dir apps/web preview",
-    "dev:api": "node scripts/run-cargo.mjs run --manifest-path apps/api/Cargo.toml",
+    "dev:api": "node scripts/run-cargo.mjs run --manifest-path apps/api/Cargo.toml --bin gestisac-api",
     "dev:api:mock": "pnpm --dir apps/api dev:mock",
     "check:api": "node scripts/run-cargo.mjs check --manifest-path apps/api/Cargo.toml",
     "fmt:api": "node scripts/run-cargo.mjs fmt --manifest-path apps/api/Cargo.toml",

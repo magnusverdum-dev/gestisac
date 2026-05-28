@@ -37,7 +37,12 @@ import type {
   GenerateDocumentPayload,
   Report,
   ReportPreview,
+  InspectionItem,
   MaintenanceItem,
+  Ocorrencia,
+  OcorrenciaComentario,
+  OcorrenciaDetalhe,
+  OcorrenciasMetricas,
   Assembly,
   AccountingSummary,
   Quota,
@@ -50,6 +55,7 @@ import type {
   AuditLogEntry,
   PermissionsResponse,
   ResourceState,
+  PaginatedOcorrencias,
   PaginatedResponse,
   LoginResponse,
   CreateResource,
@@ -100,11 +106,11 @@ export async function demoApiRequest<T>(
       throw new Error('Credenciais invalidas');
     }
 
-    return buildDemoLogin(store) as T;
+    return buildDemoLogin(store, body.appContext) as T;
   }
 
   if (pathname === 'auth/refresh' && method === 'POST') {
-    return buildDemoLogin(store) as T;
+    return buildDemoLogin(store, body.appContext) as T;
   }
 
   if (pathname === 'auth/logout' && method === 'POST') {
@@ -161,6 +167,16 @@ export async function demoApiRequest<T>(
   const documentPreviewMatch = pathname.match(/^documents\/([^/]+)\/preview$/);
   if (documentPreviewMatch) {
     return buildDemoDocumentPreview(store, documentPreviewMatch[1]) as T;
+  }
+
+  const ocorrenciaResponse = handleDemoOcorrencias(store, pathname, method, body, url);
+  if (ocorrenciaResponse.handled) {
+    return ocorrenciaResponse.value as T;
+  }
+
+  const inspectionResponse = handleDemoInspections(store, pathname, method, body, url);
+  if (inspectionResponse.handled) {
+    return inspectionResponse.value as T;
   }
 
   const collection = demoCollectionForPath(store, pathname);
@@ -230,6 +246,10 @@ function ensureDemoStoreDefaults(store: DemoStore): DemoStore {
     store.calendarEvents = demoCalendarEvents();
   }
 
+  if (!Array.isArray(store.ocorrencias) || store.ocorrencias.length === 0) {
+    store.ocorrencias = demoOcorrencias();
+  }
+
   store.tickets = store.tickets.map((ticket) => ({
     ...ticket,
     priority: ticket.priority || 'Normal',
@@ -264,6 +284,15 @@ function ensureDemoStoreDefaults(store: DemoStore): DemoStore {
     calendarEventId: item.calendarEventId || ''
   }));
 
+  if (!Array.isArray(store.inspections) || store.inspections.length === 0) {
+    store.inspections = demoInspections(store.activeCondominium);
+  }
+  for (let index = 0; index < store.inspections.length; index += 1) {
+    const normalized = normalizeInspectionRecord(store.inspections[index] as InspectionItem);
+    syncInspectionCalendarEvent(store, normalized);
+    store.inspections[index] = normalized;
+  }
+
   return store;
 }
 
@@ -283,14 +312,18 @@ function isDemoToken(token: string | undefined): boolean {
   return token === DEMO_TOKEN || token === DEMO_REFRESH_TOKEN;
 }
 
-function buildDemoLogin(store: DemoStore): LoginResponse {
+function buildDemoLogin(store: DemoStore, appContext: unknown = 'hq'): LoginResponse {
   return {
     token: DEMO_TOKEN,
     refreshToken: DEMO_REFRESH_TOKEN,
     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 8).toISOString(),
     user: store.user,
-    appContext: 'hq'
+    appContext: normalizeDemoAppContext(appContext)
   };
+}
+
+function normalizeDemoAppContext(value: unknown): LoginResponse['appContext'] {
+  return value === 'worker' || value === 'client' ? value : 'hq';
 }
 
 function createDemoStore(): DemoStore {
@@ -546,7 +579,7 @@ function createDemoStore(): DemoStore {
         updatedAt: '2026-05-14 16:10'
       }
     ],
-    ocorrencias: [],
+    ocorrencias: demoOcorrencias(),
     suppliers: [
       {
         id: 'supplier-001',
@@ -606,6 +639,7 @@ function createDemoStore(): DemoStore {
         notes: 'Verificar quadro de comando e preparar aviso aos moradores.'
       }
     ],
+    inspections: demoInspections('Condominio Vila Verde'),
     calendarEvents: demoCalendarEvents(),
     assemblies: [
       {
@@ -708,6 +742,568 @@ function demoCalendarEvents(): CalendarEvent[] {
   ];
 }
 
+function demoInspections(condominium: string): InspectionItem[] {
+  return [
+    {
+      id: 'inspection-001',
+      title: 'Vistoria anual aos extintores',
+      condominium,
+      location: 'Garagens e patamares',
+      requiredDate: '2026-06-03',
+      status: 'Planeada',
+      result: 'Pendente',
+      checklist: [
+        'Validar pressao dos extintores',
+        'Confirmar sinaletica visivel',
+        'Registar extintores fora de prazo'
+      ],
+      workerNotes: '',
+      hqNotes: '',
+      submittedAt: '',
+      confirmedAt: '',
+      confirmedBy: '',
+      calendarEventId: ''
+    },
+    {
+      id: 'inspection-002',
+      title: 'Vistoria tecnica ao elevador Bloco B',
+      condominium,
+      location: 'Casa das maquinas',
+      requiredDate: '2026-06-05',
+      status: 'Submetida',
+      result: 'A rever HQ',
+      checklist: [
+        'Testar paragem de emergencia',
+        'Verificar alarmes e comunicacao',
+        'Inspecionar ruido e vibracao'
+      ],
+      workerNotes: 'Ligacao de alarme intermitente exige validacao HQ.',
+      hqNotes: '',
+      submittedAt: '2026-05-28T09:15:00Z',
+      confirmedAt: '',
+      confirmedBy: '',
+      calendarEventId: ''
+    }
+  ];
+}
+
+function demoOcorrencias(): Ocorrencia[] {
+  return [
+    {
+      id: 'ocorr-demo-001',
+      titulo: 'Avaria no elevador do Bloco B',
+      tipo: 'avaria',
+      status: 'emCurso',
+      prioridade: 'urgente',
+      impacto: 'alto',
+      urgencia: 'imediata',
+      descricao: 'Elevador parado desde as 08:20. Tecnico agendado para hoje.',
+      condominiumId: 'cond-001',
+      requisitanteNome: 'Carlos Almeida',
+      requisitanteEmail: 'carlos.almeida@example.pt',
+      requisitanteTelefone: '+351 910 000 002',
+      canal: 'portal',
+      categoria: 'Elevadores',
+      atribuidoA: 'Joao Silva',
+      tags: ['elevador', 'bloco-b', 'urgente'],
+      blocoId: 'B',
+      pisoId: '4',
+      zonaId: 'Entrada principal',
+      equipamentoId: 'elevador-bloco-b',
+      custoEstimado: '420.00',
+      custoFinal: '',
+      fornecedorId: 'supplier-001',
+      referenciaContrato: 'CTR-ELEV-2026',
+      mediaIds: [],
+      documentoIds: [],
+      motivoResolucao: '',
+      slaRespostaEm: '2026-05-15T09:00:00.000Z',
+      slaResolucaoEm: '2026-05-24T18:00:00.000Z',
+      respondidoEm: '2026-05-15T08:45:00.000Z',
+      resolvidoEm: '',
+      fechadoEm: '',
+      tokenAcompanhamento: 'demo-elevador-b',
+      originChannel: 'hq',
+      publicStatusText: 'Tecnico agendado e administracao notificada.',
+      technicalNotes: 'Confirmar quadro de comando e verificar necessidade de peca.',
+      assignedWorkerId: 'worker-demo-1',
+      criadoEm: '2026-05-15T08:20:00.000Z',
+      atualizadoEm: '2026-05-15T10:30:00.000Z'
+    },
+    {
+      id: 'ocorr-demo-002',
+      titulo: 'Infiltracao na garagem -1',
+      tipo: 'pedido',
+      status: 'pendente',
+      prioridade: 'alta',
+      impacto: 'medio',
+      urgencia: 'alta',
+      descricao: 'Pedido de vistoria aberto para a garagem -1 apos alerta de morador.',
+      condominiumId: 'cond-001',
+      requisitanteNome: 'Maria Fernandes',
+      requisitanteEmail: 'maria.fernandes@example.pt',
+      requisitanteTelefone: '+351 910 000 001',
+      canal: 'email',
+      categoria: 'Infiltracoes',
+      atribuidoA: 'Equipa tecnica',
+      tags: ['garagem', 'vistoria'],
+      blocoId: 'A',
+      pisoId: '-1',
+      zonaId: 'Garagem',
+      equipamentoId: '',
+      custoEstimado: '',
+      custoFinal: '',
+      fornecedorId: '',
+      referenciaContrato: '',
+      mediaIds: [],
+      documentoIds: [],
+      motivoResolucao: '',
+      slaRespostaEm: '2026-05-16T12:00:00.000Z',
+      slaResolucaoEm: '2026-05-25T17:30:00.000Z',
+      respondidoEm: '',
+      resolvidoEm: '',
+      fechadoEm: '',
+      tokenAcompanhamento: 'demo-garagem',
+      originChannel: 'hq',
+      publicStatusText: 'Vistoria em preparacao.',
+      technicalNotes: 'Avaliar origem da infiltracao antes de abrir obra.',
+      assignedWorkerId: 'worker-demo-2',
+      criadoEm: '2026-05-14T16:10:00.000Z',
+      atualizadoEm: '2026-05-14T16:10:00.000Z'
+    }
+  ];
+}
+
+function handleDemoInspections(
+  store: DemoStore,
+  pathname: string,
+  method: string,
+  body: Record<string, unknown>,
+  url: URL
+): { handled: true; value: unknown } | { handled: false } {
+  if (pathname === 'inspections' && method === 'GET') {
+    return { handled: true, value: paginateDemoCollection(store.inspections, url) };
+  }
+
+  if (pathname === 'inspections' && method === 'POST') {
+    const created = normalizeInspectionRecord({
+      id: createDemoId('inspection'),
+      title: String(body.title || '').trim(),
+      condominium: String(body.condominium || store.activeCondominium),
+      location: String(body.location || ''),
+      requiredDate: String(body.requiredDate || new Date().toISOString().slice(0, 10)),
+      status: String(body.status || 'Planeada'),
+      result: String(body.result || 'Pendente'),
+      checklist: Array.isArray(body.checklist) ? body.checklist : [],
+      workerNotes: String(body.workerNotes || ''),
+      hqNotes: String(body.hqNotes || ''),
+      submittedAt: String(body.submittedAt || ''),
+      confirmedAt: String(body.confirmedAt || ''),
+      confirmedBy: String(body.confirmedBy || ''),
+      calendarEventId: String(body.calendarEventId || '')
+    });
+    if (!created.title) {
+      throw new Error('Titulo e obrigatorio');
+    }
+    if (inspectionStatusKey(created.status) !== 'planeada') {
+      throw new Error('Nova vistoria deve iniciar no estado Planeada');
+    }
+
+    syncInspectionCalendarEvent(store, created);
+    store.inspections.unshift(created);
+    appendDemoAudit(store, 'inspections', 'Criado', created.id, created.title);
+    saveDemoStore(store);
+    return { handled: true, value: created };
+  }
+
+  const match = pathname.match(/^inspections\/([^/]+)$/);
+  if (!match) {
+    return { handled: false };
+  }
+
+  const id = match[1];
+  const index = store.inspections.findIndex((item) => item.id === id);
+  if (index < 0) {
+    throw new Error('Vistoria nao encontrada');
+  }
+
+  if (method === 'PUT') {
+    const current = store.inspections[index];
+    const updated = normalizeInspectionRecord({
+      ...current,
+      ...body,
+      id
+    });
+    const from = inspectionStatusKey(current.status);
+    const to = inspectionStatusKey(updated.status);
+    if (!isAllowedInspectionTransition(from, to)) {
+      throw new Error('Transicao de estado da vistoria invalida');
+    }
+    if (from !== to && to === 'submetida' && !updated.submittedAt) {
+      updated.submittedAt = new Date().toISOString();
+    }
+    if (from !== to && (to === 'confirmada' || to === 'rejeitada')) {
+      if (!updated.confirmedAt) updated.confirmedAt = new Date().toISOString();
+      if (!updated.confirmedBy) updated.confirmedBy = store.user.name;
+    }
+
+    syncInspectionCalendarEvent(store, updated);
+    store.inspections[index] = updated;
+    appendDemoAudit(store, 'inspections', 'Atualizado', updated.id, updated.title);
+    saveDemoStore(store);
+    return { handled: true, value: updated };
+  }
+
+  if (method === 'DELETE') {
+    const [deleted] = store.inspections.splice(index, 1);
+    if (deleted.calendarEventId) {
+      store.calendarEvents = store.calendarEvents.filter((event) => event.id !== deleted.calendarEventId);
+    } else {
+      store.calendarEvents = store.calendarEvents.filter((event) => !(event.linkedEntityType === 'inspection' && event.linkedEntityId === deleted.id));
+    }
+    appendDemoAudit(store, 'inspections', 'Apagado', deleted.id, deleted.title);
+    saveDemoStore(store);
+    return { handled: true, value: { deleted: true } };
+  }
+
+  return { handled: false };
+}
+
+function handleDemoOcorrencias(
+  store: DemoStore,
+  pathname: string,
+  method: string,
+  body: Record<string, unknown>,
+  url: URL
+): { handled: true; value: unknown } | { handled: false } {
+  if (pathname === 'ocorrencias/metricas' && method === 'GET') {
+    return { handled: true, value: computeDemoOcorrenciasMetricas(store.ocorrencias) };
+  }
+
+  if (pathname === 'ocorrencias' && method === 'GET') {
+    return { handled: true, value: paginateDemoOcorrencias(store.ocorrencias, url) };
+  }
+
+  if (pathname === 'ocorrencias' && method === 'POST') {
+    const created = createDemoOcorrencia(store, body);
+    store.ocorrencias.unshift(created);
+    appendDemoAudit(store, 'ocorrencias', 'Criado', created.id, created.titulo);
+    saveDemoStore(store);
+    return { handled: true, value: created };
+  }
+
+  const match = pathname.match(/^ocorrencias\/([^/]+)(?:\/([^/]+))?$/);
+  if (!match) {
+    return { handled: false };
+  }
+
+  const [, id, action] = match;
+  const index = store.ocorrencias.findIndex((item) => item.id === id);
+  if (index < 0) {
+    throw new Error('Ocorrencia nao encontrada');
+  }
+
+  const current = store.ocorrencias[index];
+  if (!action && method === 'GET') {
+    return { handled: true, value: buildDemoOcorrenciaDetalhe(current) };
+  }
+
+  if (!action && method === 'PUT') {
+    const updated = updateDemoOcorrencia(current, body);
+    store.ocorrencias[index] = updated;
+    appendDemoAudit(store, 'ocorrencias', 'Atualizado', updated.id, updated.titulo);
+    saveDemoStore(store);
+    return { handled: true, value: updated };
+  }
+
+  if (!action && method === 'DELETE') {
+    store.ocorrencias.splice(index, 1);
+    appendDemoAudit(store, 'ocorrencias', 'Apagado', current.id, current.titulo);
+    saveDemoStore(store);
+    return { handled: true, value: store.ocorrencias };
+  }
+
+  if (action === 'status' && method === 'PATCH') {
+    const updated = updateDemoOcorrencia(current, { status: body.status });
+    store.ocorrencias[index] = updated;
+    appendDemoAudit(store, 'ocorrencias', 'Status atualizado', updated.id, updated.titulo);
+    saveDemoStore(store);
+    return { handled: true, value: updated };
+  }
+
+  if (action === 'reabrir' && method === 'POST') {
+    const updated = updateDemoOcorrencia(current, { status: 'reaberta' });
+    store.ocorrencias[index] = updated;
+    appendDemoAudit(store, 'ocorrencias', 'Reaberto', updated.id, updated.titulo);
+    saveDemoStore(store);
+    return { handled: true, value: updated };
+  }
+
+  if (action === 'comentarios' && method === 'GET') {
+    return { handled: true, value: demoOcorrenciaComentarios(current) };
+  }
+
+  if (action === 'comentarios' && method === 'POST') {
+    const comment: OcorrenciaComentario = {
+      id: createDemoId('comentario'),
+      ocorrenciaId: current.id,
+      autorId: store.user.id,
+      autorNome: store.user.name,
+      texto: String(body.texto ?? '').trim(),
+      visibilidade: body.visibilidade === 'publico' ? 'publico' : 'interno',
+      criadoEm: new Date().toISOString()
+    };
+    appendDemoAudit(store, 'ocorrencias', 'Comentario', current.id, current.titulo);
+    saveDemoStore(store);
+    return { handled: true, value: comment };
+  }
+
+  return { handled: false };
+}
+
+function paginateDemoOcorrencias(items: Ocorrencia[], url: URL): PaginatedOcorrencias {
+  const page = Number(url.searchParams.get('page') ?? '1');
+  const pageSize = Number(url.searchParams.get('pageSize') ?? '50');
+  const search = String(url.searchParams.get('search') ?? '').trim().toLowerCase();
+  const filtered = search
+    ? items.filter((item) => JSON.stringify(item).toLowerCase().includes(search))
+    : items;
+  const start = Math.max(0, (page - 1) * pageSize);
+
+  return {
+    data: filtered.slice(start, start + pageSize),
+    page,
+    pageSize,
+    total: filtered.length
+  };
+}
+
+function computeDemoOcorrenciasMetricas(items: Ocorrencia[]): OcorrenciasMetricas {
+  const abertas = items.filter((item) => !['resolvida', 'fechada'].includes(item.status));
+
+  return {
+    totalAbertas: abertas.length,
+    urgentes: abertas.filter((item) => item.prioridade === 'urgente').length,
+    totalAvarias: items.filter((item) => item.tipo === 'avaria').length,
+    mttrSegundos: 0,
+    agingMaxDias: abertas.length ? 3 : 0
+  };
+}
+
+function buildDemoOcorrenciaDetalhe(ocorrencia: Ocorrencia): OcorrenciaDetalhe {
+  return {
+    ocorrencia,
+    comentarios: demoOcorrenciaComentarios(ocorrencia),
+    anexos: [],
+    historico: [
+      {
+        timestamp: ocorrencia.criadoEm,
+        autor: ocorrencia.requisitanteNome || 'Sistema',
+        acao: 'Criacao',
+        descricao: ocorrencia.descricao
+      },
+      {
+        timestamp: ocorrencia.atualizadoEm,
+        autor: ocorrencia.atribuidoA || 'Administracao',
+        acao: 'Atualizacao',
+        descricao: ocorrencia.publicStatusText || 'Ocorrencia em acompanhamento.'
+      }
+    ]
+  };
+}
+
+function demoOcorrenciaComentarios(ocorrencia: Ocorrencia): OcorrenciaComentario[] {
+  return [
+    {
+      id: `${ocorrencia.id}-comentario-001`,
+      ocorrenciaId: ocorrencia.id,
+      autorId: 'user-admin',
+      autorNome: 'Joao Silva',
+      texto: ocorrencia.publicStatusText || 'Registo acompanhado pela administracao.',
+      visibilidade: 'interno',
+      criadoEm: ocorrencia.atualizadoEm
+    }
+  ];
+}
+
+function createDemoOcorrencia(store: DemoStore, body: Record<string, unknown>): Ocorrencia {
+  const now = new Date().toISOString();
+  const title = String(body.titulo || body.title || 'Nova ocorrencia').trim();
+
+  return {
+    id: createDemoId('ocorr'),
+    titulo: title,
+    tipo: normalizeDemoEnum(body.tipo, ['avaria', 'pedido', 'reclamacao', 'pergunta', 'tarefaInterna'], 'pedido'),
+    status: 'nova',
+    prioridade: normalizeDemoEnum(body.prioridade, ['baixa', 'normal', 'alta', 'urgente'], 'normal'),
+    impacto: normalizeDemoEnum(body.impacto, ['baixo', 'medio', 'alto', 'critico'], 'medio'),
+    urgencia: normalizeDemoEnum(body.urgencia, ['baixa', 'media', 'alta', 'imediata'], 'media'),
+    descricao: String(body.descricao || body.detail || ''),
+    condominiumId: String(body.condominiumId || store.condominiums[0]?.id || ''),
+    requisitanteNome: String(body.requisitanteNome || store.user.name),
+    requisitanteEmail: String(body.requisitanteEmail || store.user.email),
+    requisitanteTelefone: String(body.requisitanteTelefone || ''),
+    canal: normalizeDemoEnum(body.canal, ['portal', 'email', 'telefone', 'presencial', 'interno'], 'portal'),
+    categoria: String(body.categoria || 'Operacional'),
+    atribuidoA: String(body.atribuidoA || ''),
+    tags: Array.isArray(body.tags) ? body.tags.map(String) : [],
+    blocoId: String(body.blocoId || ''),
+    pisoId: String(body.pisoId || ''),
+    zonaId: String(body.zonaId || ''),
+    equipamentoId: String(body.equipamentoId || ''),
+    custoEstimado: '',
+    custoFinal: '',
+    fornecedorId: '',
+    referenciaContrato: '',
+    mediaIds: [],
+    documentoIds: [],
+    motivoResolucao: '',
+    slaRespostaEm: '',
+    slaResolucaoEm: '',
+    respondidoEm: '',
+    resolvidoEm: '',
+    fechadoEm: '',
+    tokenAcompanhamento: createDemoId('tracking'),
+    originChannel: normalizeDemoEnum(body.originChannel, ['hq', 'client', 'worker'], 'hq'),
+    publicStatusText: String(body.publicStatusText || 'Registo recebido.'),
+    technicalNotes: String(body.technicalNotes || ''),
+    assignedWorkerId: String(body.assignedWorkerId || ''),
+    criadoEm: now,
+    atualizadoEm: now
+  };
+}
+
+function updateDemoOcorrencia(
+  current: Ocorrencia,
+  body: Record<string, unknown>
+): Ocorrencia {
+  return {
+    ...current,
+    ...body,
+    id: current.id,
+    status: normalizeDemoEnum(
+      body.status,
+      ['nova', 'emTriagem', 'aguardaPecas', 'emCurso', 'pendente', 'resolvida', 'fechada', 'reaberta'],
+      current.status
+    ),
+    atualizadoEm: new Date().toISOString()
+  } as Ocorrencia;
+}
+
+function normalizeDemoEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  fallback: T
+): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+function inspectionStatusKey(value: string): 'planeada' | 'submetida' | 'confirmada' | 'rejeitada' {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (normalized.includes('submet')) return 'submetida';
+  if (normalized.includes('confirm')) return 'confirmada';
+  if (normalized.includes('rejeit')) return 'rejeitada';
+  return 'planeada';
+}
+
+function inspectionStatusLabel(value: string): 'Planeada' | 'Submetida' | 'Confirmada' | 'Rejeitada' {
+  const key = inspectionStatusKey(value);
+  if (key === 'submetida') return 'Submetida';
+  if (key === 'confirmada') return 'Confirmada';
+  if (key === 'rejeitada') return 'Rejeitada';
+  return 'Planeada';
+}
+
+function isAllowedInspectionTransition(
+  from: 'planeada' | 'submetida' | 'confirmada' | 'rejeitada',
+  to: 'planeada' | 'submetida' | 'confirmada' | 'rejeitada'
+): boolean {
+  if (from === to) return true;
+  return (from === 'planeada' && to === 'submetida') ||
+    (from === 'submetida' && (to === 'confirmada' || to === 'rejeitada'));
+}
+
+function normalizeInspectionRecord(input: Partial<InspectionItem> & { id: string; title: string }): InspectionItem {
+  const checklistSource = Array.isArray(input.checklist) ? input.checklist : [];
+  const checklist = checklistSource.map((item) => String(item || '').trim()).filter(Boolean);
+  return {
+    id: input.id,
+    title: String(input.title || '').trim(),
+    condominium: String(input.condominium || 'Geral'),
+    location: String(input.location || ''),
+    requiredDate: String(input.requiredDate || ''),
+    status: inspectionStatusLabel(String(input.status || 'Planeada')),
+    result: String(input.result || 'Pendente'),
+    checklist,
+    workerNotes: String(input.workerNotes || ''),
+    hqNotes: String(input.hqNotes || ''),
+    submittedAt: String(input.submittedAt || ''),
+    confirmedAt: String(input.confirmedAt || ''),
+    confirmedBy: String(input.confirmedBy || ''),
+    calendarEventId: String(input.calendarEventId || '')
+  };
+}
+
+function syncInspectionCalendarEvent(store: DemoStore, inspection: InspectionItem): void {
+  const now = new Date().toISOString();
+  const startAt = inspection.requiredDate
+    ? (inspection.requiredDate.includes('T') ? inspection.requiredDate : `${inspection.requiredDate}T09:00:00`)
+    : now;
+  const endAt = inspection.requiredDate
+    ? (inspection.requiredDate.includes('T') ? inspection.requiredDate : `${inspection.requiredDate}T10:00:00`)
+    : now;
+  const statusByInspection: Record<string, string> = {
+    planeada: 'Planeado',
+    submetida: 'Agendado',
+    confirmada: 'Confirmado',
+    rejeitada: 'Cancelado'
+  };
+  const status = statusByInspection[inspectionStatusKey(inspection.status)] || 'Planeado';
+  const existing = store.calendarEvents.find((event) =>
+    event.id === inspection.calendarEventId ||
+    (event.linkedEntityType === 'inspection' && event.linkedEntityId === inspection.id)
+  );
+  if (existing) {
+    existing.title = `Vistoria - ${inspection.title}`;
+    existing.description = inspection.result ? `Resultado preliminar: ${inspection.result}` : 'Vistoria operacional registada.';
+    existing.status = status;
+    existing.startAt = startAt;
+    existing.endAt = endAt;
+    existing.condominium = inspection.condominium;
+    existing.linkedEntityType = 'inspection';
+    existing.linkedEntityId = inspection.id;
+    existing.location = inspection.location;
+    existing.notes = inspection.workerNotes;
+    existing.updatedAt = now;
+    inspection.calendarEventId = existing.id;
+    return;
+  }
+
+  const createdId = createDemoId('cal');
+  store.calendarEvents.unshift({
+    id: createdId,
+    title: `Vistoria - ${inspection.title}`,
+    description: inspection.result ? `Resultado preliminar: ${inspection.result}` : 'Vistoria operacional registada.',
+    eventType: 'Vistoria',
+    status,
+    startAt,
+    endAt,
+    condominium: inspection.condominium,
+    linkedEntityType: 'inspection',
+    linkedEntityId: inspection.id,
+    attendees: [],
+    location: inspection.location,
+    notes: inspection.workerNotes,
+    createdAt: now,
+    updatedAt: now
+  });
+  inspection.calendarEventId = createdId;
+}
+
 function demoCollectionForPath(
   store: DemoStore,
   pathname: string
@@ -718,10 +1314,12 @@ function demoCollectionForPath(
     fractions: store.fractions as unknown as Array<Record<string, unknown>>,
     residents: store.residents as unknown as Array<Record<string, unknown>>,
     tickets: store.tickets as unknown as Array<Record<string, unknown>>,
+    ocorrencias: store.ocorrencias as unknown as Array<Record<string, unknown>>,
     suppliers: store.suppliers as unknown as Array<Record<string, unknown>>,
     documents: store.documents as unknown as Array<Record<string, unknown>>,
     reports: store.reports as unknown as Array<Record<string, unknown>>,
     maintenance: store.maintenance as unknown as Array<Record<string, unknown>>,
+    inspections: store.inspections as unknown as Array<Record<string, unknown>>,
     'calendar-events': store.calendarEvents as unknown as Array<Record<string, unknown>>,
     assemblies: store.assemblies as unknown as Array<Record<string, unknown>>,
     'audit-log': store.auditLog as unknown as Array<Record<string, unknown>>,
@@ -959,12 +1557,20 @@ function createDemoGeneratedDocument(
 ): DocumentItem {
   const template = String(payload.template || 'documento');
   const templateLabel = demoDocumentTemplates().find((item) => item.id === template)?.label ?? 'Documento gerado';
-  const title = `${templateLabel} - ${payload.condominium || store.activeCondominium}`;
+  const inspectionId = String(payload.inspectionId || '').trim();
+  const inspection = inspectionId
+    ? store.inspections.find((item) => item.id === inspectionId)
+    : undefined;
+  if (template === 'inspection-report' && !inspection) {
+    throw new Error('Vistoria nao encontrada para gerar relatorio');
+  }
+  const titleSuffix = inspection?.title || String(payload.condominium || store.activeCondominium);
+  const title = `${templateLabel} - ${titleSuffix}`;
   const document: DocumentItem = {
     id: createDemoId('doc'),
     title,
     type: templateLabel,
-    condominium: String(payload.condominium || store.activeCondominium),
+    condominium: inspection?.condominium || String(payload.condominium || store.activeCondominium),
     status: 'Gerado',
     fileName: `${slugifyDemo(title)}.txt`,
     mimeType: 'text/plain',
@@ -1123,6 +1729,14 @@ function demoDocumentTemplates(): DocumentTemplate[] {
       description: 'Comunicacao aos moradores sobre avarias, obras ou manutencoes.',
       output: 'PDF/TXT',
       dataSources: ['Tickets', 'Manutencao']
+    },
+    {
+      id: 'inspection-report',
+      label: 'Relatorio de vistoria',
+      category: 'Operacao',
+      description: 'Relatorio tecnico individual com checklist, notas e decisao HQ.',
+      output: 'PDF/TXT',
+      dataSources: ['Vistorias', 'Calendario']
     }
   ];
 }

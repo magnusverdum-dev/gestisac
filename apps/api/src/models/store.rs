@@ -32,6 +32,8 @@ pub struct AppStore {
     pub documents: Vec<Document>,
     pub reports: Vec<Report>,
     pub maintenance: Vec<MaintenanceItem>,
+    #[serde(default)]
+    pub inspections: Vec<Inspection>,
     #[serde(default, rename = "calendarEvents")]
     pub calendar_events: Vec<CalendarEvent>,
     pub assemblies: Vec<Assembly>,
@@ -1172,6 +1174,37 @@ pub struct MaintenanceItem {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Inspection {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub condominium: String,
+    #[serde(default)]
+    pub location: String,
+    #[serde(default)]
+    pub required_date: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub result: String,
+    #[serde(default)]
+    pub checklist: Vec<String>,
+    #[serde(default)]
+    pub worker_notes: String,
+    #[serde(default)]
+    pub hq_notes: String,
+    #[serde(default)]
+    pub submitted_at: String,
+    #[serde(default)]
+    pub confirmed_at: String,
+    #[serde(default)]
+    pub confirmed_by: String,
+    #[serde(default)]
+    pub calendar_event_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CalendarEvent {
     pub id: String,
     pub title: String,
@@ -1703,6 +1736,7 @@ impl AppStore {
                         .to_string(),
                 })
                 .collect(),
+            inspections: default_inspections(&demo.active_condominium),
             calendar_events: default_calendar_events(&demo.active_condominium),
             assemblies: demo
                 .assemblies
@@ -1788,6 +1822,9 @@ impl AppStore {
         }
         if self.calendar_events.is_empty() {
             self.calendar_events = default_calendar_events(&demo.active_condominium);
+        }
+        if self.inspections.is_empty() {
+            self.inspections = default_inspections(&demo.active_condominium);
         }
     }
 
@@ -2569,6 +2606,51 @@ fn normalize_demo_maintenance_status(status: &str) -> String {
     } else {
         "Planeada".to_string()
     }
+}
+
+fn default_inspections(condominium: &str) -> Vec<Inspection> {
+    vec![
+        Inspection {
+            id: Uuid::new_v4().to_string(),
+            title: "Vistoria anual aos extintores".to_string(),
+            condominium: condominium.to_string(),
+            location: "Garagens e patamares".to_string(),
+            required_date: "2026-06-03".to_string(),
+            status: "Planeada".to_string(),
+            result: "Pendente".to_string(),
+            checklist: vec![
+                "Validar pressao dos extintores".to_string(),
+                "Confirmar sinaletica visivel".to_string(),
+                "Registar extintores fora de prazo".to_string(),
+            ],
+            worker_notes: String::new(),
+            hq_notes: String::new(),
+            submitted_at: String::new(),
+            confirmed_at: String::new(),
+            confirmed_by: String::new(),
+            calendar_event_id: String::new(),
+        },
+        Inspection {
+            id: Uuid::new_v4().to_string(),
+            title: "Vistoria tecnica ao elevador Bloco B".to_string(),
+            condominium: condominium.to_string(),
+            location: "Casa das maquinas".to_string(),
+            required_date: "2026-06-05".to_string(),
+            status: "Submetida".to_string(),
+            result: "A rever".to_string(),
+            checklist: vec![
+                "Testar paragem de emergencia".to_string(),
+                "Verificar alarmes e comunicacao".to_string(),
+                "Inspecionar ruido e vibracao".to_string(),
+            ],
+            worker_notes: "Ligacao de alarme intermitente exige validacao HQ.".to_string(),
+            hq_notes: String::new(),
+            submitted_at: "2026-05-28T09:15:00Z".to_string(),
+            confirmed_at: String::new(),
+            confirmed_by: String::new(),
+            calendar_event_id: String::new(),
+        },
+    ]
 }
 
 #[cfg(test)]

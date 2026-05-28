@@ -18,10 +18,16 @@ sha2 = "0.10"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json", "macros", "migrate"] }
 thiserror = "2"
 tokio = { version = "1", features = ["fs", "macros", "net", "rt-multi-thread", "sync"] }
+tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+vercel_runtime = { version = "2", features = ["axum"] }
+
+[[bin]]
+name = "server"
+path = "api/server.rs"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

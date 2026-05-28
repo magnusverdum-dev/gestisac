@@ -4,7 +4,7 @@ use crate::{
         api::{paginate, Paginated, PaginationParams},
         store::{
             AppStore, Assembly, AuditLogEntry, Building, CalendarEvent, Condominium, Document,
-            Fraction, MaintenanceItem, Report, Resident, Supplier, Ticket,
+            Fraction, Inspection, MaintenanceItem, Report, Resident, Supplier, Ticket,
         },
     },
     routes::auth::{current_context, current_user, require_delete, require_write},
@@ -136,6 +136,8 @@ pub struct GenerateDocumentInput {
     pub fraction: Option<String>,
     pub notes: Option<String>,
     pub format: Option<String>,
+    #[serde(default)]
+    pub inspection_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -235,6 +237,36 @@ pub struct MaintenanceInput {
     pub cost_estimate: Option<String>,
     #[serde(default)]
     pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InspectionInput {
+    pub title: String,
+    #[serde(default)]
+    pub condominium: Option<String>,
+    #[serde(default)]
+    pub location: Option<String>,
+    #[serde(default)]
+    pub required_date: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub result: Option<String>,
+    #[serde(default)]
+    pub checklist: Option<Vec<String>>,
+    #[serde(default)]
+    pub worker_notes: Option<String>,
+    #[serde(default)]
+    pub hq_notes: Option<String>,
+    #[serde(default)]
+    pub submitted_at: Option<String>,
+    #[serde(default)]
+    pub confirmed_at: Option<String>,
+    #[serde(default)]
+    pub confirmed_by: Option<String>,
+    #[serde(default)]
+    pub calendar_event_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1792,6 +1824,214 @@ pub async fn delete_assembly(
     Ok(Json(response))
 }
 
+pub async fn inspections(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(params): Query<PaginationParams>,
+) -> Result<Json<Paginated<Inspection>>, ApiError> {
+    require_user(&headers, &state).await?;
+    let store = state.store.read().await;
+    Ok(Json(paginate(&store.inspections, &params)))
+}
+
+pub async fn create_inspection(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<InspectionInput>,
+) -> Result<Json<Inspection>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    validate_required(&input.title, "Titulo")?;
+    let status = normalize_inspection_status(input.status.as_deref().unwrap_or("Planeada"));
+    if normalize_inspection_status_key(&status) != "planeada" {
+        return Err(ApiError::validation(
+            "Nova vistoria deve iniciar no estado Planeada",
+        ));
+    }
+
+    let mut item = Inspection {
+        id: new_id(),
+        title: input.title.trim().to_string(),
+        condominium: trimmed_optional(input.condominium).unwrap_or_else(|| "Geral".to_string()),
+        location: trimmed_optional(input.location).unwrap_or_default(),
+        required_date: trimmed_optional(input.required_date)
+            .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string()),
+        status,
+        result: trimmed_optional(input.result).unwrap_or_else(|| "Pendente".to_string()),
+        checklist: clean_tags(input.checklist.unwrap_or_default()),
+        worker_notes: trimmed_optional(input.worker_notes).unwrap_or_default(),
+        hq_notes: trimmed_optional(input.hq_notes).unwrap_or_default(),
+        submitted_at: trimmed_optional(input.submitted_at).unwrap_or_default(),
+        confirmed_at: trimmed_optional(input.confirmed_at).unwrap_or_default(),
+        confirmed_by: trimmed_optional(input.confirmed_by).unwrap_or_default(),
+        calendar_event_id: trimmed_optional(input.calendar_event_id).unwrap_or_default(),
+    };
+
+    let mut store = state.store.write().await;
+    upsert_calendar_event_for_inspection(&mut store, &mut item);
+    store.inspections.insert(0, item.clone());
+    store.add_audit(
+        &user,
+        "operations",
+        "create",
+        &item.id,
+        format!("Vistoria {} criada", item.title),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(item))
+}
+
+pub async fn update_inspection(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<InspectionInput>,
+) -> Result<Json<Inspection>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    let context = current_context(&headers, &state).await?;
+    validate_required(&input.title, "Titulo")?;
+    let now = Utc::now().to_rfc3339();
+
+    let mut store = state.store.write().await;
+    let inspection_index = store
+        .inspections
+        .iter()
+        .position(|item| item.id == id)
+        .ok_or_else(|| ApiError::not_found("Vistoria nao encontrada"))?;
+    let current = store.inspections[inspection_index].clone();
+
+    let current_status_key = normalize_inspection_status_key(&current.status);
+    let next_status =
+        normalize_inspection_status(input.status.as_deref().unwrap_or(&current.status));
+    let next_status_key = normalize_inspection_status_key(&next_status);
+    validate_inspection_transition(&current_status_key, &next_status_key)?;
+
+    if context.app_context == "worker"
+        && (next_status_key == "confirmada" || next_status_key == "rejeitada")
+    {
+        return Err(ApiError::forbidden(
+            "Confirmacao da vistoria e exclusiva do contexto HQ",
+        ));
+    }
+
+    let mut next = current;
+    next.title = input.title.trim().to_string();
+    next.condominium =
+        trimmed_optional(input.condominium).unwrap_or_else(|| next.condominium.clone());
+    next.location = trimmed_optional(input.location).unwrap_or_else(|| next.location.clone());
+    next.required_date =
+        trimmed_optional(input.required_date).unwrap_or_else(|| next.required_date.clone());
+    next.result = trimmed_optional(input.result).unwrap_or_else(|| next.result.clone());
+    next.worker_notes =
+        trimmed_optional(input.worker_notes).unwrap_or_else(|| next.worker_notes.clone());
+    next.hq_notes = trimmed_optional(input.hq_notes).unwrap_or_else(|| next.hq_notes.clone());
+    next.submitted_at =
+        trimmed_optional(input.submitted_at).unwrap_or_else(|| next.submitted_at.clone());
+    next.confirmed_at =
+        trimmed_optional(input.confirmed_at).unwrap_or_else(|| next.confirmed_at.clone());
+    next.confirmed_by =
+        trimmed_optional(input.confirmed_by).unwrap_or_else(|| next.confirmed_by.clone());
+    next.calendar_event_id =
+        trimmed_optional(input.calendar_event_id).unwrap_or_else(|| next.calendar_event_id.clone());
+    if let Some(checklist) = input.checklist {
+        next.checklist = clean_tags(checklist);
+    }
+    next.status = next_status;
+
+    if current_status_key != next_status_key {
+        if next_status_key == "submetida" && next.submitted_at.is_empty() {
+            next.submitted_at = now.clone();
+            next.confirmed_at.clear();
+            next.confirmed_by.clear();
+        }
+
+        if next_status_key == "confirmada" || next_status_key == "rejeitada" {
+            if next.confirmed_at.is_empty() {
+                next.confirmed_at = now.clone();
+            }
+            if next.confirmed_by.is_empty() {
+                next.confirmed_by = user.name.clone();
+            }
+        }
+    }
+
+    upsert_calendar_event_for_inspection(&mut store, &mut next);
+    store.inspections[inspection_index] = next.clone();
+    let response = next;
+    let (audit_action, summary) = if current_status_key != next_status_key {
+        match next_status_key.as_str() {
+            "submetida" => (
+                "submit",
+                format!("Vistoria {} submetida para confirmacao HQ", response.title),
+            ),
+            "confirmada" => (
+                "confirm",
+                format!("Vistoria {} confirmada no HQ", response.title),
+            ),
+            "rejeitada" => (
+                "reject",
+                format!("Vistoria {} rejeitada no HQ", response.title),
+            ),
+            _ => ("update", format!("Vistoria {} atualizada", response.title)),
+        }
+    } else {
+        ("update", format!("Vistoria {} atualizada", response.title))
+    };
+    store.add_audit(&user, "operations", audit_action, &response.id, summary);
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn delete_inspection(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<Inspection>>, ApiError> {
+    let user = require_delete(&headers, &state, "operations").await?;
+    let mut store = state.store.write().await;
+    let original_len = store.inspections.len();
+    let deleted_inspection = store.inspections.iter().find(|item| item.id == id).cloned();
+    let deleted_name = deleted_inspection
+        .as_ref()
+        .map(|item| item.title.clone())
+        .unwrap_or_else(|| "Vistoria".to_string());
+    store.inspections.retain(|item| item.id != id);
+    if store.inspections.len() == original_len {
+        return Err(ApiError::not_found("Vistoria nao encontrada"));
+    }
+
+    if let Some(calendar_event_id) = deleted_inspection
+        .as_ref()
+        .map(|item| item.calendar_event_id.trim())
+        .filter(|value| !value.is_empty())
+    {
+        store
+            .calendar_events
+            .retain(|event| event.id != calendar_event_id);
+    } else {
+        store.calendar_events.retain(|event| {
+            !(event.linked_entity_type.eq_ignore_ascii_case("inspection")
+                && event.linked_entity_id == id)
+        });
+    }
+
+    store.add_audit(
+        &user,
+        "operations",
+        "delete",
+        &id,
+        format!("{deleted_name} apagada"),
+    );
+    let response = store.inspections.clone();
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
 pub async fn maintenance(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -2130,6 +2370,143 @@ fn date_part(value: &str) -> String {
     value.split('T').next().unwrap_or(value).to_string()
 }
 
+fn normalize_inspection_status(value: &str) -> String {
+    match normalize_inspection_status_key(value).as_str() {
+        "submetida" => "Submetida".to_string(),
+        "confirmada" => "Confirmada".to_string(),
+        "rejeitada" => "Rejeitada".to_string(),
+        _ => "Planeada".to_string(),
+    }
+}
+
+fn normalize_inspection_status_key(value: &str) -> String {
+    let normalized = value
+        .trim()
+        .to_lowercase()
+        .replace(['á', 'à', 'ã', 'â'], "a")
+        .replace(['é', 'ê'], "e")
+        .replace(['í', 'ì'], "i")
+        .replace(['ó', 'ô', 'õ'], "o")
+        .replace(['ú', 'ù'], "u");
+
+    if normalized.contains("submet") {
+        "submetida".to_string()
+    } else if normalized.contains("confirm") {
+        "confirmada".to_string()
+    } else if normalized.contains("rejeit") {
+        "rejeitada".to_string()
+    } else {
+        "planeada".to_string()
+    }
+}
+
+fn validate_inspection_transition(current: &str, next: &str) -> Result<(), ApiError> {
+    if current == next {
+        return Ok(());
+    }
+
+    let is_valid = (current == "planeada" && next == "submetida")
+        || (current == "submetida" && (next == "confirmada" || next == "rejeitada"));
+
+    if is_valid {
+        Ok(())
+    } else {
+        Err(ApiError::validation(
+            "Transicao de estado da vistoria invalida",
+        ))
+    }
+}
+
+fn inspection_status_to_calendar_status(status: &str) -> &'static str {
+    match normalize_inspection_status_key(status).as_str() {
+        "submetida" => "Agendado",
+        "confirmada" => "Confirmado",
+        "rejeitada" => "Cancelado",
+        _ => "Planeado",
+    }
+}
+
+fn inspection_start_at(required_date: &str) -> String {
+    let value = required_date.trim();
+    if value.is_empty() {
+        return Utc::now().format("%Y-%m-%dT09:00:00Z").to_string();
+    }
+    if value.contains('T') {
+        return value.to_string();
+    }
+    format!("{value}T09:00:00Z")
+}
+
+fn inspection_end_at(required_date: &str) -> String {
+    let value = required_date.trim();
+    if value.is_empty() {
+        return Utc::now().format("%Y-%m-%dT10:00:00Z").to_string();
+    }
+    if value.contains('T') {
+        if let Some((date, _)) = value.split_once('T') {
+            return format!("{date}T10:00:00Z");
+        }
+    }
+    format!("{value}T10:00:00Z")
+}
+
+fn upsert_calendar_event_for_inspection(store: &mut AppStore, inspection: &mut Inspection) {
+    let now = Utc::now().to_rfc3339();
+    let title = format!("Vistoria - {}", inspection.title);
+    let description = if inspection.result.trim().is_empty() {
+        "Vistoria operacional registada pela equipa tecnica.".to_string()
+    } else {
+        format!("Resultado preliminar: {}", inspection.result.trim())
+    };
+    let start_at = inspection_start_at(&inspection.required_date);
+    let end_at = inspection_end_at(&inspection.required_date);
+    let event_status = inspection_status_to_calendar_status(&inspection.status).to_string();
+
+    if let Some(event) = store.calendar_events.iter_mut().find(|event| {
+        event.id == inspection.calendar_event_id
+            || (event.linked_entity_type.eq_ignore_ascii_case("inspection")
+                && event.linked_entity_id == inspection.id)
+    }) {
+        event.title = title;
+        event.description = description;
+        event.event_type = "Vistoria".to_string();
+        event.status = event_status;
+        event.start_at = start_at;
+        event.end_at = end_at;
+        event.condominium = inspection.condominium.clone();
+        event.linked_entity_type = "inspection".to_string();
+        event.linked_entity_id = inspection.id.clone();
+        event.location = inspection.location.clone();
+        event.notes = inspection.worker_notes.clone();
+        event.updated_at = now;
+        inspection.calendar_event_id = event.id.clone();
+        return;
+    }
+
+    let event_id = new_id();
+    store.calendar_events.insert(
+        0,
+        CalendarEvent {
+            id: event_id.clone(),
+            title,
+            description,
+            event_type: "Vistoria".to_string(),
+            status: event_status,
+            start_at,
+            end_at,
+            condominium: inspection.condominium.clone(),
+            linked_entity_type: "inspection".to_string(),
+            linked_entity_id: inspection.id.clone(),
+            attendees: Vec::new(),
+            location: inspection.location.clone(),
+            notes: inspection.worker_notes.clone(),
+            created_at: now.clone(),
+            updated_at: now,
+        },
+    );
+    inspection.calendar_event_id = event_id;
+}
+
 fn matches_calendar_filter(event: &CalendarEvent, query: &CalendarEventQuery) -> bool {
     matches_optional_filter(&event.condominium, query.condominium.as_deref(), true)
         && matches_optional_filter(&event.event_type, query.event_type.as_deref(), false)
@@ -2246,6 +2623,13 @@ fn available_document_templates() -> Vec<DocumentTemplate> {
             vec!["Tickets", "Manutencao", "Fornecedores"],
         ),
         document_template(
+            "inspection-report",
+            "Relatorio de vistoria",
+            "Operacao",
+            "Relatorio tecnico individual de vistoria com checklist, notas e decisao HQ.",
+            vec!["Vistorias", "Calendario", "Condominio"],
+        ),
+        document_template(
             "supplier-work-order",
             "Ordem de servico a fornecedor",
             "Operacao",
@@ -2338,6 +2722,13 @@ fn build_generated_document(
         .iter()
         .find(|item| item.name.eq_ignore_ascii_case(&condominium));
     let accounting = store.accounting_summary();
+    let inspection_id = input
+        .inspection_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let mut title_suffix = condominium.clone();
+    let mut document_condominium = condominium.clone();
 
     let mut lines = vec![
         "GESTISAC - Gestao de Condominios".to_string(),
@@ -2534,6 +2925,87 @@ fn build_generated_document(
                 )
             }));
         }
+        "inspection-report" => {
+            let inspection_id = inspection_id.ok_or_else(|| {
+                ApiError::validation("inspectionId e obrigatorio para este modelo")
+            })?;
+            let inspection = store
+                .inspections
+                .iter()
+                .find(|item| item.id == inspection_id)
+                .ok_or_else(|| ApiError::not_found("Vistoria nao encontrada"))?;
+            title_suffix = inspection.title.clone();
+            document_condominium = inspection.condominium.clone();
+
+            lines.extend([
+                "Relatorio de vistoria".to_string(),
+                format!("Vistoria: {}", inspection.title),
+                format!("Condominio: {}", inspection.condominium),
+                format!(
+                    "Local: {}",
+                    if inspection.location.is_empty() {
+                        "Por definir"
+                    } else {
+                        inspection.location.as_str()
+                    }
+                ),
+                format!(
+                    "Data planeada: {}",
+                    if inspection.required_date.is_empty() {
+                        "Por definir"
+                    } else {
+                        inspection.required_date.as_str()
+                    }
+                ),
+                format!("Estado: {}", inspection.status),
+                format!(
+                    "Resultado: {}",
+                    if inspection.result.is_empty() {
+                        "Sem resultado registado"
+                    } else {
+                        inspection.result.as_str()
+                    }
+                ),
+            ]);
+            lines.push("Checklist".to_string());
+            if inspection.checklist.is_empty() {
+                lines.push("- Sem itens de checklist registados".to_string());
+            } else {
+                lines.extend(inspection.checklist.iter().map(|item| format!("- {item}")));
+            }
+            lines.extend([
+                String::new(),
+                "Notas do trabalhador".to_string(),
+                if inspection.worker_notes.is_empty() {
+                    "Sem notas do trabalhador".to_string()
+                } else {
+                    inspection.worker_notes.clone()
+                },
+                String::new(),
+                "Validacao HQ".to_string(),
+                format!(
+                    "Confirmado por: {}",
+                    if inspection.confirmed_by.is_empty() {
+                        "Por confirmar"
+                    } else {
+                        inspection.confirmed_by.as_str()
+                    }
+                ),
+                format!(
+                    "Data de confirmacao: {}",
+                    if inspection.confirmed_at.is_empty() {
+                        "Por confirmar"
+                    } else {
+                        inspection.confirmed_at.as_str()
+                    }
+                ),
+                if inspection.hq_notes.is_empty() {
+                    "Notas HQ: sem observacoes".to_string()
+                } else {
+                    format!("Notas HQ: {}", inspection.hq_notes)
+                },
+            ]);
+        }
         "supplier-work-order" => {
             let supplier = store.suppliers.first();
             lines.extend([
@@ -2613,9 +3085,9 @@ fn build_generated_document(
     }
 
     Ok(GeneratedDocumentDraft {
-        title: format!("{} - {}", template_info.label, condominium),
+        title: format!("{} - {}", template_info.label, title_suffix),
         kind: template_info.category,
-        condominium,
+        condominium: document_condominium,
         lines,
     })
 }

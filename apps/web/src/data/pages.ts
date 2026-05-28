@@ -102,6 +102,7 @@ export const emptyResources: ResourceState = {
   documents: [],
   reports: [],
   maintenance: [],
+  inspections: [],
   calendarEvents: [],
   assemblies: [],
   accounting: {
@@ -162,6 +163,7 @@ export const navPages: Array<Pick<DemoPage, 'path' | 'navLabel' | 'icon'>> = [
   { path: '/tickets', navLabel: 'Tickets', icon: 'T' },
   { path: '/documentos', navLabel: 'Documentos', icon: 'F' },
   { path: '/manutencao', navLabel: 'Manutencao', icon: 'W' },
+  { path: '/vistorias', navLabel: 'Vistorias', icon: 'V' },
   { path: '/fornecedores', navLabel: 'Fornecedores', icon: 'S' },
   { path: '/definicoes', navLabel: 'Definicoes', icon: 'G' }
 ];
@@ -629,6 +631,37 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
               }
             ]
           : undefined,
+        canEdit: canManageOperations,
+        canDelete: canDeleteOperations
+      }))
+    },
+    {
+      path: '/vistorias',
+      navLabel: 'Vistorias',
+      icon: 'V',
+      title: 'Vistorias',
+      description: 'Planeamento, submissao por trabalhadores e confirmacao final pelo HQ.',
+      action: 'Criar vistoria',
+      resource: 'inspections',
+      createFields: [
+        { name: 'title', label: 'Titulo', placeholder: 'Vistoria ao elevador Bloco B' },
+        { name: 'condominium', label: 'Condominio', placeholder: dashboard.activeCondominium },
+        { name: 'requiredDate', label: 'Data prevista', placeholder: '2026-06-05' },
+        { name: 'status', label: 'Estado', placeholder: 'Planeada' }
+      ],
+      stats: [
+        { label: 'Planeadas', value: String(resources.inspections.filter((item) => item.status === 'Planeada').length), detail: 'Por executar', tone: 'blue' },
+        { label: 'Submetidas', value: String(resources.inspections.filter((item) => item.status === 'Submetida').length), detail: 'Aguardam HQ', tone: 'gold' },
+        { label: 'Confirmadas', value: String(resources.inspections.filter((item) => item.status === 'Confirmada').length), detail: 'Fechadas', tone: 'green' }
+      ],
+      records: resources.inspections.map((item) => ({
+        id: item.id,
+        resource: 'inspections' as ResourceEndpoint,
+        title: item.title,
+        meta: `${item.condominium || 'Geral'} - ${item.location || 'Local por definir'}`,
+        status: item.status,
+        detail: item.requiredDate || 'Sem data',
+        values: item,
         canEdit: canManageOperations,
         canDelete: canDeleteOperations
       }))
@@ -1147,6 +1180,13 @@ function documentTemplateOptions(): DocumentTemplateOption[] {
       category: 'Operacao',
       description: 'Comunicacao aos moradores sobre avarias, obras ou manutencoes.',
       dataSources: ['Tickets', 'Manutencao']
+    },
+    {
+      id: 'inspection-report',
+      label: 'Relatorio de vistoria',
+      category: 'Operacao',
+      description: 'Relatorio tecnico individual com checklist, notas e confirmacao HQ.',
+      dataSources: ['Vistorias', 'Calendario']
     },
     {
       id: 'supplier-work-order',

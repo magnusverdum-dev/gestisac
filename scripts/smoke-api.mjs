@@ -72,17 +72,21 @@ async function main() {
         buildings: 1,
         fractions: 4,
         residents: 8,
-        status: 'Ativo',
+        status: 'Em onboarding',
         notice: 'Teste automatico'
       }
     });
     assert(condominium.id, 'creating a condominium must return an id');
-    cleanup.push(() =>
-      request(`/api/condominiums/${condominium.id}`, {
+    cleanup.push(async () => {
+      await request(`/api/condominiums/${condominium.id}/archive`, {
+        method: 'POST',
+        token
+      });
+      await request(`/api/condominiums/${condominium.id}`, {
         method: 'DELETE',
         token
-      })
-    );
+      });
+    });
 
     const ticket = await request('/api/tickets', {
       method: 'POST',

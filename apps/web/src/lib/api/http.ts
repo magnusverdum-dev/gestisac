@@ -22,6 +22,10 @@ export async function apiRequest<T>(
     headers.Authorization = `Bearer ${options.token}`;
   }
 
+  if (!API_BASE_URL && typeof window !== 'undefined') {
+    return demoApiRequest<T>(path, options);
+  }
+
   let response: Response;
   try {
     response = await fetch(resolveApiUrl(path), {

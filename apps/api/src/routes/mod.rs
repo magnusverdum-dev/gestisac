@@ -326,6 +326,14 @@ pub fn router(state: AppState) -> Router {
             put(administration::update_maintenance).delete(administration::delete_maintenance),
         )
         .route(
+            "/api/inspections",
+            get(resources::inspections).post(resources::create_inspection),
+        )
+        .route(
+            "/api/inspections/{id}",
+            put(resources::update_inspection).delete(resources::delete_inspection),
+        )
+        .route(
             "/api/calendar-events",
             get(resources::calendar_events).post(resources::create_calendar_event),
         )

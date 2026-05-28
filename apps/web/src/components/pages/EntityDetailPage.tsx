@@ -100,6 +100,38 @@ export const EntityDetailPage = component$((props: EntityDetailPageProps) => {
     ) : <MissingEntity route={route} navigate$={props.navigate$} />;
   }
 
+  if (route.entityType === 'inspection') {
+    const inspection = props.resources.inspections.find((item) => item.id === route.id);
+    const linkedEvent = inspection
+      ? props.resources.calendarEvents.find((event) => event.id === inspection.calendarEventId || event.linkedEntityId === inspection.id)
+      : undefined;
+
+    return inspection ? (
+      <DetailFrame
+        eyebrow="GESTISAC - Vistoria"
+        title={inspection.title}
+        subtitle={`${inspection.condominium || 'Geral'} - ${inspection.status}`}
+        backPath="/vistorias"
+        navigate$={props.navigate$}
+      >
+        <section class="entity-detail-grid">
+          <InfoCard label="Data prevista" value={inspection.requiredDate || 'Por definir'} detail={inspection.location || 'Local por definir'} />
+          <InfoCard label="Resultado" value={inspection.result || 'Sem resultado'} detail={inspection.submittedAt || 'Sem submissao'} />
+          <InfoCard label="Checklist" value={String(inspection.checklist.length)} detail={inspection.checklist.join(', ') || 'Sem itens'} />
+          <InfoCard label="Validacao HQ" value={inspection.confirmedBy || 'Por confirmar'} detail={inspection.confirmedAt || 'Sem confirmacao'} />
+        </section>
+        <section class="entity-story glass-panel">
+          <p>{inspection.workerNotes || 'Sem notas do trabalhador.'}</p>
+          <small>{inspection.hqNotes || 'Sem notas HQ.'}</small>
+        </section>
+        <section class="entity-link-grid">
+          <EntityCard icon="home" label="Condominio" title={inspection.condominium || 'Geral'} detail="Ficha do condominio" path={condominiumPath(props.resources, inspection.condominium)} navigate$={props.navigate$} />
+          <EntityCard icon="calendar" label="Evento ligado" title={linkedEvent?.title || inspection.calendarEventId || 'Ligacao nao encontrada'} detail={linkedEvent?.startAt || 'Sem evento resolvido'} path={linkedEvent ? entityPath('calendarEvent', linkedEvent.id) : ''} navigate$={props.navigate$} />
+        </section>
+      </DetailFrame>
+    ) : <MissingEntity route={route} navigate$={props.navigate$} />;
+  }
+
   if (route.entityType === 'calendarEvent') {
     const event = props.resources.calendarEvents.find((item) => item.id === route.id);
     const linkedPath = event ? linkedEntityPath(props.resources, event.linkedEntityType, event.linkedEntityId) : '';
@@ -340,12 +372,15 @@ function linkedEntityPath(resources: ResourceState, type: string, id: string): s
   if (!id) return '';
   if (normalized.includes('ticket')) return entityPath('ticket', id);
   if (normalized.includes('maintenance') || normalized.includes('manutencao')) return entityPath('maintenance', id);
+  if (normalized.includes('inspection') || normalized.includes('vistoria')) return entityPath('inspection', id);
   if (normalized.includes('document')) return entityPath('document', id);
   if (normalized.includes('condominium') || normalized.includes('condominio')) return entityPath('condominium', id);
   const ticket = resources.tickets.find((item) => item.id === id);
   if (ticket) return entityPath('ticket', ticket.id);
   const maintenance = resources.maintenance.find((item) => item.id === id);
   if (maintenance) return entityPath('maintenance', maintenance.id);
+  const inspection = resources.inspections.find((item) => item.id === id);
+  if (inspection) return entityPath('inspection', inspection.id);
   return '';
 }
 
