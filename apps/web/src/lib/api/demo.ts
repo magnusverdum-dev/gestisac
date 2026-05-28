@@ -68,7 +68,11 @@ type DemoStore = Omit<ResourceState, 'permissions'> & {
 };
 
 export function canUseBrowserDemoApi(status = 0): boolean {
-  return false;
+  if (API_BASE_URL || typeof window === 'undefined') {
+    return false;
+  }
+
+  return status === 0 || status === 404 || status === 405 || status >= 500;
 }
 
 export async function demoApiRequest<T>(
