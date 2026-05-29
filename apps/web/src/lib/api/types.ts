@@ -306,6 +306,15 @@ export type CondominiumMedia = {
   createdAt: string;
 };
 
+export type ChatMessage = {
+  id: string;
+  text: string;
+  senderName: string;
+  senderRole: string;
+  sourceApp: AppContext;
+  createdAt: string;
+};
+
 export type CondominiumPlanMarker = {
   id: string;
   label: string;
@@ -590,6 +599,7 @@ export type InspectionItem = {
   confirmedAt: string;
   confirmedBy: string;
   calendarEventId: string;
+  assignedWorkerId: string;
 };
 
 export type CalendarEvent = {

@@ -9,6 +9,7 @@ export type {
   AuditLogEntry,
   Building,
   CalendarEvent,
+  ChatMessage,
   Canal,
   ComentarioVisibilidade,
   CompletenessReport,
@@ -114,6 +115,11 @@ export {
   updateCondominiumSubresource,
   type CondominiumSubresource
 } from './api/condominiums';
+
+export {
+  listChatMessages,
+  sendChatMessage
+} from './api/chat';
 
 export {
   downloadDocument,

@@ -240,7 +240,7 @@ export function matchesDocumentContext(record: DemoRecord, context: string): boo
     condominios: ['condominio', 'seguro', 'planta', 'regulamento', 'ata', 'certificado'],
     fornecedores: ['fornecedor', 'contrato', 'proposta', 'legal'],
     manutencao: ['manutencao', 'relatorio tecnico', 'inspecao', 'garantia', 'manual'],
-    tickets: ['ticket', 'ocorrencia', 'avaria', 'foto', 'comprovativo']
+    vistorias: ['vistoria', 'relatorio de vistoria', 'inspecao', 'checklist', 'validacao hq']
   };
 
   return (keywords[context] ?? []).some((keyword) => searchable.includes(keyword));

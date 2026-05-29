@@ -1,5 +1,6 @@
 import type {
   ApiStatus,
+  ChatMessage,
   PublicUser,
   DashboardMetric,
   DashboardModule,
@@ -71,6 +72,7 @@ type DemoStore = Omit<ResourceState, 'permissions'> & {
   user: PublicUser;
   activeCondominium: string;
   permissions: PermissionsResponse;
+  chatMessages: ChatMessage[];
 };
 
 export function canUseBrowserDemoApi(status = 0): boolean {
@@ -131,6 +133,31 @@ export async function demoApiRequest<T>(
 
   if (pathname === 'permissions') {
     return store.permissions as T;
+  }
+
+  if (pathname === 'chat/messages' && method === 'GET') {
+    return store.chatMessages as T;
+  }
+
+  if (pathname === 'chat/messages' && method === 'POST') {
+    const text = String(body.text ?? '').trim();
+    if (!text) {
+      throw new Error('Mensagem vazia');
+    }
+    const message: ChatMessage = {
+      id: createDemoId('chat'),
+      text,
+      senderName: store.user.name,
+      senderRole: store.user.role,
+      sourceApp: normalizeDemoAppContext(body.appContext),
+      createdAt: new Date().toISOString()
+    };
+    store.chatMessages.push(message);
+    if (store.chatMessages.length > 500) {
+      store.chatMessages.splice(0, store.chatMessages.length - 500);
+    }
+    saveDemoStore(store);
+    return message as T;
   }
 
   if (pathname === 'active-condominium' && method === 'PUT') {
@@ -242,6 +269,10 @@ function saveDemoStore(store: DemoStore): void {
 }
 
 function ensureDemoStoreDefaults(store: DemoStore): DemoStore {
+  if (!Array.isArray(store.chatMessages)) {
+    store.chatMessages = [];
+  }
+
   if (!Array.isArray(store.calendarEvents)) {
     store.calendarEvents = demoCalendarEvents();
   }
@@ -639,6 +670,7 @@ function createDemoStore(): DemoStore {
         notes: 'Verificar quadro de comando e preparar aviso aos moradores.'
       }
     ],
+    chatMessages: [],
     inspections: demoInspections('Condominio Vila Verde'),
     calendarEvents: demoCalendarEvents(),
     assemblies: [
@@ -762,7 +794,8 @@ function demoInspections(condominium: string): InspectionItem[] {
       submittedAt: '',
       confirmedAt: '',
       confirmedBy: '',
-      calendarEventId: ''
+      calendarEventId: '',
+      assignedWorkerId: 'worker-demo-1'
     },
     {
       id: 'inspection-002',
@@ -782,7 +815,8 @@ function demoInspections(condominium: string): InspectionItem[] {
       submittedAt: '2026-05-28T09:15:00Z',
       confirmedAt: '',
       confirmedBy: '',
-      calendarEventId: ''
+      calendarEventId: '',
+      assignedWorkerId: 'worker-demo-1'
     }
   ];
 }
@@ -1244,7 +1278,8 @@ function normalizeInspectionRecord(input: Partial<InspectionItem> & { id: string
     submittedAt: String(input.submittedAt || ''),
     confirmedAt: String(input.confirmedAt || ''),
     confirmedBy: String(input.confirmedBy || ''),
-    calendarEventId: String(input.calendarEventId || '')
+    calendarEventId: String(input.calendarEventId || ''),
+    assignedWorkerId: String(input.assignedWorkerId || '')
   };
 }
 
@@ -1278,6 +1313,7 @@ function syncInspectionCalendarEvent(store: DemoStore, inspection: InspectionIte
     existing.linkedEntityId = inspection.id;
     existing.location = inspection.location;
     existing.notes = inspection.workerNotes;
+    existing.attendees = inspection.assignedWorkerId ? [inspection.assignedWorkerId] : [];
     existing.updatedAt = now;
     inspection.calendarEventId = existing.id;
     return;
@@ -1295,7 +1331,7 @@ function syncInspectionCalendarEvent(store: DemoStore, inspection: InspectionIte
     condominium: inspection.condominium,
     linkedEntityType: 'inspection',
     linkedEntityId: inspection.id,
-    attendees: [],
+    attendees: inspection.assignedWorkerId ? [inspection.assignedWorkerId] : [],
     location: inspection.location,
     notes: inspection.workerNotes,
     createdAt: now,

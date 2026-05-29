@@ -1,6 +1,7 @@
 pub mod accounting;
 pub mod administration;
 pub mod auth;
+pub mod chat;
 pub mod condominiums;
 pub mod dashboard;
 pub mod documents;
@@ -25,6 +26,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/refresh", post(auth::refresh))
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/me", get(auth::me))
+        .route(
+            "/api/chat/messages",
+            get(chat::list_messages).post(chat::create_message),
+        )
         .route("/api/permissions", get(auth::permissions))
         .route("/api/dashboard", get(dashboard::dashboard))
         .route(

@@ -7,6 +7,7 @@ type SidebarProps = {
   user: PublicUser;
   appContext: AppContext;
   navigate$: PropFunction<(path: string) => void>;
+  onSwitchApp$: PropFunction<() => void>;
 };
 
 export const Sidebar = component$((props: SidebarProps) => {
@@ -14,14 +15,20 @@ export const Sidebar = component$((props: SidebarProps) => {
   const navItems = navPages.filter((page) => {
     if (props.appContext === 'hq') return true;
     if (props.appContext === 'worker') {
-      return ['/dashboard', '/tickets', '/manutencao', '/calendario', '/vistorias'].includes(page.path);
+      return ['/dashboard', '/tickets', '/manutencao', '/calendario', '/vistorias', '/chat'].includes(page.path);
     }
-    return ['/dashboard', '/tickets', '/documentos'].includes(page.path);
+    return ['/dashboard', '/tickets', '/documentos', '/chat'].includes(page.path);
   });
 
   return (
     <aside class="sidebar" aria-label="Navegacao principal">
-      <div class="brand">
+      <button
+        class="brand"
+        type="button"
+        aria-label="Trocar app"
+        title="Voltar ao menu inicial das apps"
+        onClick$={props.onSwitchApp$}
+      >
         <div class="brand-mark">
           <span />
           <span />
@@ -31,7 +38,7 @@ export const Sidebar = component$((props: SidebarProps) => {
           <strong>GESTISAC</strong>
           <small>Gestao de Condominios</small>
         </div>
-      </div>
+      </button>
 
       <button
         class="mobile-nav-toggle"

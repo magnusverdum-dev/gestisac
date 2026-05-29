@@ -1,9 +1,22 @@
 import { component$, useSignal, type PropFunction } from '@builder.io/qwik';
-import { EditIcon, FileTextIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, Trash2Icon } from 'lucide-qwik';
+import {
+  AlertTriangleIcon,
+  CalendarDaysIcon,
+  CheckCircleIcon,
+  ClipboardCheckIcon,
+  EditIcon,
+  FileTextIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  SearchIcon,
+  Trash2Icon,
+  UserIcon
+} from 'lucide-qwik';
 import type {
   AppContext,
   GenerateDocumentPayload,
   InspectionItem,
+  PublicUser,
   ResourceEndpoint,
   ResourceState
 } from '../../lib/api';
@@ -12,6 +25,7 @@ import { EntityAction } from '../common/EntityAction';
 
 type InspectionsPageProps = {
   appContext: AppContext;
+  currentUser: PublicUser | null;
   resources: ResourceState;
   isSaving: boolean;
   navigate$: PropFunction<(path: string) => void>;
@@ -31,14 +45,19 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
   const selectedId = useSignal(props.resources.inspections[0]?.id ?? '');
   const isCreating = useSignal(false);
   const editingId = useSignal('');
+  const quickCreateDate = useSignal('');
   const hqNote = useSignal('');
 
   const isWorkerContext = props.appContext === 'worker';
   const isHqContext = props.appContext === 'hq';
   const condominiumOptions = ['Geral', ...props.resources.condominiums.map((item) => item.name)];
   const normalizedSearch = search.value.trim().toLowerCase();
+  const currentDate = new Date();
+  const visibleSource = props.resources.inspections.filter((item) =>
+    !isWorkerContext || isInspectionAssignedToWorker(item, props.currentUser)
+  );
 
-  const inspections = props.resources.inspections
+  const inspections = visibleSource
     .filter((item) => condominiumFilter.value === 'Geral' || item.condominium === condominiumFilter.value)
     .filter((item) => statusFilter.value === 'Todos' || item.status === statusFilter.value)
     .filter((item) => {
@@ -54,9 +73,14 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
 
   const selected = inspections.find((item) => item.id === selectedId.value) ?? inspections[0];
   const editingItem = props.resources.inspections.find((item) => item.id === editingId.value);
-  const pendingCount = props.resources.inspections.filter((item) => item.status === 'Submetida').length;
-  const confirmedCount = props.resources.inspections.filter((item) => item.status === 'Confirmada').length;
-  const rejectedCount = props.resources.inspections.filter((item) => item.status === 'Rejeitada').length;
+  const pendingCount = visibleSource.filter((item) => item.status === 'Submetida').length;
+  const thisWeekCount = visibleSource.filter((item) => isSameWeek(item.requiredDate, currentDate)).length;
+  const thisMonthCount = visibleSource.filter((item) => isSameMonth(item.requiredDate, currentDate)).length;
+  const overdueCount = visibleSource.filter((item) => isOverdueInspection(item, currentDate)).length;
+  const monthCells = buildInspectionMonthCells(currentDate);
+  const calendarSource = visibleSource
+    .filter((item) => condominiumFilter.value === 'Geral' || item.condominium === condominiumFilter.value)
+    .filter((item) => statusFilter.value === 'Todos' || item.status === statusFilter.value);
 
   return (
     <section class="page-view operational-page maintenance-page">
@@ -83,18 +107,22 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
         </button>
       </header>
 
-      <div class="summary-grid simple-summary-grid">
-        <button class="summary-card blue" type="button" onClick$={() => props.navigate$('/vistorias')}>
-          <span>Planeadas</span><strong>{props.resources.inspections.filter((item) => item.status === 'Planeada').length}</strong><small>Por executar</small>
+      <div class="inspection-kpi-grid">
+        <button class="inspection-kpi-card blue" type="button" onClick$={() => (statusFilter.value = 'Todos')}>
+          <CalendarDaysIcon size={18} />
+          <span>Esta semana</span><strong>{thisWeekCount}</strong><small>Vistorias previstas</small>
         </button>
-        <button class="summary-card gold" type="button" onClick$={() => (statusFilter.value = 'Submetida')}>
-          <span>Submetidas</span><strong>{pendingCount}</strong><small>Aguardam HQ</small>
+        <button class="inspection-kpi-card green" type="button" onClick$={() => (statusFilter.value = 'Todos')}>
+          <ClipboardCheckIcon size={18} />
+          <span>Este mes</span><strong>{thisMonthCount}</strong><small>Planeamento mensal</small>
         </button>
-        <button class="summary-card green" type="button" onClick$={() => (statusFilter.value = 'Confirmada')}>
-          <span>Confirmadas</span><strong>{confirmedCount}</strong><small>Validadas</small>
+        <button class="inspection-kpi-card gold" type="button" onClick$={() => (statusFilter.value = 'Submetida')}>
+          <CheckCircleIcon size={18} />
+          <span>A validar</span><strong>{pendingCount}</strong><small>Submetidas pelo trabalhador</small>
         </button>
-        <button class="summary-card red" type="button" onClick$={() => (statusFilter.value = 'Rejeitada')}>
-          <span>Rejeitadas</span><strong>{rejectedCount}</strong><small>A rever</small>
+        <button class={`inspection-kpi-card alarm ${overdueCount ? 'active' : ''}`} type="button" onClick$={() => (statusFilter.value = 'Todos')}>
+          <AlertTriangleIcon size={18} />
+          <span>Em atraso</span><strong>{overdueCount}</strong><small>Exigem atencao</small>
         </button>
       </div>
 
@@ -102,7 +130,7 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
         <div class="ops-panel-header calendar-toolbar">
           <div>
             <span class="page-eyebrow">Fluxo operacional</span>
-            <h2>Painel de vistorias</h2>
+            <h2>Calendario de vistorias</h2>
           </div>
           <div class="ops-toolbar calendar-filters">
             <label class="ops-search">
@@ -122,6 +150,76 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
           </div>
         </div>
 
+        <div class="inspection-calendar-mini" aria-label="Calendario de vistorias">
+          {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'].map((day) => <strong key={day}>{day}</strong>)}
+          {monthCells.map((date) => {
+            const dateKey = toDateKey(date.toISOString());
+            const dayInspections = calendarSource.filter((item) => item.requiredDate.slice(0, 10) === dateKey);
+            const outside = date.getMonth() !== currentDate.getMonth();
+
+            return (
+              <article class={`inspection-day ${outside ? 'muted' : ''} ${dayInspections.length ? 'has-items' : ''}`} key={dateKey}>
+                <span>{date.getDate()}</span>
+                {!outside ? (
+                  <button
+                    type="button"
+                    class="inspection-day-add"
+                    title={`Nova vistoria em ${dateKey}`}
+                    onClick$={() => {
+                      quickCreateDate.value = dateKey;
+                      isCreating.value = true;
+                      editingId.value = '';
+                    }}
+                  >
+                    +
+                  </button>
+                ) : null}
+                <div>
+                  {dayInspections.slice(0, 3).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      class={`inspection-chip ${inspectionTone(item.status)} ${isOverdueInspection(item, currentDate) ? 'overdue' : ''}`}
+                      title={`${item.title} - ${item.status}`}
+                      onClick$={() => {
+                        selectedId.value = item.id;
+                        editingId.value = '';
+                        isCreating.value = false;
+                      }}
+                      onDblClick$={() => {
+                        editingId.value = item.id;
+                        isCreating.value = false;
+                        quickCreateDate.value = '';
+                      }}
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                  {dayInspections.length > 0 ? (
+                    <button
+                      type="button"
+                      class="inspection-chip blue"
+                      title={`Editar rapidamente (${dayInspections.length})`}
+                      onClick$={() => {
+                        const first = dayInspections[0];
+                        if (!first) {
+                          return;
+                        }
+                        selectedId.value = first.id;
+                        editingId.value = first.id;
+                        isCreating.value = false;
+                        quickCreateDate.value = '';
+                      }}
+                    >
+                      {dayInspections.length}
+                    </button>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
         <div class="ops-detail-layout">
           <div class="ops-list-column maintenance-list">
             {inspections.length ? inspections.map((item) => (
@@ -131,7 +229,7 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
                   <div>
                     <strong>{item.title}</strong>
                     <span>{item.condominium || 'Geral'} - {item.location || 'Local por definir'}</span>
-                    <p>{item.requiredDate || 'Sem data'} - {item.result || 'Sem resultado'}</p>
+                    <p>{item.requiredDate || 'Sem data'} - {item.assignedWorkerId || 'Sem trabalhador'}</p>
                   </div>
                   <div class="ticket-card-meta">
                     <small class={`status-chip ${inspectionTone(item.status)}`}>{item.status}</small>
@@ -165,7 +263,7 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
                           hqNote.value = '';
                         }}
                       >
-                        Confirmar
+                        Validar vistoria
                       </button>
                       <button
                         type="button"
@@ -216,6 +314,7 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
                 </div>
                 <div class="detail-kv-grid">
                   <article><span>Data prevista</span><strong>{selected.requiredDate || 'Por definir'}</strong><small>{selected.location || 'Local por definir'}</small></article>
+                  <article><span>Trabalhador</span><strong>{selected.assignedWorkerId || 'Por atribuir'}</strong><small>App funcionario</small></article>
                   <article><span>Resultado</span><strong>{selected.result || 'Sem resultado'}</strong><small>{selected.submittedAt || 'Sem submissao'}</small></article>
                   <article><span>Validação HQ</span><strong>{selected.confirmedBy || 'Pendente'}</strong><small>{selected.confirmedAt || 'Sem confirmacao'}</small></article>
                   <article><span>Checklist</span><strong>{selected.checklist.length} itens</strong><small>{selected.checklist.join(', ') || 'Sem itens'}</small></article>
@@ -230,6 +329,14 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
                   disabled={!selected.calendarEventId}
                 >
                   Abrir evento de calendario ligado
+                </EntityAction>
+                <EntityAction
+                  class="entity-inline-link"
+                  path={selected.assignedWorkerId ? entityPath('profile', `perfil-${selected.assignedWorkerId}`) : ''}
+                  navigate$={props.navigate$}
+                  disabled={!selected.assignedWorkerId}
+                >
+                  <UserIcon size={14} /> Documentacao do trabalhador
                 </EntityAction>
                 <p>{selected.workerNotes || 'Sem notas do trabalhador.'}</p>
                 <small>{selected.hqNotes || 'Sem notas HQ.'}</small>
@@ -276,7 +383,7 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
                           hqNote.value = '';
                         }}
                       >
-                        {props.isSaving ? 'A guardar...' : 'Confirmar vistoria'}
+                        {props.isSaving ? 'A guardar...' : 'Validar vistoria'}
                       </button>
                       <button
                         type="button"
@@ -323,9 +430,11 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
       {isCreating.value || editingItem ? (
         <InspectionForm
           item={editingItem}
+          createDate={quickCreateDate.value}
+          defaultCondominium={condominiumFilter.value}
           condominiumOptions={condominiumOptions}
           isSaving={props.isSaving}
-          onClose$={() => { isCreating.value = false; editingId.value = ''; }}
+          onClose$={() => { isCreating.value = false; editingId.value = ''; quickCreateDate.value = ''; }}
           onSubmit$={async (payload) => {
             if (editingItem) {
               await props.onUpdate$('inspections', editingItem.id, payload);
@@ -334,6 +443,7 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
             }
             isCreating.value = false;
             editingId.value = '';
+            quickCreateDate.value = '';
           }}
         />
       ) : null}
@@ -343,6 +453,8 @@ export const InspectionsPage = component$((props: InspectionsPageProps) => {
 
 const InspectionForm = component$((props: {
   item?: InspectionItem;
+  createDate?: string;
+  defaultCondominium?: string;
   condominiumOptions: string[];
   isSaving: boolean;
   onClose$: PropFunction<() => void>;
@@ -359,11 +471,12 @@ const InspectionForm = component$((props: {
     <form preventdefault:submit onSubmit$={async (event) => props.onSubmit$(inspectionPayloadFromForm(event.target as HTMLFormElement, props.item))}>
       <div class="ops-form-grid">
         <label>Titulo<input name="title" value={props.item?.title ?? ''} placeholder="Vistoria ao elevador Bloco B" required /></label>
-        <label>Condominio<select name="condominium" value={props.item?.condominium || props.condominiumOptions[1] || 'Geral'}>
+        <label>Condominio<select name="condominium" value={props.item?.condominium || (props.defaultCondominium && props.defaultCondominium !== 'Geral' ? props.defaultCondominium : props.condominiumOptions[1]) || 'Geral'}>
           {props.condominiumOptions.map((name) => <option key={name} value={name}>{name}</option>)}
         </select></label>
         <label>Local<input name="location" value={props.item?.location ?? ''} placeholder="Casa das maquinas" /></label>
-        <label>Data prevista<input type="date" name="requiredDate" value={props.item?.requiredDate ?? ''} /></label>
+        <label>Data prevista<input type="date" name="requiredDate" value={props.item?.requiredDate ?? props.createDate ?? ''} /></label>
+        <label>Trabalhador<input name="assignedWorkerId" value={props.item?.assignedWorkerId ?? ''} placeholder="worker-demo-1" /></label>
         <label>Estado<select name="status" value={props.item?.status || 'Planeada'}>
           {STATUS_OPTIONS.filter((status) => status !== 'Todos').map((status) => <option key={status} value={status}>{status}</option>)}
         </select></label>
@@ -396,7 +509,8 @@ function inspectionPayloadFromForm(form: HTMLFormElement, current?: InspectionIt
     submittedAt: current?.submittedAt || '',
     confirmedAt: current?.confirmedAt || '',
     confirmedBy: current?.confirmedBy || '',
-    calendarEventId: current?.calendarEventId || ''
+    calendarEventId: current?.calendarEventId || '',
+    assignedWorkerId: stringField(data, 'assignedWorkerId') || current?.assignedWorkerId || ''
   };
 }
 
@@ -414,7 +528,8 @@ function inspectionPayload(item: InspectionItem, overrides: Partial<InspectionIt
     submittedAt: overrides.submittedAt ?? item.submittedAt,
     confirmedAt: overrides.confirmedAt ?? item.confirmedAt,
     confirmedBy: overrides.confirmedBy ?? item.confirmedBy,
-    calendarEventId: overrides.calendarEventId ?? item.calendarEventId
+    calendarEventId: overrides.calendarEventId ?? item.calendarEventId,
+    assignedWorkerId: overrides.assignedWorkerId ?? item.assignedWorkerId
   };
 }
 
@@ -435,4 +550,83 @@ function inspectionTone(status: string): string {
   if (normalized.includes('submet')) return 'gold';
   if (normalized.includes('rejeit')) return 'red';
   return 'blue';
+}
+
+function isInspectionAssignedToWorker(item: InspectionItem, user: PublicUser | null): boolean {
+  const assigned = item.assignedWorkerId.trim().toLowerCase();
+  if (!assigned) {
+    return false;
+  }
+
+  const tokens = [
+    user?.id,
+    user?.email,
+    user?.name,
+    'worker-demo-1',
+    'worker'
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+
+  return tokens.some((token) => assigned.includes(token) || token.includes(assigned));
+}
+
+function isSameWeek(value: string, reference: Date): boolean {
+  const parsed = parseInspectionDate(value);
+  if (!parsed) {
+    return false;
+  }
+
+  const start = startOfWeek(reference);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  return parsed >= start && parsed < end;
+}
+
+function isSameMonth(value: string, reference: Date): boolean {
+  const parsed = parseInspectionDate(value);
+  return Boolean(parsed && parsed.getFullYear() === reference.getFullYear() && parsed.getMonth() === reference.getMonth());
+}
+
+function isOverdueInspection(item: InspectionItem, reference: Date): boolean {
+  const parsed = parseInspectionDate(item.requiredDate);
+  if (!parsed || ['Confirmada', 'Rejeitada'].includes(item.status)) {
+    return false;
+  }
+
+  const today = new Date(reference);
+  today.setHours(0, 0, 0, 0);
+  return parsed < today;
+}
+
+function parseInspectionDate(value: string): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value.includes('T') ? value : `${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function startOfWeek(reference: Date): Date {
+  const date = new Date(reference);
+  date.setHours(0, 0, 0, 0);
+  const mondayIndex = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - mondayIndex);
+  return date;
+}
+
+function buildInspectionMonthCells(reference: Date): Date[] {
+  const first = new Date(reference.getFullYear(), reference.getMonth(), 1);
+  const start = startOfWeek(first);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return date;
+  });
+}
+
+function toDateKey(value: string): string {
+  return value.slice(0, 10);
 }

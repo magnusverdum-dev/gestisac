@@ -23,6 +23,8 @@ pub struct AppStore {
     pub residents: Vec<Resident>,
     pub tickets: Vec<Ticket>,
     #[serde(default)]
+    pub chat_messages: Vec<ChatMessage>,
+    #[serde(default)]
     pub ocorrencias: Vec<Ocorrencia>,
     #[serde(default)]
     pub ocorrencia_comentarios: Vec<OcorrenciaComentario>,
@@ -1097,6 +1099,19 @@ pub struct Ticket {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatMessage {
+    pub id: String,
+    pub text: String,
+    pub sender_name: String,
+    pub sender_role: String,
+    #[serde(default)]
+    pub source_app: String,
+    #[serde(default = "now_utc_string")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Supplier {
     pub id: String,
     pub name: String,
@@ -1201,6 +1216,8 @@ pub struct Inspection {
     pub confirmed_by: String,
     #[serde(default)]
     pub calendar_event_id: String,
+    #[serde(default)]
+    pub assigned_worker_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1553,6 +1570,7 @@ impl AppStore {
                     updated_at: item.updated_at.clone(),
                 })
                 .collect(),
+            chat_messages: Vec::new(),
             ocorrencias: demo
                 .tickets
                 .iter()
@@ -2629,6 +2647,7 @@ fn default_inspections(condominium: &str) -> Vec<Inspection> {
             confirmed_at: String::new(),
             confirmed_by: String::new(),
             calendar_event_id: String::new(),
+            assigned_worker_id: "worker-demo-1".to_string(),
         },
         Inspection {
             id: Uuid::new_v4().to_string(),
@@ -2649,6 +2668,7 @@ fn default_inspections(condominium: &str) -> Vec<Inspection> {
             confirmed_at: String::new(),
             confirmed_by: String::new(),
             calendar_event_id: String::new(),
+            assigned_worker_id: "worker-demo-1".to_string(),
         },
     ]
 }

@@ -11,6 +11,7 @@ type AppShellProps = {
   searchResults: GlobalSearchResult[];
   navigate$: PropFunction<(path: string) => void>;
   onLogout$: PropFunction<() => void>;
+  onSwitchApp$: PropFunction<() => void>;
 };
 
 export const AppShell = component$((props: AppShellProps) => {
@@ -23,6 +24,7 @@ export const AppShell = component$((props: AppShellProps) => {
         user={props.dashboard.user}
         appContext={props.appContext}
         navigate$={props.navigate$}
+        onSwitchApp$={props.onSwitchApp$}
       />
       <section class="main-stage">
         <Topbar

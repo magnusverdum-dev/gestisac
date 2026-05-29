@@ -1,6 +1,6 @@
 import { component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
 import { EditIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, Trash2Icon } from 'lucide-qwik';
-import type { CalendarEvent, ResourceEndpoint, ResourceState } from '../../lib/api';
+import type { CalendarEvent, InspectionItem, ResourceEndpoint, ResourceState } from '../../lib/api';
 import { calendarTypePath, condominiumPath, entityPath, slugify } from '../../lib/entity-navigation';
 import { EntityAction } from '../common/EntityAction';
 
@@ -29,6 +29,8 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
   const selectedId = useSignal(props.resources.calendarEvents[0]?.id ?? '');
   const isCreating = useSignal(false);
   const editingId = useSignal('');
+  const quickInspectionDate = useSignal('');
+  const quickInspectionOpen = useSignal(false);
 
   useTask$(({ track }) => {
     const routedType = track(() => props.initialType);
@@ -61,6 +63,12 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
     .sort((left, right) => left.startAt.localeCompare(right.startAt));
   const selectedEvent = filteredEvents.find((event) => event.id === selectedId.value) ?? filteredEvents[0];
   const editingEvent = props.resources.calendarEvents.find((event) => event.id === editingId.value);
+  const linkedInspection = selectedEvent
+    ? props.resources.inspections.find((item) =>
+        item.id === selectedEvent.linkedEntityId ||
+        item.calendarEventId === selectedEvent.id
+      )
+    : undefined;
   const now = new Date();
   const monthCells = buildMonthCells(now);
   const weekCells = buildWeekCells(now);
@@ -148,6 +156,37 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
           ))}
         </div>
 
+        {quickInspectionOpen.value ? (
+          <section class="quick-inspection-panel">
+            <div>
+              <span class="page-eyebrow">Agendar vistoria</span>
+              <strong>{quickInspectionDate.value}</strong>
+            </div>
+            <form
+              preventdefault:submit
+              onSubmit$={async (event) => {
+                const form = event.target as HTMLFormElement;
+                await props.onCreate$('inspections', inspectionPayloadFromQuickForm(form, quickInspectionDate.value));
+                form.reset();
+                quickInspectionOpen.value = false;
+              }}
+            >
+              <label>Titulo<input name="title" placeholder="Vistoria ao condominio" required /></label>
+              <label>Condominio<select name="condominium" value={condominiumFilter.value}>
+                {condominiumOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select></label>
+              <label>Trabalhador<input name="assignedWorkerId" placeholder="worker-demo-1" required /></label>
+              <label>Local<input name="location" placeholder="Bloco, piso ou zona" /></label>
+              <button class="primary-action" type="submit" disabled={props.isSaving}>
+                {props.isSaving ? 'A guardar...' : 'Agendar'}
+              </button>
+              <button type="button" class="secondary-action" onClick$={() => (quickInspectionOpen.value = false)}>
+                Cancelar
+              </button>
+            </form>
+          </section>
+        ) : null}
+
         <div class="calendar-layout">
           <div class="calendar-main-panel">
             {viewMode.value === 'month' ? (
@@ -158,7 +197,17 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
                   const dayEvents = filteredEvents.filter((event) => toDateKey(event.startAt) === dateKey).slice(0, 3);
                   const isOutside = date.getMonth() !== now.getMonth();
                   return (
-                    <article class={`calendar-day ${isOutside ? 'muted' : ''}`} key={dateKey}>
+                    <article
+                      class={`calendar-day ${isOutside ? 'muted' : ''}`}
+                      key={dateKey}
+                      onContextMenu$={(event) => {
+                        event.preventDefault();
+                        quickInspectionDate.value = dateKey;
+                        quickInspectionOpen.value = true;
+                        isCreating.value = false;
+                        editingId.value = '';
+                      }}
+                    >
                       <span>{date.getDate()}</span>
                       <div>
                         {dayEvents.map((event) => (
@@ -166,7 +215,7 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
                             key={event.id}
                             type="button"
                             class={`calendar-event-chip ${toneForType(event.eventType)}`}
-                            onClick$={() => props.navigate$(entityPath('calendarEvent', event.id))}
+                            onClick$={() => (selectedId.value = event.id)}
                           >
                             {shortTime(event.startAt)} {event.title}
                           </button>
@@ -317,6 +366,40 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
                     {selectedEvent.attendees.map((attendee) => <span key={attendee}>{attendee}</span>)}
                   </div>
                 ) : null}
+                {linkedInspection ? (
+                  <div class="simple-header-actions">
+                    {linkedInspection.status === 'Planeada' ? (
+                      <button
+                        type="button"
+                        class="secondary-action"
+                        disabled={props.isSaving}
+                        onClick$={async () => {
+                          await props.onUpdate$('inspections', linkedInspection.id, inspectionPayloadForCalendar(linkedInspection, {
+                            status: 'Submetida',
+                            submittedAt: new Date().toISOString()
+                          }));
+                        }}
+                      >
+                        Marcar submetida
+                      </button>
+                    ) : null}
+                    {linkedInspection.status === 'Submetida' ? (
+                      <button
+                        type="button"
+                        class="primary-action"
+                        disabled={props.isSaving}
+                        onClick$={async () => {
+                          await props.onUpdate$('inspections', linkedInspection.id, inspectionPayloadForCalendar(linkedInspection, {
+                            status: 'Confirmada',
+                            confirmedAt: new Date().toISOString()
+                          }));
+                        }}
+                      >
+                        Validar vistoria
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </section>
             ) : null}
           </aside>
@@ -412,6 +495,48 @@ function eventPayloadFromForm(form: HTMLFormElement): Record<string, unknown> {
     description: stringField(data, 'description'),
     notes: stringField(data, 'notes'),
     attendees: splitList(stringField(data, 'attendees'))
+  };
+}
+
+function inspectionPayloadFromQuickForm(form: HTMLFormElement, requiredDate: string): Record<string, unknown> {
+  const data = new FormData(form);
+  return {
+    title: stringField(data, 'title'),
+    condominium: stringField(data, 'condominium') || 'Geral',
+    location: stringField(data, 'location'),
+    requiredDate,
+    status: 'Planeada',
+    result: 'Pendente',
+    checklist: [],
+    workerNotes: '',
+    hqNotes: '',
+    submittedAt: '',
+    confirmedAt: '',
+    confirmedBy: '',
+    calendarEventId: '',
+    assignedWorkerId: stringField(data, 'assignedWorkerId')
+  };
+}
+
+function inspectionPayloadForCalendar(
+  item: InspectionItem,
+  overrides: Partial<InspectionItem> = {}
+): Record<string, unknown> {
+  return {
+    title: overrides.title ?? item.title,
+    condominium: overrides.condominium ?? item.condominium,
+    location: overrides.location ?? item.location,
+    requiredDate: overrides.requiredDate ?? item.requiredDate,
+    status: overrides.status ?? item.status,
+    result: overrides.result ?? item.result,
+    checklist: overrides.checklist ?? item.checklist,
+    workerNotes: overrides.workerNotes ?? item.workerNotes,
+    hqNotes: overrides.hqNotes ?? item.hqNotes,
+    submittedAt: overrides.submittedAt ?? item.submittedAt,
+    confirmedAt: overrides.confirmedAt ?? item.confirmedAt,
+    confirmedBy: overrides.confirmedBy ?? item.confirmedBy,
+    calendarEventId: overrides.calendarEventId ?? item.calendarEventId,
+    assignedWorkerId: overrides.assignedWorkerId ?? item.assignedWorkerId
   };
 }
 

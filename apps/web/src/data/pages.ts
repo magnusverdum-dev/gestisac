@@ -164,6 +164,7 @@ export const navPages: Array<Pick<DemoPage, 'path' | 'navLabel' | 'icon'>> = [
   { path: '/documentos', navLabel: 'Documentos', icon: 'F' },
   { path: '/manutencao', navLabel: 'Manutencao', icon: 'W' },
   { path: '/vistorias', navLabel: 'Vistorias', icon: 'V' },
+  { path: '/chat', navLabel: 'Chat', icon: 'H' },
   { path: '/fornecedores', navLabel: 'Fornecedores', icon: 'S' },
   { path: '/definicoes', navLabel: 'Definicoes', icon: 'G' }
 ];
@@ -665,6 +666,20 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
         canEdit: canManageOperations,
         canDelete: canDeleteOperations
       }))
+    },
+    {
+      path: '/chat',
+      navLabel: 'Chat',
+      icon: 'H',
+      title: 'Chat',
+      description: 'Canal de comunicacao transversal entre Cliente, HQ e Fornecedores.',
+      action: 'Enviar mensagem',
+      stats: [
+        { label: 'Canal', value: 'Global', detail: 'Partilhado entre apps', tone: 'blue' },
+        { label: 'SLA', value: 'Ativo', detail: 'Resposta em tempo real', tone: 'green' },
+        { label: 'Escala', value: '3 apps', detail: 'Cliente, HQ e Fornecedores', tone: 'gold' }
+      ],
+      records: []
     },
     {
       path: '/fornecedores',

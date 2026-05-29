@@ -61,7 +61,7 @@ const documentContexts = [
   { id: 'condominios', title: 'Condominios', detail: 'Atas, seguros e plantas' },
   { id: 'fornecedores', title: 'Fornecedores', detail: 'Contratos e propostas' },
   { id: 'manutencao', title: 'Manutencao', detail: 'Relatorios tecnicos' },
-  { id: 'tickets', title: 'Tickets', detail: 'Anexos de ocorrencias' }
+  { id: 'vistorias', title: 'Vistorias', detail: 'Relatorios e validacoes' }
 ] as const;
 
 export const DocumentsPage = component$((props: DocumentsPageProps) => {

@@ -3,6 +3,7 @@ import { AppEntryPage } from './components/auth/AppEntryPage';
 import { LoginPage } from './components/auth/LoginPage';
 import { DashboardPage } from './components/dashboard/DashboardPage';
 import { CalendarPage } from './components/pages/CalendarPage';
+import { ChatPage } from './components/pages/ChatPage';
 import { CondominiumsPage, type CondoAreaId } from './components/pages/CondominiumsPage';
 import { DocumentsPage } from './components/pages/DocumentsPage';
 import { EntityDetailPage } from './components/pages/EntityDetailPage';
@@ -256,6 +257,28 @@ export const App = component$(() => {
       await logout(token).catch(() => undefined);
     }
     window.history.replaceState({}, '', buildAppPath(context, '/login'));
+  });
+
+  const switchApp$ = $(async () => {
+    const token = session.token;
+    session.token = '';
+    session.user = null;
+    session.appContext = 'hq';
+    appContext.value = 'hq';
+    showEntry.value = true;
+    currentPath.value = '/dashboard';
+    dashboard.value = fallbackDashboard;
+    resources.value = emptyResources;
+    pageCache.value = buildPages(emptyResources, fallbackDashboard);
+    searchResultCache.value = buildGlobalSearchResults(emptyResources);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(SESSION_REFRESH_KEY);
+    localStorage.removeItem(SESSION_EXPIRES_KEY);
+    localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
+    if (token) {
+      await logout(token).catch(() => undefined);
+    }
+    window.history.replaceState({}, '', '/');
   });
 
   const openCreateFor$ = $(async (path: string, resource: CreateResource) => {
@@ -711,11 +734,19 @@ export const App = component$(() => {
       searchResults={searchResultCache.value}
       navigate$={navigate$}
       onLogout$={logout$}
+      onSwitchApp$={switchApp$}
     >
       {error.value ? <div class="app-error glass-panel">{error.value}</div> : null}
       {notice.value ? <div class="app-success glass-panel">{notice.value}</div> : null}
       {isClientContext ? (
-        page.path === '/documentos' ? (
+        page.path === '/chat' ? (
+          <ChatPage
+            appContext={appContext.value}
+            currentUser={session.user}
+            token={session.token}
+            navigate$={navigate$}
+          />
+        ) : page.path === '/documentos' ? (
           <DocumentsPage
             page={page}
             isSaving={isSaving.value}
@@ -753,7 +784,14 @@ export const App = component$(() => {
           />
         )
       ) : isWorkerContext ? (
-        page.path === '/manutencao' ? (
+        page.path === '/chat' ? (
+          <ChatPage
+            appContext={appContext.value}
+            currentUser={session.user}
+            token={session.token}
+            navigate$={navigate$}
+          />
+        ) : page.path === '/manutencao' ? (
           <MaintenancePage
             resources={resources.value}
             isSaving={isSaving.value}
@@ -767,6 +805,7 @@ export const App = component$(() => {
         ) : page.path === '/vistorias' ? (
           <InspectionsPage
             appContext={appContext.value}
+            currentUser={session.user}
             resources={resources.value}
             isSaving={isSaving.value}
             navigate$={navigate$}
@@ -860,6 +899,7 @@ export const App = component$(() => {
       ) : page.path === '/vistorias' ? (
         <InspectionsPage
           appContext={appContext.value}
+          currentUser={session.user}
           resources={resources.value}
           isSaving={isSaving.value}
           navigate$={navigate$}
@@ -889,6 +929,13 @@ export const App = component$(() => {
           onDownloadDocument$={downloadDocument$}
           onCloseReportPreview$={closeReportPreview$}
           onCloseDocumentPreview$={closeDocumentPreview$}
+        />
+      ) : page.path === '/chat' ? (
+        <ChatPage
+          appContext={appContext.value}
+          currentUser={session.user}
+          token={session.token}
+          navigate$={navigate$}
         />
       ) : (
         <PageOverview
