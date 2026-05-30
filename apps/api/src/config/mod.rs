@@ -3,6 +3,7 @@ use axum::http::{
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
     HeaderValue, Method,
 };
+use std::collections::HashSet;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
@@ -80,17 +81,24 @@ impl ApiConfig {
     }
 
     pub fn cors_layer(&self) -> anyhow::Result<CorsLayer> {
-        let origins = self
+        for origin in &self.cors_allowed_origins {
+            HeaderValue::from_str(origin)
+                .with_context(|| format!("invalid CORS origin configured: {origin}"))?;
+        }
+        let explicit_origins = self
             .cors_allowed_origins
             .iter()
-            .map(|origin| {
-                HeaderValue::from_str(origin)
-                    .with_context(|| format!("invalid CORS origin configured: {origin}"))
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+            .map(|origin| origin.to_ascii_lowercase())
+            .collect::<HashSet<_>>();
 
         Ok(CorsLayer::new()
-            .allow_origin(AllowOrigin::list(origins))
+            .allow_origin(AllowOrigin::predicate(move |origin, _request_parts| {
+                let Ok(value) = origin.to_str() else {
+                    return false;
+                };
+                let normalized = value.to_ascii_lowercase();
+                explicit_origins.contains(&normalized) || is_local_dev_origin(&normalized)
+            }))
             .allow_methods([
                 Method::GET,
                 Method::POST,
@@ -167,6 +175,22 @@ fn redact_database_url(url: &str) -> String {
     format!("{scheme}://{user}:<redacted>@{host_and_path}")
 }
 
+fn is_local_dev_origin(origin: &str) -> bool {
+    is_local_host_with_scheme(origin, "http://localhost")
+        || is_local_host_with_scheme(origin, "https://localhost")
+        || is_local_host_with_scheme(origin, "http://127.0.0.1")
+        || is_local_host_with_scheme(origin, "https://127.0.0.1")
+        || is_local_host_with_scheme(origin, "http://[::1]")
+        || is_local_host_with_scheme(origin, "https://[::1]")
+}
+
+fn is_local_host_with_scheme(origin: &str, prefix: &str) -> bool {
+    origin == prefix
+        || origin
+            .strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.starts_with(':'))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,5 +204,13 @@ mod tests {
             "postgres://gestisac:<redacted>@localhost:5432/gestisac"
         );
         assert!(!redacted.contains("secret"));
+    }
+
+    #[test]
+    fn local_dev_origins_allow_arbitrary_ports() {
+        assert!(is_local_dev_origin("http://localhost:5192"));
+        assert!(is_local_dev_origin("http://127.0.0.1:3301"));
+        assert!(is_local_dev_origin("https://[::1]:5173"));
+        assert!(!is_local_dev_origin("https://example.com"));
     }
 }

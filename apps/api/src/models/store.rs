@@ -52,6 +52,14 @@ pub struct AppStore {
     pub expenses: Vec<Expense>,
     #[serde(default, rename = "reserveFunds")]
     pub reserve_funds: Vec<ReserveFund>,
+    #[serde(default, rename = "paymentAgreements")]
+    pub payment_agreements: Vec<PaymentAgreement>,
+    #[serde(default, rename = "cashMovements")]
+    pub cash_movements: Vec<CashMovement>,
+    #[serde(default, rename = "bankTransactions")]
+    pub bank_transactions: Vec<BankTransaction>,
+    #[serde(default, rename = "bankReconciliations")]
+    pub bank_reconciliations: Vec<BankReconciliation>,
     #[serde(default, rename = "auditLog")]
     pub audit_log: Vec<AuditLogEntry>,
 }
@@ -938,6 +946,17 @@ pub enum ComentarioVisibilidade {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkerChecklistItem {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub done: bool,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Ocorrencia {
     pub id: String,
     pub titulo: String,
@@ -1011,6 +1030,32 @@ pub struct Ocorrencia {
     pub technical_notes: String,
     #[serde(default)]
     pub assigned_worker_id: String,
+    #[serde(default)]
+    pub work_started_at: String,
+    #[serde(default)]
+    pub work_paused_at: String,
+    #[serde(default)]
+    pub arrived_at: String,
+    #[serde(default)]
+    pub resolved_by_worker_at: String,
+    #[serde(default)]
+    pub resolution_summary: String,
+    #[serde(default)]
+    pub worker_checklist: Vec<WorkerChecklistItem>,
+    #[serde(default)]
+    pub worker_time_minutes: u32,
+    #[serde(default)]
+    pub requires_hq_validation: bool,
+    #[serde(default)]
+    pub hq_validation_status: String,
+    #[serde(default)]
+    pub hq_validation_notes: String,
+    #[serde(default)]
+    pub public_timeline_status: String,
+    #[serde(default)]
+    pub qr_source_type: String,
+    #[serde(default)]
+    pub qr_source_id: String,
     // ── Timestamps ──
     #[serde(default = "now_utc_string")]
     pub criado_em: String,
@@ -1050,8 +1095,66 @@ pub struct OcorrenciaAnexo {
     pub storage_key: String,
     #[serde(default)]
     pub uploaded_por: String,
+    #[serde(default = "default_attachment_kind")]
+    pub kind: String,
+    #[serde(default = "default_attachment_visibility")]
+    pub visibility: String,
     #[serde(default = "now_utc_string")]
     pub criado_em: String,
+}
+
+fn default_attachment_kind() -> String {
+    "document".to_string()
+}
+
+fn default_attachment_visibility() -> String {
+    "internal".to_string()
+}
+
+pub fn default_worker_checklist(category: &str) -> Vec<WorkerChecklistItem> {
+    let normalized = category.to_lowercase();
+    let labels: Vec<&str> = if normalized.contains("elev") {
+        vec![
+            "Confirmar seguranca do elevador",
+            "Verificar quadro/comando",
+            "Registar teste final",
+        ]
+    } else if normalized.contains("infil") || normalized.contains("agua") {
+        vec![
+            "Identificar origem da infiltracao",
+            "Fotografar zona afetada",
+            "Indicar reparacao necessaria",
+        ]
+    } else if normalized.contains("eletr") || normalized.contains("electric") {
+        vec![
+            "Cortar/validar seguranca eletrica",
+            "Testar ponto afetado",
+            "Confirmar reposicao de servico",
+        ]
+    } else if normalized.contains("limp") {
+        vec![
+            "Confirmar area afetada",
+            "Executar limpeza/correcao",
+            "Fotografar resultado final",
+        ]
+    } else {
+        vec![
+            "Confirmar local e seguranca",
+            "Executar intervencao",
+            "Registar conclusao e evidencias",
+        ]
+    };
+
+    labels
+        .into_iter()
+        .enumerate()
+        .map(|(index, label)| WorkerChecklistItem {
+            id: format!("step-{}", index + 1),
+            label: label.to_string(),
+            done: false,
+            note: String::new(),
+        })
+        .collect()
 }
 
 // ── Ticket legacy ──
@@ -1348,6 +1451,103 @@ pub struct ReserveFund {
     pub balance: Decimal,
     #[serde(with = "rust_decimal::serde::float")]
     pub monthly_change: Decimal,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentAgreementInstallment {
+    pub installment_number: u16,
+    pub due_date: String,
+    #[serde(with = "rust_decimal::serde::float")]
+    pub amount: Decimal,
+    pub status: String,
+    #[serde(default)]
+    pub payment_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentAgreement {
+    pub id: String,
+    pub condominium: String,
+    pub fraction: String,
+    pub resident: String,
+    pub debt_id: String,
+    #[serde(with = "rust_decimal::serde::float")]
+    pub total_amount: Decimal,
+    pub installment_count: u16,
+    #[serde(with = "rust_decimal::serde::float")]
+    pub installment_amount: Decimal,
+    pub next_due_date: String,
+    pub status: String,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(default)]
+    pub installments: Vec<PaymentAgreementInstallment>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CashMovement {
+    pub id: String,
+    pub condominium: String,
+    pub movement_type: String,
+    pub account_type: String,
+    #[serde(with = "rust_decimal::serde::float")]
+    pub amount: Decimal,
+    pub occurred_at: String,
+    pub source: String,
+    pub method: String,
+    #[serde(default)]
+    pub reference: String,
+    pub status: String,
+    #[serde(default)]
+    pub linked_entity_type: String,
+    #[serde(default)]
+    pub linked_entity_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BankTransaction {
+    pub id: String,
+    pub condominium: String,
+    pub occurred_at: String,
+    pub description: String,
+    #[serde(with = "rust_decimal::serde::float")]
+    pub amount: Decimal,
+    pub direction: String,
+    #[serde(default)]
+    pub reference: String,
+    pub reconciliation_status: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BankReconciliation {
+    pub id: String,
+    pub bank_transaction_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    #[serde(default)]
+    pub notes: String,
+    pub reconciled_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomerStatementEntry {
+    pub id: String,
+    pub entry_type: String,
+    pub date: String,
+    pub description: String,
+    #[serde(with = "rust_decimal::serde::float")]
+    pub debit: Decimal,
+    #[serde(with = "rust_decimal::serde::float")]
+    pub credit: Decimal,
+    #[serde(with = "rust_decimal::serde::float")]
+    pub balance: Decimal,
     pub status: String,
 }
 
@@ -1678,6 +1878,23 @@ impl AppStore {
                         public_status_text: "Em analise".to_string(),
                         technical_notes: String::new(),
                         assigned_worker_id: String::new(),
+                        work_started_at: String::new(),
+                        work_paused_at: String::new(),
+                        arrived_at: String::new(),
+                        resolved_by_worker_at: String::new(),
+                        resolution_summary: String::new(),
+                        worker_checklist: default_worker_checklist(&if is_avaria {
+                            "Elevadores".to_string()
+                        } else {
+                            "Infraestrutura".to_string()
+                        }),
+                        worker_time_minutes: 0,
+                        requires_hq_validation: false,
+                        hq_validation_status: "nao_requerida".to_string(),
+                        hq_validation_notes: String::new(),
+                        public_timeline_status: "Recebida".to_string(),
+                        qr_source_type: String::new(),
+                        qr_source_id: String::new(),
                         criado_em: item.updated_at.clone(),
                         atualizado_em: item.updated_at.clone(),
                     }
@@ -1782,6 +1999,10 @@ impl AppStore {
             receipts: default_receipts(&demo.active_condominium),
             expenses: default_expenses(&demo.active_condominium),
             reserve_funds: default_reserve_funds(&demo.active_condominium),
+            payment_agreements: default_payment_agreements(&demo.active_condominium),
+            cash_movements: default_cash_movements(&demo.active_condominium),
+            bank_transactions: default_bank_transactions(&demo.active_condominium),
+            bank_reconciliations: Vec::new(),
             audit_log: Vec::new(),
         }
     }
@@ -1837,6 +2058,15 @@ impl AppStore {
         }
         if self.reserve_funds.is_empty() {
             self.reserve_funds = default_reserve_funds(&demo.active_condominium);
+        }
+        if self.payment_agreements.is_empty() {
+            self.payment_agreements = default_payment_agreements(&demo.active_condominium);
+        }
+        if self.cash_movements.is_empty() {
+            self.cash_movements = default_cash_movements(&demo.active_condominium);
+        }
+        if self.bank_transactions.is_empty() {
+            self.bank_transactions = default_bank_transactions(&demo.active_condominium);
         }
         if self.calendar_events.is_empty() {
             self.calendar_events = default_calendar_events(&demo.active_condominium);
@@ -2112,7 +2342,36 @@ impl AppStore {
         total_fractions: u16,
         total_residents: u16,
     ) -> Vec<DashboardModule> {
-        let accounting = self.accounting_summary();
+        let pending_quotas = self
+            .quotas
+            .iter()
+            .filter(|quota| {
+                !matches!(
+                    quota.status.to_ascii_lowercase().as_str(),
+                    "paga" | "pago" | "liquidado"
+                )
+            })
+            .count();
+        let unreconciled_bank_movements = self
+            .bank_transactions
+            .iter()
+            .filter(|movement| {
+                !matches!(
+                    movement.reconciliation_status.to_ascii_lowercase().as_str(),
+                    "reconciliado" | "reconciliada"
+                )
+            })
+            .count();
+        let receipts_to_issue = self
+            .receipts
+            .iter()
+            .filter(|receipt| receipt.status.to_ascii_lowercase().contains("emitir"))
+            .count();
+        let active_payment_agreements = self
+            .payment_agreements
+            .iter()
+            .filter(|agreement| agreement.status.to_ascii_lowercase().contains("ativo"))
+            .count();
         let ocorrencias_metricas = self.ocorrencias_metricas();
         let ocorrencias_urgentes =
             self.ocorrencias_urgentes().len() + self.ocorrencias_abertas().len();
@@ -2143,24 +2402,32 @@ impl AppStore {
                 visual: "wallet".to_string(),
                 metrics: vec![
                     metric(
-                        format_currency(accounting.current_balance),
-                        "Saldo atual",
-                        None,
+                        pending_quotas.to_string(),
+                        "Quotas por validar",
+                        Some(if pending_quotas > 0 {
+                            "warning"
+                        } else {
+                            "success"
+                        }),
                     ),
                     metric(
-                        format!("{}%", accounting.paid_quota_percentage),
-                        "Quotas pagas",
-                        None,
+                        unreconciled_bank_movements.to_string(),
+                        "Por reconciliar",
+                        Some(if unreconciled_bank_movements > 0 {
+                            "warning"
+                        } else {
+                            "success"
+                        }),
                     ),
                     metric(
-                        accounting.overdue_count.to_string(),
-                        "Em atraso",
+                        receipts_to_issue.to_string(),
+                        "Recibos por emitir",
                         Some("warning"),
                     ),
                     metric(
-                        format_currency(accounting.monthly_expenses),
-                        "Despesas do mes",
-                        None,
+                        active_payment_agreements.to_string(),
+                        "Acordos ativos",
+                        Some("success"),
                     ),
                 ],
             },
@@ -2289,10 +2556,6 @@ fn now_utc_string() -> String {
 fn is_critical_priority(priority: &str) -> bool {
     let normalized = priority.to_lowercase();
     normalized.contains("crit") || normalized.contains("tic") || normalized.contains("urg")
-}
-
-fn format_currency(value: Decimal) -> String {
-    format!("{value:.2} EUR")
 }
 
 fn default_buildings(condominium: &str) -> Vec<Building> {
@@ -2519,6 +2782,84 @@ fn default_reserve_funds(condominium: &str) -> Vec<ReserveFund> {
         monthly_change: Decimal::new(42_000, 2),
         status: "Estavel".to_string(),
     }]
+}
+
+fn default_payment_agreements(condominium: &str) -> Vec<PaymentAgreement> {
+    let total_amount = Decimal::new(9_500, 2);
+    let installment_count = 2;
+    let installment_amount = total_amount / Decimal::from(installment_count);
+
+    vec![PaymentAgreement {
+        id: Uuid::new_v4().to_string(),
+        condominium: condominium.to_string(),
+        fraction: "B-4".to_string(),
+        resident: "Carlos Almeida".to_string(),
+        debt_id: "demo-debt-b4".to_string(),
+        total_amount,
+        installment_count,
+        installment_amount,
+        next_due_date: "2026-06-08".to_string(),
+        status: "Ativo".to_string(),
+        notes: "Plano simples para regularizar quota em atraso.".to_string(),
+        installments: vec![
+            PaymentAgreementInstallment {
+                installment_number: 1,
+                due_date: "2026-06-08".to_string(),
+                amount: installment_amount,
+                status: "Pendente".to_string(),
+                payment_id: String::new(),
+            },
+            PaymentAgreementInstallment {
+                installment_number: 2,
+                due_date: "2026-07-08".to_string(),
+                amount: installment_amount,
+                status: "Pendente".to_string(),
+                payment_id: String::new(),
+            },
+        ],
+    }]
+}
+
+fn default_cash_movements(condominium: &str) -> Vec<CashMovement> {
+    vec![CashMovement {
+        id: Uuid::new_v4().to_string(),
+        condominium: condominium.to_string(),
+        movement_type: "entrada".to_string(),
+        account_type: "caixa".to_string(),
+        amount: Decimal::new(8_500, 2),
+        occurred_at: "2026-05-06".to_string(),
+        source: "Quota A-1".to_string(),
+        method: "Transferencia".to_string(),
+        reference: "REC-2026-001".to_string(),
+        status: "Confirmado".to_string(),
+        linked_entity_type: "receipt".to_string(),
+        linked_entity_id: String::new(),
+    }]
+}
+
+fn default_bank_transactions(condominium: &str) -> Vec<BankTransaction> {
+    vec![
+        BankTransaction {
+            id: Uuid::new_v4().to_string(),
+            condominium: condominium.to_string(),
+            occurred_at: "2026-05-06".to_string(),
+            description: "TRF Maria Fernandes A-1 Maio".to_string(),
+            amount: Decimal::new(8_500, 2),
+            direction: "entrada".to_string(),
+            reference: "A-1 Maio".to_string(),
+            reconciliation_status: "reconciliado".to_string(),
+        },
+        BankTransaction {
+            id: Uuid::new_v4().to_string(),
+            condominium: condominium.to_string(),
+            occurred_at: "2026-05-18".to_string(),
+            description: "TRF Carlos Almeida B-4".to_string(),
+            amount: Decimal::new(4_750, 2),
+            direction: "entrada".to_string(),
+            reference: "B-4 acordo".to_string(),
+            reconciliation_status: "por reconciliar".to_string(),
+        },
+    ]
 }
 
 fn default_calendar_events(condominium: &str) -> Vec<CalendarEvent> {

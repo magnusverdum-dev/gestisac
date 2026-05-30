@@ -4,7 +4,10 @@ use crate::{
         demo::DemoData,
         store::{default_tenant_id, AppStore},
     },
-    repositories::postgres::{FinancialSnapshotRef, PostgresRepository},
+    repositories::{
+        condominiums::{CondominiumPersistenceRepository, PostgresCondominiumRepository},
+        postgres::{FinancialSnapshotRef, PostgresRepository},
+    },
 };
 use anyhow::Context;
 use argon2::{
@@ -95,6 +98,7 @@ impl AppState {
         }
 
         if let Some(repository) = &self.postgres {
+            let condominium_repository = PostgresCondominiumRepository::new(repository.clone());
             let tenant_id = snapshot
                 .tenants
                 .first()
@@ -109,10 +113,13 @@ impl AppState {
                 )
                 .await
                 .context("failed to persist identity snapshots in postgres")?;
-            repository
-                .replace_condominiums(&tenant_id, &snapshot.condominiums)
-                .await
-                .context("failed to persist condominium snapshots in postgres")?;
+            persist_condominiums_snapshot(
+                &condominium_repository,
+                &tenant_id,
+                &snapshot.condominiums,
+            )
+            .await
+            .context("failed to persist condominium snapshots in postgres")?;
             repository
                 .replace_sessions(&snapshot.sessions)
                 .await
@@ -156,6 +163,10 @@ impl AppState {
                         receipts: &snapshot.receipts,
                         expenses: &snapshot.expenses,
                         reserve_funds: &snapshot.reserve_funds,
+                        payment_agreements: &snapshot.payment_agreements,
+                        cash_movements: &snapshot.cash_movements,
+                        bank_transactions: &snapshot.bank_transactions,
+                        bank_reconciliations: &snapshot.bank_reconciliations,
                     },
                 )
                 .await
@@ -217,13 +228,12 @@ async fn hydrate_store_from_postgres(
         }
     }
 
-    let loaded_condominiums = repository
-        .load_condominiums(&tenant_id)
+    let condominium_repository = PostgresCondominiumRepository::new(repository.clone());
+    let loaded_condominiums = load_condominiums_snapshot(&condominium_repository, &tenant_id)
         .await
         .context("failed to load condominium snapshots from postgres")?;
     if loaded_condominiums.is_empty() {
-        repository
-            .replace_condominiums(&tenant_id, &store.condominiums)
+        persist_condominiums_snapshot(&condominium_repository, &tenant_id, &store.condominiums)
             .await
             .context("failed to seed condominium snapshots in postgres")?;
     } else {
@@ -328,6 +338,10 @@ async fn hydrate_store_from_postgres(
         && financial_snapshot.receipts.is_empty()
         && financial_snapshot.expenses.is_empty()
         && financial_snapshot.reserve_funds.is_empty()
+        && financial_snapshot.payment_agreements.is_empty()
+        && financial_snapshot.cash_movements.is_empty()
+        && financial_snapshot.bank_transactions.is_empty()
+        && financial_snapshot.bank_reconciliations.is_empty()
     {
         repository
             .replace_financial_snapshot(
@@ -339,6 +353,10 @@ async fn hydrate_store_from_postgres(
                     receipts: &store.receipts,
                     expenses: &store.expenses,
                     reserve_funds: &store.reserve_funds,
+                    payment_agreements: &store.payment_agreements,
+                    cash_movements: &store.cash_movements,
+                    bank_transactions: &store.bank_transactions,
+                    bank_reconciliations: &store.bank_reconciliations,
                 },
             )
             .await
@@ -350,9 +368,30 @@ async fn hydrate_store_from_postgres(
         store.receipts = financial_snapshot.receipts;
         store.expenses = financial_snapshot.expenses;
         store.reserve_funds = financial_snapshot.reserve_funds;
+        store.payment_agreements = financial_snapshot.payment_agreements;
+        store.cash_movements = financial_snapshot.cash_movements;
+        store.bank_transactions = financial_snapshot.bank_transactions;
+        store.bank_reconciliations = financial_snapshot.bank_reconciliations;
     }
 
     Ok(())
+}
+
+async fn load_condominiums_snapshot(
+    repository: &dyn CondominiumPersistenceRepository,
+    tenant_id: &str,
+) -> anyhow::Result<Vec<crate::models::store::Condominium>> {
+    repository.load_condominiums(tenant_id).await
+}
+
+async fn persist_condominiums_snapshot(
+    repository: &dyn CondominiumPersistenceRepository,
+    tenant_id: &str,
+    condominiums: &[crate::models::store::Condominium],
+) -> anyhow::Result<()> {
+    repository
+        .replace_condominiums(tenant_id, condominiums)
+        .await
 }
 
 pub fn hash_password(password: &str) -> anyhow::Result<String> {

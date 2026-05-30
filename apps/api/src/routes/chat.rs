@@ -1,14 +1,7 @@
 use crate::{
-    error::ApiError,
-    models::store::ChatMessage,
-    routes::auth::current_context,
-    state::AppState,
+    error::ApiError, models::store::ChatMessage, routes::auth::current_context, state::AppState,
 };
-use axum::{
-    extract::State,
-    http::HeaderMap,
-    Json,
-};
+use axum::{extract::State, http::HeaderMap, Json};
 use chrono::Utc;
 use serde::Deserialize;
 use uuid::Uuid;

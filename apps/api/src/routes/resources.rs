@@ -267,6 +267,8 @@ pub struct InspectionInput {
     pub confirmed_by: Option<String>,
     #[serde(default)]
     pub calendar_event_id: Option<String>,
+    #[serde(default)]
+    pub assigned_worker_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1864,6 +1866,7 @@ pub async fn create_inspection(
         confirmed_at: trimmed_optional(input.confirmed_at).unwrap_or_default(),
         confirmed_by: trimmed_optional(input.confirmed_by).unwrap_or_default(),
         calendar_event_id: trimmed_optional(input.calendar_event_id).unwrap_or_default(),
+        assigned_worker_id: trimmed_optional(input.assigned_worker_id).unwrap_or_default(),
     };
 
     let mut store = state.store.write().await;
@@ -1934,6 +1937,8 @@ pub async fn update_inspection(
         trimmed_optional(input.confirmed_by).unwrap_or_else(|| next.confirmed_by.clone());
     next.calendar_event_id =
         trimmed_optional(input.calendar_event_id).unwrap_or_else(|| next.calendar_event_id.clone());
+    next.assigned_worker_id = trimmed_optional(input.assigned_worker_id)
+        .unwrap_or_else(|| next.assigned_worker_id.clone());
     if let Some(checklist) = input.checklist {
         next.checklist = clean_tags(checklist);
     }
@@ -2478,6 +2483,7 @@ fn upsert_calendar_event_for_inspection(store: &mut AppStore, inspection: &mut I
         event.linked_entity_id = inspection.id.clone();
         event.location = inspection.location.clone();
         event.notes = inspection.worker_notes.clone();
+        event.attendees = inspection_attendees(inspection);
         event.updated_at = now;
         inspection.calendar_event_id = event.id.clone();
         return;
@@ -2497,7 +2503,7 @@ fn upsert_calendar_event_for_inspection(store: &mut AppStore, inspection: &mut I
             condominium: inspection.condominium.clone(),
             linked_entity_type: "inspection".to_string(),
             linked_entity_id: inspection.id.clone(),
-            attendees: Vec::new(),
+            attendees: inspection_attendees(inspection),
             location: inspection.location.clone(),
             notes: inspection.worker_notes.clone(),
             created_at: now.clone(),
@@ -2505,6 +2511,15 @@ fn upsert_calendar_event_for_inspection(store: &mut AppStore, inspection: &mut I
         },
     );
     inspection.calendar_event_id = event_id;
+}
+
+fn inspection_attendees(inspection: &Inspection) -> Vec<String> {
+    let worker = inspection.assigned_worker_id.trim();
+    if worker.is_empty() {
+        Vec::new()
+    } else {
+        vec![worker.to_string()]
+    }
 }
 
 fn matches_calendar_filter(event: &CalendarEvent, query: &CalendarEventQuery) -> bool {

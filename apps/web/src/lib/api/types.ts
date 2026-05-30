@@ -699,14 +699,100 @@ export type ReserveFund = {
   status: string;
 };
 
+export type PaymentAgreementInstallment = {
+  installmentNumber: number;
+  dueDate: string;
+  amount: number;
+  status: string;
+  paymentId?: string;
+};
+
+export type PaymentAgreement = {
+  id: string;
+  condominium: string;
+  fraction: string;
+  resident: string;
+  debtId: string;
+  totalAmount: number;
+  installmentCount: number;
+  installmentAmount: number;
+  nextDueDate: string;
+  status: string;
+  notes?: string;
+  installments: PaymentAgreementInstallment[];
+};
+
+export type CashMovement = {
+  id: string;
+  condominium: string;
+  movementType: string;
+  accountType: string;
+  amount: number;
+  occurredAt: string;
+  source: string;
+  method: string;
+  reference?: string;
+  status: string;
+  linkedEntityType?: string;
+  linkedEntityId?: string;
+};
+
+export type BankTransaction = {
+  id: string;
+  condominium: string;
+  occurredAt: string;
+  description: string;
+  amount: number;
+  direction: string;
+  reference?: string;
+  reconciliationStatus: string;
+};
+
+export type BankReconciliation = {
+  id: string;
+  bankTransactionId: string;
+  targetType: string;
+  targetId: string;
+  notes?: string;
+  reconciledAt: string;
+};
+
+export type CustomerStatementEntry = {
+  id: string;
+  entryType: string;
+  date: string;
+  description: string;
+  debit: number;
+  credit: number;
+  balance: number;
+  status: string;
+};
+
+export type AccountingOverview = {
+  quotasToValidate: number;
+  unreconciledMovements: number;
+  oldestUnreconciledAgeDays?: number;
+  receiptsToIssue: number;
+  debtsInFollowUp: number;
+  overdueDebtSeverity: string;
+  activePaymentAgreements: number;
+  brokenPaymentAgreements: number;
+  reserveFundStatus: string;
+};
+
 export type AccountingState = {
   summary: AccountingSummary;
+  overview: AccountingOverview;
   quotas: Quota[];
   payments: AccountingPayment[];
   debts: Debt[];
   receipts: Receipt[];
   expenses: Expense[];
   reserveFunds: ReserveFund[];
+  paymentAgreements: PaymentAgreement[];
+  cashMovements: CashMovement[];
+  bankTransactions: BankTransaction[];
+  bankReconciliations: BankReconciliation[];
 };
 
 export type AuditLogEntry = {
@@ -739,6 +825,16 @@ export type Impacto = 'baixo' | 'medio' | 'alto' | 'critico';
 export type Urgencia = 'baixa' | 'media' | 'alta' | 'imediata';
 export type Canal = 'portal' | 'email' | 'telefone' | 'presencial' | 'interno';
 export type ComentarioVisibilidade = 'interno' | 'publico';
+export type AttachmentKind = 'before' | 'after' | 'proof' | 'document';
+export type AttachmentVisibility = 'internal' | 'public';
+export type HqValidationStatus = 'nao_requerida' | 'pendente' | 'aprovada' | 'rejeitada';
+
+export type WorkerChecklistItem = {
+  id: string;
+  label: string;
+  done: boolean;
+  note: string;
+};
 
 export type Ocorrencia = {
   id: string;
@@ -778,6 +874,19 @@ export type Ocorrencia = {
   publicStatusText: string;
   technicalNotes: string;
   assignedWorkerId: string;
+  workStartedAt: string;
+  workPausedAt: string;
+  arrivedAt: string;
+  resolvedByWorkerAt: string;
+  resolutionSummary: string;
+  workerChecklist: WorkerChecklistItem[];
+  workerTimeMinutes: number;
+  requiresHqValidation: boolean;
+  hqValidationStatus: HqValidationStatus | string;
+  hqValidationNotes: string;
+  publicTimelineStatus: string;
+  qrSourceType: string;
+  qrSourceId: string;
   criadoEm: string;
   atualizadoEm: string;
 };
@@ -800,6 +909,8 @@ export type OcorrenciaAnexo = {
   tamanhoBytes: number;
   storageKey: string;
   uploadedPor: string;
+  kind: AttachmentKind | string;
+  visibility: AttachmentVisibility | string;
   criadoEm: string;
 };
 
@@ -855,6 +966,46 @@ export type OcorrenciaInput = {
   publicStatusText?: string;
   technicalNotes?: string;
   assignedWorkerId?: string;
+  workStartedAt?: string;
+  workPausedAt?: string;
+  arrivedAt?: string;
+  resolvedByWorkerAt?: string;
+  resolutionSummary?: string;
+  workerChecklist?: WorkerChecklistItem[];
+  workerTimeMinutes?: number;
+  requiresHqValidation?: boolean;
+  hqValidationStatus?: string;
+  hqValidationNotes?: string;
+  publicTimelineStatus?: string;
+  qrSourceType?: string;
+  qrSourceId?: string;
+};
+
+export type WorkerActionPayload = {
+  action: 'arrive' | 'start' | 'pause' | 'await_parts' | 'resolve';
+  note?: string;
+  resolutionSummary?: string;
+  workerChecklist?: WorkerChecklistItem[];
+  workerTimeMinutes?: number;
+  publicTimelineStatus?: string;
+};
+
+export type ValidateResolutionPayload = {
+  decision: 'accept' | 'reject';
+  notes?: string;
+};
+
+export type QrOcorrenciaInput = {
+  titulo: string;
+  descricao: string;
+  condominiumId?: string;
+  qrSourceType?: string;
+  qrSourceId?: string;
+  equipamentoId?: string;
+  zonaId?: string;
+  requisitanteNome?: string;
+  requisitanteEmail?: string;
+  requisitanteTelefone?: string;
 };
 
 export type ResourceState = {
@@ -910,6 +1061,10 @@ export type CreateResource =
   | 'accounting/payments'
   | 'accounting/debts'
   | 'accounting/receipts'
-  | 'accounting/expenses';
+  | 'accounting/expenses'
+  | 'accounting/payment-agreements'
+  | 'accounting/cash-movements'
+  | 'accounting/bank-transactions'
+  | 'accounting/reconciliations';
 
 export type ResourceEndpoint = CreateResource;

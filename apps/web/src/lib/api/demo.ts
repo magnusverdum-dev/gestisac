@@ -60,7 +60,8 @@ import type {
   PaginatedResponse,
   LoginResponse,
   CreateResource,
-  ResourceEndpoint
+  ResourceEndpoint,
+  WorkerChecklistItem
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') ?? '';
@@ -174,6 +175,10 @@ export async function demoApiRequest<T>(
 
   if (pathname === 'accounting/summary') {
     return computeAccountingSummary(store) as T;
+  }
+
+  if (pathname === 'accounting/overview') {
+    return store.accounting.overview as T;
   }
 
   if (pathname === 'documents/templates') {
@@ -385,6 +390,17 @@ function createDemoStore(): DemoStore {
       reserveFund: 0,
       currency: 'EUR'
     },
+    overview: {
+      quotasToValidate: 1,
+      unreconciledMovements: 1,
+      oldestUnreconciledAgeDays: 2,
+      receiptsToIssue: 0,
+      debtsInFollowUp: 1,
+      overdueDebtSeverity: 'normal',
+      activePaymentAgreements: 1,
+      brokenPaymentAgreements: 0,
+      reserveFundStatus: 'conforme'
+    },
     quotas: [
       {
         id: 'quota-001',
@@ -470,7 +486,63 @@ function createDemoStore(): DemoStore {
         monthlyChange: 120,
         status: 'Saudavel'
       }
-    ]
+    ],
+    paymentAgreements: [
+      {
+        id: 'agreement-001',
+        condominium: 'Condominio Vila Verde',
+        fraction: 'B-4',
+        resident: 'Carlos Almeida',
+        debtId: 'debt-001',
+        totalAmount: 95,
+        installmentCount: 2,
+        installmentAmount: 47.5,
+        nextDueDate: '2026-06-08',
+        status: 'Ativo',
+        notes: 'Plano simples para regularizar quota em atraso.',
+        installments: [
+          { installmentNumber: 1, dueDate: '2026-06-08', amount: 47.5, status: 'Pendente' },
+          { installmentNumber: 2, dueDate: '2026-07-08', amount: 47.5, status: 'Pendente' }
+        ]
+      }
+    ],
+    cashMovements: [
+      {
+        id: 'cash-001',
+        condominium: 'Condominio Vila Verde',
+        movementType: 'entrada',
+        accountType: 'caixa',
+        amount: 85,
+        occurredAt: '2026-05-14',
+        source: 'Quota A-1',
+        method: 'Transferencia',
+        reference: 'REC-2026-001',
+        status: 'Confirmado'
+      }
+    ],
+    bankTransactions: [
+      {
+        id: 'bank-001',
+        condominium: 'Condominio Vila Verde',
+        occurredAt: '2026-05-14',
+        description: 'TRF Maria Fernandes A-1',
+        amount: 85,
+        direction: 'entrada',
+        reference: 'A-1 Maio',
+        reconciliationStatus: 'reconciliado'
+      },
+      {
+        id: 'bank-002',
+        condominium: 'Condominio Vila Verde',
+        occurredAt: '2026-05-18',
+        description: 'TRF Carlos Almeida B-4',
+        amount: 47.5,
+        direction: 'entrada',
+        reference: 'B-4 acordo',
+        reconciliationStatus: 'por reconciliar'
+      }
+    ],
+    bankReconciliations: []
   };
 
   return {
@@ -861,6 +933,19 @@ function demoOcorrencias(): Ocorrencia[] {
       publicStatusText: 'Tecnico agendado e administracao notificada.',
       technicalNotes: 'Confirmar quadro de comando e verificar necessidade de peca.',
       assignedWorkerId: 'worker-demo-1',
+      workStartedAt: '2026-05-15T10:00:00.000Z',
+      workPausedAt: '',
+      arrivedAt: '2026-05-15T09:45:00.000Z',
+      resolvedByWorkerAt: '',
+      resolutionSummary: '',
+      workerChecklist: defaultDemoWorkerChecklist('Elevadores'),
+      workerTimeMinutes: 45,
+      requiresHqValidation: false,
+      hqValidationStatus: 'nao_requerida',
+      hqValidationNotes: '',
+      publicTimelineStatus: 'Intervencao em curso',
+      qrSourceType: 'equipment',
+      qrSourceId: 'elevador-bloco-b',
       criadoEm: '2026-05-15T08:20:00.000Z',
       atualizadoEm: '2026-05-15T10:30:00.000Z'
     },
@@ -902,10 +987,39 @@ function demoOcorrencias(): Ocorrencia[] {
       publicStatusText: 'Vistoria em preparacao.',
       technicalNotes: 'Avaliar origem da infiltracao antes de abrir obra.',
       assignedWorkerId: 'worker-demo-2',
+      workStartedAt: '',
+      workPausedAt: '',
+      arrivedAt: '',
+      resolvedByWorkerAt: '',
+      resolutionSummary: '',
+      workerChecklist: defaultDemoWorkerChecklist('Infiltracoes'),
+      workerTimeMinutes: 0,
+      requiresHqValidation: false,
+      hqValidationStatus: 'nao_requerida',
+      hqValidationNotes: '',
+      publicTimelineStatus: 'Vistoria em preparacao',
+      qrSourceType: 'zone',
+      qrSourceId: 'garagem-a-minus-1',
       criadoEm: '2026-05-14T16:10:00.000Z',
       atualizadoEm: '2026-05-14T16:10:00.000Z'
     }
   ];
+}
+
+function defaultDemoWorkerChecklist(category: string): WorkerChecklistItem[] {
+  const normalized = category.toLowerCase();
+  const labels = normalized.includes('elev')
+    ? ['Confirmar seguranca do elevador', 'Verificar quadro/comando', 'Registar teste final']
+    : normalized.includes('infil')
+      ? ['Identificar origem da infiltracao', 'Fotografar zona afetada', 'Indicar reparacao necessaria']
+      : ['Confirmar local e seguranca', 'Executar intervencao', 'Registar conclusao e evidencias'];
+
+  return labels.map((label, index) => ({
+    id: `step-${index + 1}`,
+    label,
+    done: index === 0 && normalized.includes('elev'),
+    note: ''
+  }));
 }
 
 function handleDemoInspections(
@@ -1014,6 +1128,13 @@ function handleDemoOcorrencias(
     return { handled: true, value: computeDemoOcorrenciasMetricas(store.ocorrencias) };
   }
 
+  if (pathname === 'worker/tickets' && method === 'GET') {
+    const items = store.ocorrencias
+      .filter((item) => isDemoWorkerTicket(item))
+      .sort((left, right) => demoWorkerRank(left) - demoWorkerRank(right));
+    return { handled: true, value: items };
+  }
+
   if (pathname === 'ocorrencias' && method === 'GET') {
     return { handled: true, value: paginateDemoOcorrencias(store.ocorrencias, url) };
   }
@@ -1022,6 +1143,21 @@ function handleDemoOcorrencias(
     const created = createDemoOcorrencia(store, body);
     store.ocorrencias.unshift(created);
     appendDemoAudit(store, 'ocorrencias', 'Criado', created.id, created.titulo);
+    saveDemoStore(store);
+    return { handled: true, value: created };
+  }
+
+  if (pathname === 'ocorrencias/from-qr' && method === 'POST') {
+    const created = createDemoOcorrencia(store, {
+      ...body,
+      tipo: 'avaria',
+      tags: ['qr', String(body.qrSourceType || 'unknown')],
+      publicStatusText: 'Avaria recebida por QR.',
+      technicalNotes: `Criada via QR: ${String(body.qrSourceType || '')} ${String(body.qrSourceId || '')}`.trim(),
+      originChannel: 'client'
+    });
+    store.ocorrencias.unshift(created);
+    appendDemoAudit(store, 'ocorrencias', 'Criado por QR', created.id, created.titulo);
     saveDemoStore(store);
     return { handled: true, value: created };
   }
@@ -1061,6 +1197,30 @@ function handleDemoOcorrencias(
     const updated = updateDemoOcorrencia(current, { status: body.status });
     store.ocorrencias[index] = updated;
     appendDemoAudit(store, 'ocorrencias', 'Status atualizado', updated.id, updated.titulo);
+    saveDemoStore(store);
+    return { handled: true, value: updated };
+  }
+
+  if (action === 'worker-action' && method === 'POST') {
+    const updated = applyDemoWorkerAction(current, body);
+    store.ocorrencias[index] = updated;
+    appendDemoAudit(store, 'ocorrencias', 'Acao trabalhador', updated.id, updated.titulo);
+    saveDemoStore(store);
+    return { handled: true, value: updated };
+  }
+
+  if (action === 'validate-resolution' && method === 'POST') {
+    const decision = String(body.decision || '').toLowerCase();
+    const accepted = decision === 'accept' || decision === 'aceitar';
+    const updated = updateDemoOcorrencia(current, {
+      status: accepted ? 'resolvida' : 'emCurso',
+      requiresHqValidation: !accepted,
+      hqValidationStatus: accepted ? 'aprovada' : 'rejeitada',
+      hqValidationNotes: String(body.notes || (accepted ? '' : 'Rever intervencao e submeter novamente.')),
+      publicTimelineStatus: accepted ? 'Resolucao validada.' : 'Intervencao em revisao tecnica.'
+    });
+    store.ocorrencias[index] = updated;
+    appendDemoAudit(store, 'ocorrencias', 'Validacao HQ', updated.id, updated.titulo);
     saveDemoStore(store);
     return { handled: true, value: updated };
   }
@@ -1163,6 +1323,7 @@ function demoOcorrenciaComentarios(ocorrencia: Ocorrencia): OcorrenciaComentario
 function createDemoOcorrencia(store: DemoStore, body: Record<string, unknown>): Ocorrencia {
   const now = new Date().toISOString();
   const title = String(body.titulo || body.title || 'Nova ocorrencia').trim();
+  const category = String(body.categoria || 'Operacional');
 
   return {
     id: createDemoId('ocorr'),
@@ -1178,7 +1339,7 @@ function createDemoOcorrencia(store: DemoStore, body: Record<string, unknown>): 
     requisitanteEmail: String(body.requisitanteEmail || store.user.email),
     requisitanteTelefone: String(body.requisitanteTelefone || ''),
     canal: normalizeDemoEnum(body.canal, ['portal', 'email', 'telefone', 'presencial', 'interno'], 'portal'),
-    categoria: String(body.categoria || 'Operacional'),
+    categoria: category,
     atribuidoA: String(body.atribuidoA || ''),
     tags: Array.isArray(body.tags) ? body.tags.map(String) : [],
     blocoId: String(body.blocoId || ''),
@@ -1202,6 +1363,21 @@ function createDemoOcorrencia(store: DemoStore, body: Record<string, unknown>): 
     publicStatusText: String(body.publicStatusText || 'Registo recebido.'),
     technicalNotes: String(body.technicalNotes || ''),
     assignedWorkerId: String(body.assignedWorkerId || ''),
+    workStartedAt: String(body.workStartedAt || ''),
+    workPausedAt: String(body.workPausedAt || ''),
+    arrivedAt: String(body.arrivedAt || ''),
+    resolvedByWorkerAt: String(body.resolvedByWorkerAt || ''),
+    resolutionSummary: String(body.resolutionSummary || ''),
+    workerChecklist: Array.isArray(body.workerChecklist)
+      ? body.workerChecklist as WorkerChecklistItem[]
+      : defaultDemoWorkerChecklist(category),
+    workerTimeMinutes: Number(body.workerTimeMinutes || 0),
+    requiresHqValidation: Boolean(body.requiresHqValidation || false),
+    hqValidationStatus: String(body.hqValidationStatus || 'nao_requerida'),
+    hqValidationNotes: String(body.hqValidationNotes || ''),
+    publicTimelineStatus: String(body.publicTimelineStatus || 'Registo recebido.'),
+    qrSourceType: String(body.qrSourceType || ''),
+    qrSourceId: String(body.qrSourceId || ''),
     criadoEm: now,
     atualizadoEm: now
   };
@@ -1222,6 +1398,82 @@ function updateDemoOcorrencia(
     ),
     atualizadoEm: new Date().toISOString()
   } as Ocorrencia;
+}
+
+function applyDemoWorkerAction(current: Ocorrencia, body: Record<string, unknown>): Ocorrencia {
+  const now = new Date().toISOString();
+  const action = String(body.action || '').toLowerCase();
+  const checklist = Array.isArray(body.workerChecklist)
+    ? body.workerChecklist as WorkerChecklistItem[]
+    : current.workerChecklist;
+  const note = String(body.note || '').trim();
+
+  if (action === 'arrive') {
+    return updateDemoOcorrencia(current, {
+      arrivedAt: now,
+      publicTimelineStatus: 'Tecnico no local',
+      workerChecklist: checklist,
+      technicalNotes: appendDemoNote(current.technicalNotes, note)
+    });
+  }
+  if (action === 'start') {
+    return updateDemoOcorrencia(current, {
+      status: 'emCurso',
+      workStartedAt: current.workStartedAt || now,
+      respondidoEm: current.respondidoEm || now,
+      publicTimelineStatus: 'Intervencao em curso',
+      workerChecklist: checklist,
+      technicalNotes: appendDemoNote(current.technicalNotes, note)
+    });
+  }
+  if (action === 'pause') {
+    return updateDemoOcorrencia(current, {
+      status: 'pendente',
+      workPausedAt: now,
+      publicTimelineStatus: 'Intervencao pausada',
+      workerChecklist: checklist,
+      technicalNotes: appendDemoNote(current.technicalNotes, note)
+    });
+  }
+  if (action === 'await_parts') {
+    return updateDemoOcorrencia(current, {
+      status: 'aguardaPecas',
+      publicTimelineStatus: 'A aguardar pecas/material',
+      workerChecklist: checklist,
+      technicalNotes: appendDemoNote(current.technicalNotes, note)
+    });
+  }
+
+  const summary = String(body.resolutionSummary || body.note || 'Intervencao concluida').trim();
+  return updateDemoOcorrencia(current, {
+    status: 'resolvida',
+    resolvidoEm: now,
+    resolvedByWorkerAt: now,
+    motivoResolucao: summary,
+    resolutionSummary: summary,
+    workerChecklist: checklist,
+    workerTimeMinutes: Number(body.workerTimeMinutes || current.workerTimeMinutes || 0),
+    requiresHqValidation: true,
+    hqValidationStatus: 'pendente',
+    publicTimelineStatus: 'Resolvida pelo tecnico, em validacao',
+    technicalNotes: appendDemoNote(current.technicalNotes, note)
+  });
+}
+
+function appendDemoNote(existing: string, note: string): string {
+  if (!note) return existing;
+  return existing ? `${existing}\n${note}` : note;
+}
+
+function isDemoWorkerTicket(item: Ocorrencia): boolean {
+  const assigned = `${item.assignedWorkerId} ${item.atribuidoA}`.toLowerCase();
+  return assigned.includes('worker') || assigned.includes('tecnico') || assigned.includes('funcionario');
+}
+
+function demoWorkerRank(item: Ocorrencia): number {
+  const priority = item.prioridade === 'urgente' ? 0 : item.prioridade === 'alta' ? 1 : item.prioridade === 'normal' ? 2 : 3;
+  const status = item.status === 'emCurso' ? 0 : item.status === 'aguardaPecas' ? 1 : item.status === 'resolvida' ? 4 : 2;
+  return priority + status;
 }
 
 function normalizeDemoEnum<T extends string>(
@@ -1364,7 +1616,10 @@ function demoCollectionForPath(
     'accounting/debts': store.accounting.debts as unknown as Array<Record<string, unknown>>,
     'accounting/receipts': store.accounting.receipts as unknown as Array<Record<string, unknown>>,
     'accounting/expenses': store.accounting.expenses as unknown as Array<Record<string, unknown>>,
-    'accounting/reserve-funds': store.accounting.reserveFunds as unknown as Array<Record<string, unknown>>
+    'accounting/reserve-funds': store.accounting.reserveFunds as unknown as Array<Record<string, unknown>>,
+    'accounting/payment-agreements': store.accounting.paymentAgreements as unknown as Array<Record<string, unknown>>,
+    'accounting/cash-movements': store.accounting.cashMovements as unknown as Array<Record<string, unknown>>,
+    'accounting/bank-transactions': store.accounting.bankTransactions as unknown as Array<Record<string, unknown>>
   };
 
   const cleaned = collections[pathname]
@@ -1413,7 +1668,7 @@ function computeAccountingSummary(store: Pick<DemoStore, 'accounting'>): Account
 }
 
 function buildDemoDashboard(store: DemoStore): DashboardResponse {
-  const summary = computeAccountingSummary(store);
+  const overview = store.accounting.overview;
   const urgentTicket = store.tickets.find((item) => isCriticalDemoStatus(item.priority));
   const expiringDocument = store.documents.find((item) => item.status.toLowerCase().includes('expirar'));
   const urgentTitle = urgentTicket?.title ?? expiringDocument?.title ?? 'Operacao sem alertas criticos';
@@ -1434,7 +1689,7 @@ function buildDemoDashboard(store: DemoStore): DashboardResponse {
     },
     operationalSummary: [
       { label: `${store.condominiums.length} condominios ativos`, tone: 'blue' },
-      { label: `${summary.overdueCount} dividas em aberto`, tone: summary.overdueCount ? 'danger' : 'green' },
+      { label: `${overview.debtsInFollowUp} dividas em acompanhamento`, tone: overview.debtsInFollowUp ? 'danger' : 'green' },
       { label: `${store.tickets.length} tickets registados`, tone: 'gold' }
     ],
     quickActions: [
@@ -1468,10 +1723,10 @@ function buildDemoDashboard(store: DemoStore): DashboardResponse {
         path: '/contabilidade',
         visual: 'wallet',
         metrics: [
-          { value: formatDemoCurrency(summary.currentBalance), label: 'Saldo atual' },
-          { value: `${summary.paidQuotaPercentage}%`, label: 'Quotas pagas', status: 'success' },
-          { value: String(summary.overdueCount), label: 'Em atraso', status: summary.overdueCount ? 'urgent' : 'success' },
-          { value: formatDemoCurrency(summary.monthlyExpenses), label: 'Despesas' }
+          { value: String(overview.quotasToValidate), label: 'Quotas por validar', status: overview.quotasToValidate ? 'warning' : 'success' },
+          { value: String(overview.unreconciledMovements), label: 'Por reconciliar', status: overview.unreconciledMovements ? 'warning' : 'success' },
+          { value: String(overview.receiptsToIssue), label: 'Recibos por emitir', status: overview.receiptsToIssue ? 'warning' : 'success' },
+          { value: String(overview.activePaymentAgreements), label: 'Acordos ativos', status: 'success' }
         ]
       },
       {

@@ -37,6 +37,15 @@ pub fn router(state: AppState) -> Router {
             get(condominiums::active_condominium).put(condominiums::update_active_condominium),
         )
         .route("/api/accounting/summary", get(accounting::summary))
+        .route("/api/accounting/overview", get(accounting::overview))
+        .route(
+            "/api/accounting/context/condominiums/{id}",
+            get(accounting::condominium_context),
+        )
+        .route(
+            "/api/accounting/statements/fractions/{fraction_id}",
+            get(accounting::fraction_statement),
+        )
         .route(
             "/api/accounting/quotas",
             get(accounting::quotas).post(accounting::create_quota),
@@ -80,6 +89,22 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/accounting/reserve-funds",
             get(accounting::reserve_funds),
+        )
+        .route(
+            "/api/accounting/payment-agreements",
+            get(accounting::payment_agreements).post(accounting::create_payment_agreement),
+        )
+        .route(
+            "/api/accounting/cash-movements",
+            get(accounting::cash_movements).post(accounting::create_cash_movement),
+        )
+        .route(
+            "/api/accounting/bank-transactions",
+            get(accounting::bank_transactions).post(accounting::create_bank_transaction),
+        )
+        .route(
+            "/api/accounting/reconciliations",
+            get(accounting::reconciliations).post(accounting::create_reconciliation),
         )
         .route(
             "/api/condominiums",
@@ -356,10 +381,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/audit-log", get(administration::audit_log))
         // ── Ocorrencias (Tickets & Avarias) ──
+        .route("/api/worker/tickets", get(ocorrencias::worker_tickets))
         .route(
             "/api/ocorrencias",
             get(ocorrencias::listar).post(ocorrencias::criar),
         )
+        .route("/api/ocorrencias/from-qr", post(ocorrencias::criar_from_qr))
         .route("/api/ocorrencias/publica", post(ocorrencias::criar_publica))
         .route("/api/ocorrencias/metricas", get(ocorrencias::metricas))
         .route(
@@ -371,6 +398,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/ocorrencias/{id}/status",
             patch(ocorrencias::transitar_status),
+        )
+        .route(
+            "/api/ocorrencias/{id}/worker-action",
+            post(ocorrencias::worker_action),
+        )
+        .route(
+            "/api/ocorrencias/{id}/validate-resolution",
+            post(ocorrencias::validate_resolution),
         )
         .route(
             "/api/ocorrencias/{id}/comentarios",

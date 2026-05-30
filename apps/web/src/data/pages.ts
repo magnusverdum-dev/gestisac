@@ -115,12 +115,26 @@ export const emptyResources: ResourceState = {
       reserveFund: 0,
       currency: 'EUR'
     },
+    overview: {
+      quotasToValidate: 0,
+      unreconciledMovements: 0,
+      receiptsToIssue: 0,
+      debtsInFollowUp: 0,
+      overdueDebtSeverity: 'normal',
+      activePaymentAgreements: 0,
+      brokenPaymentAgreements: 0,
+      reserveFundStatus: 'sem dados'
+    },
     quotas: [],
     payments: [],
     debts: [],
     receipts: [],
     expenses: [],
-    reserveFunds: []
+    reserveFunds: [],
+    paymentAgreements: [],
+    cashMovements: [],
+    bankTransactions: [],
+    bankReconciliations: []
   },
   auditLog: [],
   permissions: {
@@ -180,14 +194,12 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
   const residents = resources.condominiums.reduce((total, item) => total + item.residents, 0);
   const realFractions = resources.fractions.length || fractions;
   const realResidents = resources.residents.length || residents;
-  const accounting = resources.accounting.summary;
+  const accountingOverview = resources.accounting.overview;
   const canManageCondominiums = canWrite(resources, 'condominiums');
   const canManageOperations = canWrite(resources, 'operations');
-  const canManageAccounting = canWrite(resources, 'accounting');
   const canManageReports = canWrite(resources, 'reports');
   const canDeleteCondominiums = canDelete(resources, 'condominiums');
   const canDeleteOperations = canDelete(resources, 'operations');
-  const canDeleteAccounting = canDelete(resources, 'accounting');
   const canDeleteReports = canDelete(resources, 'reports');
 
   return [
@@ -303,46 +315,30 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
       navLabel: 'Contabilidade',
       icon: 'EUR',
       title: 'Contabilidade',
-      description: 'Resumo financeiro, quotas, dividas, recibos, despesas e fundo de reserva.',
+      description: 'Painel operacional com avisos, tarefas e saude do modulo, sem detalhe financeiro individual.',
       action: 'Registar movimento',
       createOptions: accountingOptions(dashboard.activeCondominium),
       stats: [
         {
-          label: 'Saldo atual',
-          value: formatCurrency(accounting.currentBalance),
-          detail: `${accounting.paidQuotaPercentage}% das quotas regularizadas`,
-          tone: 'green'
+          label: 'Quotas por validar',
+          value: String(accountingOverview.quotasToValidate),
+          detail: 'Contagem agregada, sem nomes ou valores',
+          tone: accountingOverview.quotasToValidate ? 'gold' : 'green'
         },
         {
-          label: 'Em atraso',
-          value: formatCurrency(accounting.overdueAmount),
-          detail: `${accounting.overdueCount} registos pendentes`,
-          tone: accounting.overdueCount ? 'danger' : 'green'
+          label: 'Movimentos por reconciliar',
+          value: String(accountingOverview.unreconciledMovements),
+          detail: `Antiguidade maxima: ${accountingOverview.oldestUnreconciledAgeDays ?? 0} dias`,
+          tone: accountingOverview.unreconciledMovements ? 'danger' : 'green'
         },
         {
-          label: 'Despesas',
-          value: formatCurrency(accounting.monthlyExpenses),
-          detail: `Fundo reserva: ${formatCurrency(accounting.reserveFund)}`,
-          tone: 'gold'
+          label: 'Recibos por emitir',
+          value: String(accountingOverview.receiptsToIssue),
+          detail: `${accountingOverview.activePaymentAgreements} acordos ativos`,
+          tone: accountingOverview.receiptsToIssue ? 'gold' : 'green'
         }
       ],
-      records: [
-        ...resources.accounting.debts.map((item) =>
-          debtRecord(item, canManageAccounting, canDeleteAccounting)
-        ),
-        ...resources.accounting.quotas.map((item) =>
-          quotaRecord(item, canManageAccounting, canDeleteAccounting)
-        ),
-        ...resources.accounting.payments.map((item) =>
-          paymentRecord(item, canManageAccounting, canDeleteAccounting)
-        ),
-        ...resources.accounting.expenses.map((item) =>
-          expenseRecord(item, canManageAccounting, canDeleteAccounting)
-        ),
-        ...resources.accounting.receipts.map((item) =>
-          receiptRecord(item, canManageAccounting, canDeleteAccounting)
-        )
-      ]
+      records: []
     },
     {
       path: '/relatorios',

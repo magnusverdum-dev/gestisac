@@ -3,6 +3,7 @@ import { AppEntryPage } from './components/auth/AppEntryPage';
 import { LoginPage } from './components/auth/LoginPage';
 import { DashboardPage } from './components/dashboard/DashboardPage';
 import { CalendarPage } from './components/pages/CalendarPage';
+import { AccountingPage } from './components/pages/AccountingPage';
 import { ChatPage } from './components/pages/ChatPage';
 import { CondominiumsPage, type CondoAreaId } from './components/pages/CondominiumsPage';
 import { DocumentsPage } from './components/pages/DocumentsPage';
@@ -860,6 +861,12 @@ export const App = component$(() => {
           isSaving={isSaving.value}
           onRefresh$={refreshWorkspace$}
           navigate$={navigate$}
+        />
+      ) : page.path === '/contabilidade' ? (
+        <AccountingPage
+          resources={resources.value}
+          isSaving={isSaving.value}
+          onCreate$={createRecord$}
         />
       ) : page.path === '/calendario' ? (
         <CalendarPage

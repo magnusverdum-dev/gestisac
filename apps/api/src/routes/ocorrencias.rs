@@ -1,11 +1,11 @@
 use crate::{
     error::ApiError,
     models::store::{
-        AppStore, Canal, ComentarioVisibilidade, Impacto, Ocorrencia, OcorrenciaAnexo,
-        OcorrenciaComentario, OcorrenciaStatus, OcorrenciaTipo, OcorrenciasMetricas, Prioridade,
-        Urgencia,
+        default_worker_checklist, AppStore, Canal, ComentarioVisibilidade, Impacto, Ocorrencia,
+        OcorrenciaAnexo, OcorrenciaComentario, OcorrenciaStatus, OcorrenciaTipo,
+        OcorrenciasMetricas, Prioridade, Urgencia, WorkerChecklistItem,
     },
-    routes::auth::{current_user, require_delete, require_write},
+    routes::auth::{current_context, current_user, require_delete, require_write},
     state::AppState,
 };
 use axum::{
@@ -101,6 +101,32 @@ pub struct OcorrenciaInput {
     pub technical_notes: Option<String>,
     #[serde(default)]
     pub assigned_worker_id: Option<String>,
+    #[serde(default)]
+    pub work_started_at: Option<String>,
+    #[serde(default)]
+    pub work_paused_at: Option<String>,
+    #[serde(default)]
+    pub arrived_at: Option<String>,
+    #[serde(default)]
+    pub resolved_by_worker_at: Option<String>,
+    #[serde(default)]
+    pub resolution_summary: Option<String>,
+    #[serde(default)]
+    pub worker_checklist: Option<Vec<WorkerChecklistItem>>,
+    #[serde(default)]
+    pub worker_time_minutes: Option<u32>,
+    #[serde(default)]
+    pub requires_hq_validation: Option<bool>,
+    #[serde(default)]
+    pub hq_validation_status: Option<String>,
+    #[serde(default)]
+    pub hq_validation_notes: Option<String>,
+    #[serde(default)]
+    pub public_timeline_status: Option<String>,
+    #[serde(default)]
+    pub qr_source_type: Option<String>,
+    #[serde(default)]
+    pub qr_source_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,6 +135,62 @@ pub struct StatusTransitionInput {
     pub status: String,
     #[serde(default)]
     pub motivo: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerActionInput {
+    pub action: String,
+    #[serde(default)]
+    pub note: Option<String>,
+    #[serde(default)]
+    pub resolution_summary: Option<String>,
+    #[serde(default)]
+    pub worker_checklist: Option<Vec<WorkerChecklistItem>>,
+    #[serde(default)]
+    pub worker_time_minutes: Option<u32>,
+    #[serde(default)]
+    pub public_timeline_status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateResolutionInput {
+    pub decision: String,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QrOcorrenciaInput {
+    pub titulo: String,
+    pub descricao: String,
+    #[serde(default)]
+    pub condominium_id: Option<String>,
+    #[serde(default)]
+    pub qr_source_type: Option<String>,
+    #[serde(default)]
+    pub qr_source_id: Option<String>,
+    #[serde(default)]
+    pub equipamento_id: Option<String>,
+    #[serde(default)]
+    pub zona_id: Option<String>,
+    #[serde(default)]
+    pub requisitante_nome: Option<String>,
+    #[serde(default)]
+    pub requisitante_email: Option<String>,
+    #[serde(default)]
+    pub requisitante_telefone: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentQuery {
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub visibility: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -252,6 +334,10 @@ pub async fn criar(
     validate_required(&input.titulo, "Titulo")?;
 
     let now = Utc::now().to_rfc3339();
+    let category = input
+        .categoria
+        .clone()
+        .unwrap_or_else(|| "Operacional".to_string());
     let item = Ocorrencia {
         id: Uuid::new_v4().to_string(),
         titulo: input.titulo.trim().to_string(),
@@ -266,7 +352,7 @@ pub async fn criar(
         requisitante_email: input.requisitante_email.unwrap_or_default(),
         requisitante_telefone: input.requisitante_telefone.unwrap_or_default(),
         canal: parse_canal(input.canal.as_deref()).unwrap_or(Canal::Portal),
-        categoria: input.categoria.unwrap_or_else(|| "Operacional".to_string()),
+        categoria: category.clone(),
         atribuido_a: input.atribuido_a.unwrap_or_default(),
         tags: input.tags.unwrap_or_default(),
         bloco_id: input.bloco_id.unwrap_or_default(),
@@ -282,6 +368,25 @@ pub async fn criar(
             .unwrap_or_else(|| "Avaria recebida".to_string()),
         technical_notes: input.technical_notes.unwrap_or_default(),
         assigned_worker_id: input.assigned_worker_id.unwrap_or_default(),
+        work_started_at: input.work_started_at.unwrap_or_default(),
+        work_paused_at: input.work_paused_at.unwrap_or_default(),
+        arrived_at: input.arrived_at.unwrap_or_default(),
+        resolved_by_worker_at: input.resolved_by_worker_at.unwrap_or_default(),
+        resolution_summary: input.resolution_summary.unwrap_or_default(),
+        worker_checklist: input
+            .worker_checklist
+            .unwrap_or_else(|| default_worker_checklist(&category)),
+        worker_time_minutes: input.worker_time_minutes.unwrap_or_default(),
+        requires_hq_validation: input.requires_hq_validation.unwrap_or(false),
+        hq_validation_status: input
+            .hq_validation_status
+            .unwrap_or_else(|| "nao_requerida".to_string()),
+        hq_validation_notes: input.hq_validation_notes.unwrap_or_default(),
+        public_timeline_status: input
+            .public_timeline_status
+            .unwrap_or_else(|| "Recebida".to_string()),
+        qr_source_type: input.qr_source_type.unwrap_or_default(),
+        qr_source_id: input.qr_source_id.unwrap_or_default(),
         sla_resposta_em: String::new(),
         sla_resolucao_em: String::new(),
         referencia_contrato: String::new(),
@@ -400,6 +505,45 @@ pub async fn atualizar(
     }
     if let Some(v) = non_empty_string(input.assigned_worker_id) {
         item.assigned_worker_id = v;
+    }
+    if let Some(v) = non_empty_string(input.work_started_at) {
+        item.work_started_at = v;
+    }
+    if let Some(v) = non_empty_string(input.work_paused_at) {
+        item.work_paused_at = v;
+    }
+    if let Some(v) = non_empty_string(input.arrived_at) {
+        item.arrived_at = v;
+    }
+    if let Some(v) = non_empty_string(input.resolved_by_worker_at) {
+        item.resolved_by_worker_at = v;
+    }
+    if let Some(v) = non_empty_string(input.resolution_summary) {
+        item.resolution_summary = v;
+    }
+    if let Some(checklist) = input.worker_checklist {
+        item.worker_checklist = checklist;
+    }
+    if let Some(minutes) = input.worker_time_minutes {
+        item.worker_time_minutes = minutes;
+    }
+    if let Some(value) = input.requires_hq_validation {
+        item.requires_hq_validation = value;
+    }
+    if let Some(v) = non_empty_string(input.hq_validation_status) {
+        item.hq_validation_status = normalize_validation_status(&v);
+    }
+    if let Some(v) = non_empty_string(input.hq_validation_notes) {
+        item.hq_validation_notes = v;
+    }
+    if let Some(v) = non_empty_string(input.public_timeline_status) {
+        item.public_timeline_status = v;
+    }
+    if let Some(v) = non_empty_string(input.qr_source_type) {
+        item.qr_source_type = normalize_qr_source_type(&v);
+    }
+    if let Some(v) = non_empty_string(input.qr_source_id) {
+        item.qr_source_id = v;
     }
     item.atualizado_em = Utc::now().to_rfc3339();
 
@@ -606,6 +750,7 @@ pub async fn anexos_upload(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     Path(id): Path<String>,
+    Query(query): Query<AttachmentQuery>,
     mut multipart: Multipart,
 ) -> Result<Json<Vec<OcorrenciaAnexo>>, ApiError> {
     let user = require_write(&headers, &state, "operations").await?;
@@ -639,6 +784,8 @@ pub async fn anexos_upload(
             tamanho_bytes,
             storage_key,
             uploaded_por: user.name.clone(),
+            kind: normalize_attachment_kind(query.kind.as_deref()),
+            visibility: normalize_attachment_visibility(query.visibility.as_deref()),
             criado_em: Utc::now().to_rfc3339(),
         };
 
@@ -753,6 +900,257 @@ pub async fn metricas(
     Ok(Json(store.ocorrencias_metricas()))
 }
 
+pub async fn worker_tickets(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<Vec<Ocorrencia>>, ApiError> {
+    let context = current_context(&headers, &state).await?;
+    let store = state.store.read().await;
+    let mut items: Vec<Ocorrencia> = store
+        .ocorrencias
+        .iter()
+        .filter(|item| is_assigned_to_worker(item, &context.user))
+        .cloned()
+        .collect();
+    items.sort_by_key(worker_queue_rank);
+    Ok(Json(items))
+}
+
+pub async fn worker_action(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<WorkerActionInput>,
+) -> Result<Json<Ocorrencia>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    let mut store = state.store.write().await;
+    let item = store
+        .ocorrencias
+        .iter_mut()
+        .find(|o| o.id == id)
+        .ok_or_else(|| ApiError::not_found("Ocorrencia nao encontrada"))?;
+
+    let now = Utc::now().to_rfc3339();
+    let action = input.action.trim().to_lowercase();
+    match action.as_str() {
+        "arrive" | "chegar" => {
+            item.arrived_at = now.clone();
+            item.public_timeline_status = "Tecnico no local".to_string();
+        }
+        "start" | "iniciar" => {
+            item.status = OcorrenciaStatus::EmCurso;
+            item.work_started_at = now.clone();
+            item.respondido_em = if item.respondido_em.is_empty() {
+                now.clone()
+            } else {
+                item.respondido_em.clone()
+            };
+            item.public_timeline_status = "Intervencao em curso".to_string();
+        }
+        "pause" | "pausar" => {
+            item.status = OcorrenciaStatus::Pendente;
+            item.work_paused_at = now.clone();
+            item.public_timeline_status = "Intervencao pausada".to_string();
+        }
+        "await_parts" | "aguardar_pecas" | "aguarda_pecas" => {
+            item.status = OcorrenciaStatus::AguardaPecas;
+            item.public_timeline_status = "A aguardar pecas/material".to_string();
+        }
+        "resolve" | "resolver" => {
+            let summary = input
+                .resolution_summary
+                .as_deref()
+                .or(input.note.as_deref())
+                .unwrap_or("")
+                .trim();
+            validate_required(summary, "Resumo de resolucao")?;
+            item.status = OcorrenciaStatus::Resolvida;
+            item.resolvido_em = now.clone();
+            item.resolved_by_worker_at = now.clone();
+            item.resolution_summary = summary.to_string();
+            item.motivo_resolucao = summary.to_string();
+            item.requires_hq_validation = true;
+            item.hq_validation_status = "pendente".to_string();
+            item.public_timeline_status = "Resolvida pelo tecnico, em validacao".to_string();
+        }
+        _ => return Err(ApiError::validation("Acao de trabalhador invalida")),
+    }
+
+    if let Some(checklist) = input.worker_checklist {
+        item.worker_checklist = checklist;
+    }
+    if let Some(minutes) = input.worker_time_minutes {
+        item.worker_time_minutes = minutes;
+    }
+    if let Some(status) = non_empty_string(input.public_timeline_status) {
+        item.public_timeline_status = status;
+    }
+    if let Some(note) = non_empty_string(input.note) {
+        item.technical_notes =
+            append_note(&item.technical_notes, &format!("{}: {}", user.name, note));
+    }
+    item.atualizado_em = now;
+
+    let response = item.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "worker_action",
+        &response.id,
+        format!("Acao trabalhador '{}': {}", action, response.titulo),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn validate_resolution(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<ValidateResolutionInput>,
+) -> Result<Json<Ocorrencia>, ApiError> {
+    let user = require_write(&headers, &state, "operations").await?;
+    let mut store = state.store.write().await;
+    let item = store
+        .ocorrencias
+        .iter_mut()
+        .find(|o| o.id == id)
+        .ok_or_else(|| ApiError::not_found("Ocorrencia nao encontrada"))?;
+
+    let decision = input.decision.trim().to_lowercase();
+    let notes = input.notes.unwrap_or_default();
+    let now = Utc::now().to_rfc3339();
+    match decision.as_str() {
+        "accept" | "aceitar" | "aprovada" | "approved" => {
+            item.requires_hq_validation = false;
+            item.hq_validation_status = "aprovada".to_string();
+            item.hq_validation_notes = notes;
+            item.public_timeline_status = "Resolucao validada".to_string();
+            item.status = OcorrenciaStatus::Resolvida;
+        }
+        "reject" | "rejeitar" | "rejeitada" | "rejected" => {
+            item.requires_hq_validation = true;
+            item.hq_validation_status = "rejeitada".to_string();
+            item.hq_validation_notes = if notes.trim().is_empty() {
+                "Rever intervencao e submeter novamente".to_string()
+            } else {
+                notes
+            };
+            item.public_timeline_status = "Intervencao em revisao tecnica".to_string();
+            item.status = OcorrenciaStatus::EmCurso;
+        }
+        _ => return Err(ApiError::validation("Decisao de validacao invalida")),
+    }
+    item.atualizado_em = now;
+
+    let response = item.clone();
+    store.add_audit(
+        &user,
+        "operations",
+        "validate_resolution",
+        &response.id,
+        format!(
+            "Validacao de resolucao {}: {}",
+            response.hq_validation_status, response.titulo
+        ),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(response))
+}
+
+pub async fn criar_from_qr(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(input): Json<QrOcorrenciaInput>,
+) -> Result<Json<Ocorrencia>, ApiError> {
+    let user = current_user(&headers, &state).await?;
+    validate_required(&input.titulo, "Titulo")?;
+    validate_required(&input.descricao, "Descricao")?;
+
+    let source_type = normalize_qr_source_type(input.qr_source_type.as_deref().unwrap_or(""));
+    let now = Utc::now().to_rfc3339();
+    let item = Ocorrencia {
+        id: Uuid::new_v4().to_string(),
+        titulo: input.titulo.trim().to_string(),
+        tipo: OcorrenciaTipo::Avaria,
+        status: OcorrenciaStatus::Nova,
+        prioridade: Prioridade::Normal,
+        impacto: Impacto::Medio,
+        urgencia: Urgencia::Media,
+        descricao: input.descricao.trim().to_string(),
+        condominium_id: input.condominium_id.unwrap_or_default(),
+        requisitante_nome: input.requisitante_nome.unwrap_or_else(|| user.name.clone()),
+        requisitante_email: input
+            .requisitante_email
+            .unwrap_or_else(|| user.email.clone()),
+        requisitante_telefone: input.requisitante_telefone.unwrap_or_default(),
+        canal: Canal::Portal,
+        categoria: "QR operacional".to_string(),
+        atribuido_a: String::new(),
+        tags: vec!["qr".to_string(), source_type.clone()],
+        bloco_id: String::new(),
+        piso_id: String::new(),
+        zona_id: input.zona_id.unwrap_or_default(),
+        equipamento_id: input.equipamento_id.unwrap_or_default(),
+        custo_estimado: String::new(),
+        custo_final: String::new(),
+        fornecedor_id: String::new(),
+        referencia_contrato: String::new(),
+        media_ids: vec![],
+        documento_ids: vec![],
+        motivo_resolucao: String::new(),
+        sla_resposta_em: String::new(),
+        sla_resolucao_em: String::new(),
+        respondido_em: String::new(),
+        resolvido_em: String::new(),
+        fechado_em: String::new(),
+        token_acompanhamento: String::new(),
+        origin_channel: "client".to_string(),
+        public_status_text: "Avaria recebida por QR".to_string(),
+        technical_notes: format!(
+            "Criada via QR: {} {}",
+            source_type,
+            input.qr_source_id.clone().unwrap_or_default()
+        )
+        .trim()
+        .to_string(),
+        assigned_worker_id: String::new(),
+        work_started_at: String::new(),
+        work_paused_at: String::new(),
+        arrived_at: String::new(),
+        resolved_by_worker_at: String::new(),
+        resolution_summary: String::new(),
+        worker_checklist: default_worker_checklist("QR operacional"),
+        worker_time_minutes: 0,
+        requires_hq_validation: false,
+        hq_validation_status: "nao_requerida".to_string(),
+        hq_validation_notes: String::new(),
+        public_timeline_status: "Avaria recebida por QR".to_string(),
+        qr_source_type: source_type,
+        qr_source_id: input.qr_source_id.unwrap_or_default(),
+        criado_em: now.clone(),
+        atualizado_em: now,
+    };
+
+    let mut store = state.store.write().await;
+    store.ocorrencias.insert(0, item.clone());
+    store.add_audit(
+        &user,
+        "operations",
+        "qr_create",
+        &item.id,
+        format!("Ocorrencia criada por QR: {}", item.titulo),
+    );
+    drop(store);
+    persist(&state).await?;
+
+    Ok(Json(item))
+}
+
 pub async fn criar_publica(
     State(state): State<AppState>,
     Json(input): Json<PublicaInput>,
@@ -793,6 +1191,19 @@ pub async fn criar_publica(
         public_status_text: "Avaria recebida".to_string(),
         technical_notes: String::new(),
         assigned_worker_id: String::new(),
+        work_started_at: String::new(),
+        work_paused_at: String::new(),
+        arrived_at: String::new(),
+        resolved_by_worker_at: String::new(),
+        resolution_summary: String::new(),
+        worker_checklist: default_worker_checklist("Reportado por morador"),
+        worker_time_minutes: 0,
+        requires_hq_validation: false,
+        hq_validation_status: "nao_requerida".to_string(),
+        hq_validation_notes: String::new(),
+        public_timeline_status: "Avaria recebida".to_string(),
+        qr_source_type: String::new(),
+        qr_source_id: String::new(),
         referencia_contrato: String::new(),
         media_ids: vec![],
         documento_ids: vec![],
@@ -968,6 +1379,79 @@ fn normalize_origin_channel(value: Option<&str>) -> String {
         "worker" => "worker".to_string(),
         "client" => "client".to_string(),
         _ => "hq".to_string(),
+    }
+}
+
+fn normalize_validation_status(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
+        "aprovada" | "approved" | "accept" | "aceitar" => "aprovada".to_string(),
+        "rejeitada" | "rejected" | "reject" | "rejeitar" => "rejeitada".to_string(),
+        "pendente" | "pending" => "pendente".to_string(),
+        _ => "nao_requerida".to_string(),
+    }
+}
+
+fn normalize_attachment_kind(value: Option<&str>) -> String {
+    match value.unwrap_or("document").trim().to_lowercase().as_str() {
+        "before" | "antes" => "before".to_string(),
+        "after" | "depois" => "after".to_string(),
+        "proof" | "prova" => "proof".to_string(),
+        _ => "document".to_string(),
+    }
+}
+
+fn normalize_attachment_visibility(value: Option<&str>) -> String {
+    match value.unwrap_or("internal").trim().to_lowercase().as_str() {
+        "public" | "publico" | "público" => "public".to_string(),
+        _ => "internal".to_string(),
+    }
+}
+
+fn normalize_qr_source_type(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
+        "condominium" | "condominio" | "condomínio" => "condominium".to_string(),
+        "zone" | "zona" => "zone".to_string(),
+        "equipment" | "equipamento" => "equipment".to_string(),
+        _ => "unknown".to_string(),
+    }
+}
+
+fn is_assigned_to_worker(item: &Ocorrencia, user: &crate::models::store::PublicUser) -> bool {
+    let assigned = format!("{} {}", item.assigned_worker_id, item.atribuido_a).to_lowercase();
+    let user_id = user.id.to_lowercase();
+    let user_name = user.name.to_lowercase();
+    let user_email = user.email.to_lowercase();
+    assigned.contains(&user_id)
+        || assigned.contains(&user_name)
+        || assigned.contains(&user_email)
+        || assigned.contains("worker")
+        || assigned.contains("tecnico")
+        || assigned.contains("funcionario")
+}
+
+fn worker_queue_rank(item: &Ocorrencia) -> (u8, String) {
+    let priority = match item.prioridade {
+        Prioridade::Urgente => 0,
+        Prioridade::Alta => 1,
+        Prioridade::Normal => 2,
+        Prioridade::Baixa => 3,
+    };
+    let status = match item.status {
+        OcorrenciaStatus::EmCurso => 0,
+        OcorrenciaStatus::AguardaPecas => 1,
+        OcorrenciaStatus::Nova | OcorrenciaStatus::EmTriagem | OcorrenciaStatus::Reaberta => 2,
+        OcorrenciaStatus::Pendente => 3,
+        OcorrenciaStatus::Resolvida => 4,
+        OcorrenciaStatus::Fechada => 5,
+    };
+    (priority + status, item.sla_resolucao_em.clone())
+}
+
+fn append_note(existing: &str, note: &str) -> String {
+    if existing.trim().is_empty() {
+        note.to_string()
+    } else {
+        format!("{}\n{}", existing.trim(), note)
     }
 }
 
@@ -1327,6 +1811,111 @@ mod tests {
             .unwrap();
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_worker_tickets_returns_assigned_queue() {
+        let state = test_app_state();
+        let app = app(state);
+
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/api/worker/tickets")
+            .header(AUTHORIZATION, "Bearer test-token-raw")
+            .body(Body::empty())
+            .unwrap();
+        let (status, body) = collect(app.oneshot(req).await.unwrap()).await;
+        assert_eq!(status, StatusCode::OK);
+        let parsed: Vec<Ocorrencia> = serde_json::from_slice(&body).unwrap();
+        assert!(!parsed.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_worker_action_resolve_requires_hq_validation() {
+        let state = test_app_state();
+        let target_id = {
+            let store = state.store.read().await;
+            store.ocorrencias[0].id.clone()
+        };
+        let app = app(state);
+        let input = serde_json::json!({
+            "action": "resolve",
+            "resolutionSummary": "Motor reiniciado e teste final conforme.",
+            "workerTimeMinutes": 35
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/api/ocorrencias/{target_id}/worker-action"))
+            .header(AUTHORIZATION, "Bearer test-token-raw")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&input).unwrap()))
+            .unwrap();
+        let (status, body) = collect(app.oneshot(req).await.unwrap()).await;
+        assert_eq!(status, StatusCode::OK);
+        let parsed: Ocorrencia = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed.status, OcorrenciaStatus::Resolvida);
+        assert!(parsed.requires_hq_validation);
+        assert_eq!(parsed.hq_validation_status, "pendente");
+    }
+
+    #[tokio::test]
+    async fn test_hq_can_reject_worker_resolution() {
+        let state = test_app_state();
+        let target_id = {
+            let mut store = state.store.write().await;
+            let item = store.ocorrencias.first_mut().unwrap();
+            item.status = OcorrenciaStatus::Resolvida;
+            item.requires_hq_validation = true;
+            item.hq_validation_status = "pendente".to_string();
+            item.id.clone()
+        };
+        let app = app(state);
+        let input = serde_json::json!({
+            "decision": "reject",
+            "notes": "Falta fotografia final."
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/api/ocorrencias/{target_id}/validate-resolution"))
+            .header(AUTHORIZATION, "Bearer test-token-raw")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&input).unwrap()))
+            .unwrap();
+        let (status, body) = collect(app.oneshot(req).await.unwrap()).await;
+        assert_eq!(status, StatusCode::OK);
+        let parsed: Ocorrencia = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed.status, OcorrenciaStatus::EmCurso);
+        assert_eq!(parsed.hq_validation_status, "rejeitada");
+    }
+
+    #[tokio::test]
+    async fn test_qr_creation_preserves_source_context() {
+        let state = test_app_state();
+        let app = app(state);
+        let input = serde_json::json!({
+            "titulo": "Avaria lida por QR",
+            "descricao": "Porta da casa do lixo nao fecha.",
+            "condominiumId": "cond-001",
+            "qrSourceType": "equipment",
+            "qrSourceId": "porta-lixo-001",
+            "equipamentoId": "porta-lixo-001"
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/api/ocorrencias/from-qr")
+            .header(AUTHORIZATION, "Bearer test-token-raw")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&input).unwrap()))
+            .unwrap();
+        let (status, body) = collect(app.oneshot(req).await.unwrap()).await;
+        assert_eq!(status, StatusCode::OK);
+        let parsed: Ocorrencia = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed.qr_source_type, "equipment");
+        assert_eq!(parsed.qr_source_id, "porta-lixo-001");
+        assert_eq!(parsed.public_timeline_status, "Avaria recebida por QR");
     }
 
     // ── DELETE /api/ocorrencias/{id} ──

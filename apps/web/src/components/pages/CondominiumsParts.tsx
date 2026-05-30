@@ -33,7 +33,7 @@ export const SectionEditor = component$((props: SectionEditorProps) => (
   <form
     class="condo-editor"
     preventdefault:submit
-    onSubmit$={async (event) => props.onSubmit$(event.target as HTMLFormElement)}
+    onSubmit$={async (event) => props.onSubmit$(event.currentTarget as HTMLFormElement)}
   >
     <header>
       <strong>{props.title}</strong>
@@ -74,7 +74,7 @@ export const SubresourcePanel = component$((props: SubresourcePanelProps) => (
     <form
       class="condo-editor"
       preventdefault:submit
-      onSubmit$={async (event) => props.onSubmit$(event.target as HTMLFormElement, props.resource, props.fields)}
+      onSubmit$={async (event) => props.onSubmit$(event.currentTarget as HTMLFormElement, props.resource, props.fields)}
     >
       <header>
         <strong>Adicionar {props.title.toLowerCase()}</strong>
@@ -202,7 +202,7 @@ export const AssetUploadPanel = component$((props: {
   <form
     class="condo-upload-panel"
     preventdefault:submit
-    onSubmit$={(event) => props.onUpload$(event.target as HTMLFormElement, props.kind)}
+    onSubmit$={(event) => props.onUpload$(event.currentTarget as HTMLFormElement, props.kind)}
   >
     <strong>{props.kind === 'documents' ? 'Upload de documento' : 'Upload de imagem/planta'}</strong>
     <div class="condo-form-grid compact">
@@ -231,6 +231,16 @@ export const FuturePanel = component$((props: {
 
   return (
     <section class="condo-future-panel">
+      <article class="condo-future-readiness">
+        <strong>Estado da preparacao Mapa/QR/Planta/3D</strong>
+        <div class="condo-qr-grid">
+          <span>{mapUrl ? 'Mapa: ativo (coordenadas encontradas)' : 'Mapa: pendente (falta latitude/longitude)'}</span>
+          <span>{(props.selected.zones ?? []).length ? `QR: ${(props.selected.zones ?? []).length} zonas prontas` : 'QR: pendente (sem zonas)'}</span>
+          <span>{plan ? 'Planta 2D: ativa' : 'Planta 2D: pendente (sem imagem/planta)'}</span>
+          <span>{model ? '3D: ativo (.glb/.gltf associado)' : '3D: pendente (sem modelo)'}</span>
+        </div>
+        <small>Esta vista e uma preparacao visual para operacao: mostra o que ja esta pronto e o que falta para ativar cada capacidade.</small>
+      </article>
       <article class="condo-map-panel">
         <strong>Mapa operacional</strong>
         {mapUrl ? <iframe src={mapUrl} title={`Mapa de ${props.selected.name}`} loading="lazy" /> : <span>Coordenadas por definir</span>}
@@ -246,6 +256,7 @@ export const FuturePanel = component$((props: {
             </a>
           ))}
         </div>
+        <small>Os QR ligam diretamente as zonas para inspeccao, manutencao e historico operativo.</small>
       </article>
       <article class="condo-plan-panel">
         <strong>Planta 2D</strong>
@@ -265,7 +276,7 @@ export const FuturePanel = component$((props: {
             ))}
           </div>
         ) : <span>Carrega uma planta na aba Imagens e plantas para ativar a vista 2D.</span>}
-        <form class="condo-marker-form" preventdefault:submit onSubmit$={(event) => props.onAddMarker$(event.target as HTMLFormElement)}>
+        <form class="condo-marker-form" preventdefault:submit onSubmit$={(event) => props.onAddMarker$(event.currentTarget as HTMLFormElement)}>
           <Field name="label" label="Marcador" />
           <Field name="xPercent" label="X %" kind="number" value="50" />
           <Field name="yPercent" label="Y %" kind="number" value="50" />

@@ -8,7 +8,7 @@ import {
   normalize
 } from '../../lib/entity-navigation';
 import { EntityAction } from '../common/EntityAction';
-import { criarComentario, transitarStatus } from '../../lib/api/ocorrencias';
+import { criarComentario, executarAcaoFuncionario, transitarStatus, validarResolucao } from '../../lib/api/ocorrencias';
 
 type TicketsPageProps = {
   appContext: AppContext;
@@ -56,7 +56,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
   const selectedId = useSignal(props.resources.ocorrencias[0]?.id ?? '');
   const isCreating = useSignal(false);
   const editingId = useSignal('');
-  const detailTab = useSignal<'timeline' | 'ficheiros' | 'custos'>('timeline');
+  const detailTab = useSignal<'resumo' | 'checklist' | 'fotos' | 'historico' | 'resolver' | 'timeline' | 'ficheiros' | 'custos'>('resumo');
   const showCommentForm = useSignal(false);
   const commentText = useSignal('');
   const commentVisibility = useSignal<'interno' | 'publico'>('interno');
@@ -161,18 +161,37 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
       {pageError.value ? <div class="app-error glass-panel">{pageError.value}</div> : null}
 
       <div class="summary-grid simple-summary-grid">
-        <button class={`summary-card red ${statusFiltro.value === 'abertos' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'abertos'; tipoTab.value = 'todas'; }}>
-          <span>Abertas</span><strong>{abertas}</strong><small>{urgentes} urgente</small>
-        </button>
-        <button class={`summary-card gold ${statusFiltro.value === 'pendentes' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'pendentes'; tipoTab.value = 'todas'; }}>
-          <span>Pendentes</span><strong>{props.resources.ocorrencias.filter((oc) => oc.status === 'pendente').length}</strong><small>A aguardar decisão</small>
-        </button>
-        <button class="summary-card blue" type="button" onClick$={() => { statusFiltro.value = ''; prioridadeFiltro.value = ''; }}>
-          <span>Filtradas</span><strong>{filtered.length}</strong><small>Vista atual</small>
-        </button>
-        <button class={`summary-card green ${statusFiltro.value === 'resolvidos' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'resolvidos'; tipoTab.value = 'todas'; }}>
-          <span>Resolvidas</span><strong>{props.resources.ocorrencias.filter((oc) => isTicketClosed(oc.status)).length}</strong><small>Histórico operacional</small>
-        </button>
+        {isWorkerContext ? (
+          <>
+            <button class="summary-card blue" type="button" onClick$={() => { statusFiltro.value = ''; prioridadeFiltro.value = ''; }}>
+              <span>Hoje</span><strong>{filtered.filter((oc) => !isTicketClosed(oc.status)).length}</strong><small>Fila atribuída</small>
+            </button>
+            <button class={`summary-card red ${prioridadeFiltro.value === 'urgente' ? 'active' : ''}`} type="button" onClick$={() => { prioridadeFiltro.value = 'urgente'; statusFiltro.value = ''; }}>
+              <span>Urgentes</span><strong>{filtered.filter((oc) => oc.prioridade === 'urgente').length}</strong><small>Resposta rápida</small>
+            </button>
+            <button class={`summary-card gold ${statusFiltro.value === 'aguardaPecas' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'aguardaPecas'; prioridadeFiltro.value = ''; }}>
+              <span>A aguardar peças</span><strong>{filtered.filter((oc) => oc.status === 'aguardaPecas').length}</strong><small>Material/fornecedor</small>
+            </button>
+            <button class={`summary-card green ${statusFiltro.value === 'resolvidos' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'resolvidos'; prioridadeFiltro.value = ''; }}>
+              <span>Resolvidos</span><strong>{filtered.filter((oc) => isTicketClosed(oc.status)).length}</strong><small>A validar/fechar</small>
+            </button>
+          </>
+        ) : (
+          <>
+            <button class={`summary-card red ${statusFiltro.value === 'abertos' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'abertos'; tipoTab.value = 'todas'; }}>
+              <span>Abertas</span><strong>{abertas}</strong><small>{urgentes} urgente</small>
+            </button>
+            <button class={`summary-card gold ${statusFiltro.value === 'pendentes' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'pendentes'; tipoTab.value = 'todas'; }}>
+              <span>{isHqContext ? 'A validar HQ' : 'Pendentes'}</span><strong>{isHqContext ? props.resources.ocorrencias.filter((oc) => oc.requiresHqValidation && oc.hqValidationStatus === 'pendente').length : props.resources.ocorrencias.filter((oc) => oc.status === 'pendente').length}</strong><small>{isHqContext ? 'Resoluções técnicas' : 'A aguardar decisão'}</small>
+            </button>
+            <button class="summary-card blue" type="button" onClick$={() => { statusFiltro.value = ''; prioridadeFiltro.value = ''; }}>
+              <span>Filtradas</span><strong>{filtered.length}</strong><small>Vista atual</small>
+            </button>
+            <button class={`summary-card green ${statusFiltro.value === 'resolvidos' ? 'active' : ''}`} type="button" onClick$={() => { statusFiltro.value = 'resolvidos'; tipoTab.value = 'todas'; }}>
+              <span>Resolvidas</span><strong>{props.resources.ocorrencias.filter((oc) => isTicketClosed(oc.status)).length}</strong><small>Histórico operacional</small>
+            </button>
+          </>
+        )}
       </div>
 
       <section class="glass-panel ops-workspace">
@@ -211,7 +230,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
           <div class="ops-list-column">
             {filtered.length ? filtered.map((oc) => (
               <article class={`ops-ticket-card ${selected?.id === oc.id ? 'active' : ''}`} key={oc.id}>
-                <button type="button" class="ops-ticket-main" onClick$={() => { selectedId.value = oc.id; detailTab.value = 'timeline'; }}>
+                <button type="button" class="ops-ticket-main" onClick$={() => { selectedId.value = oc.id; detailTab.value = 'resumo'; }}>
                   <span class={`priority-rail ${tomPrioridade(oc.prioridade)}`} />
                   <div>
                     <strong><span class={`tipo-badge ${oc.tipo}`}>{iconeTipo(oc.tipo)}</span> {oc.titulo}</strong>
@@ -274,7 +293,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                     <p>
                       <small class={`status-chip ${tomStatus(selected.status)}`}>{rotuloStatus(selected.status)}</small>
                       {' '}<small class={`pri-chip ${tomPrioridade(selected.prioridade)}`}>{rotuloPri(selected.prioridade)}</small>
-                      {selected.custoEstimado ? <small> Custo estimado: {selected.custoEstimado}€</small> : null}
+                      {!isClientContext && selected.custoEstimado ? <small> Custo estimado: {selected.custoEstimado} EUR</small> : null}
                     </p>
                   </div>
                   {isHqContext ? (
@@ -285,29 +304,46 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                 </div>
 
                 <div class="detail-kv-grid">
-                  <article>
-                    <span>Requerente</span>
-                    <strong>{selected.requisitanteNome || 'Por definir'}</strong>
-                    <small>{selected.requisitanteEmail || selected.requisitanteTelefone || selected.canal || 'Sem contacto'}</small>
-                  </article>
-                  <EntityAction class="detail-link-card" path={(selected.assignedWorkerId || selected.atribuidoA) ? entityPath('profile', `perfil-${selected.assignedWorkerId || selected.atribuidoA}`) : ''} navigate$={props.navigate$}>
-                    <span>Atribuído a</span>
-                    <strong>{selected.assignedWorkerId || selected.atribuidoA || 'Por atribuir'}</strong>
-                    <small>{selected.categoria || 'Sem categoria'}</small>
-                  </EntityAction>
-                  <article>
-                    <span>Tipo</span>
-                    <strong>{rotuloTipo(selected.tipo)}</strong>
-                    <small>Canal: {rotuloCanal(selected.canal)}</small>
-                  </article>
-                  <article>
-                    <span>Impacto / Urgência</span>
-                    <strong>{rotuloImpacto(selected.impacto)}</strong>
-                    <small>{rotuloUrgencia(selected.urgencia)}</small>
-                  </article>
-                  {selected.blocoId ? <article><span>Localização</span><strong>Bloco {selected.blocoId}{selected.pisoId ? `, Piso ${selected.pisoId}` : ''}{selected.zonaId ? `, ${selected.zonaId}` : ''}</strong></article> : null}
-                  {selected.equipamentoId ? <article><span>Equipamento</span><strong>{selected.equipamentoId}</strong></article> : null}
-                  <article><span>Criado em</span><strong>{selected.criadoEm}</strong><small>Atualizado: {selected.atualizadoEm}</small></article>
+                  {isClientContext ? (
+                    <>
+                      <article>
+                        <span>Estado público</span>
+                        <strong>{selected.publicTimelineStatus || selected.publicStatusText || rotuloStatus(selected.status)}</strong>
+                        <small>Atualizado: {selected.atualizadoEm}</small>
+                      </article>
+                      <article>
+                        <span>Referência</span>
+                        <strong>{selected.tokenAcompanhamento || selected.id}</strong>
+                        <small>{rotuloTipo(selected.tipo)}</small>
+                      </article>
+                    </>
+                  ) : (
+                    <>
+                      <article>
+                        <span>Requerente</span>
+                        <strong>{selected.requisitanteNome || 'Por definir'}</strong>
+                        <small>{selected.requisitanteEmail || selected.requisitanteTelefone || selected.canal || 'Sem contacto'}</small>
+                      </article>
+                      <EntityAction class="detail-link-card" path={(selected.assignedWorkerId || selected.atribuidoA) ? entityPath('profile', `perfil-${selected.assignedWorkerId || selected.atribuidoA}`) : ''} navigate$={props.navigate$}>
+                        <span>Atribuído a</span>
+                        <strong>{selected.assignedWorkerId || selected.atribuidoA || 'Por atribuir'}</strong>
+                        <small>{selected.categoria || 'Sem categoria'}</small>
+                      </EntityAction>
+                      <article>
+                        <span>Tipo</span>
+                        <strong>{rotuloTipo(selected.tipo)}</strong>
+                        <small>Canal: {rotuloCanal(selected.canal)}</small>
+                      </article>
+                      <article>
+                        <span>Impacto / Urgência</span>
+                        <strong>{rotuloImpacto(selected.impacto)}</strong>
+                        <small>{rotuloUrgencia(selected.urgencia)}</small>
+                      </article>
+                      {selected.blocoId ? <article><span>Localização</span><strong>Bloco {selected.blocoId}{selected.pisoId ? `, Piso ${selected.pisoId}` : ''}{selected.zonaId ? `, ${selected.zonaId}` : ''}</strong></article> : null}
+                      {selected.equipamentoId ? <article><span>Equipamento</span><strong>{selected.equipamentoId}</strong></article> : null}
+                      <article><span>Criado em</span><strong>{selected.criadoEm}</strong><small>Atualizado: {selected.atualizadoEm}</small></article>
+                    </>
+                  )}
                 </div>
 
                 <EntityAction class="entity-inline-link" path={condominiumPath(props.resources, selected.condominiumId)} navigate$={props.navigate$}>
@@ -332,14 +368,60 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                 ) : null}
 
                 <nav class="detail-tabs" style="margin-top:1rem">
-                  {(['timeline', 'ficheiros', 'custos'] as const).map((t) => (
-                    <button key={t} type="button" class={`tab-btn ${detailTab.value === t ? 'active' : ''}`} onClick$={() => (detailTab.value = t)}>
-                      {t === 'timeline' ? 'Timeline' : t === 'ficheiros' ? 'Ficheiros' : 'Custos'}
+                  {(isWorkerContext ? ['resumo', 'checklist', 'fotos', 'historico', 'resolver'] : isClientContext ? ['resumo', 'historico'] : ['resumo', 'historico', 'fotos', 'custos'] as const).map((t) => (
+                    <button key={t} type="button" class={`tab-btn ${detailTab.value === t ? 'active' : ''}`} onClick$={() => (detailTab.value = t as typeof detailTab.value)}>
+                      {tabLabel(t)}
                     </button>
                   ))}
                 </nav>
 
-                {detailTab.value === 'timeline' ? (
+                {detailTab.value === 'resumo' ? (
+                  <div class="ops-history">
+                    <div class="detail-kv-grid">
+                      <article><span>Próxima ação</span><strong>{nextTicketAction(selected, props.appContext)}</strong><small>{selected.publicTimelineStatus || selected.publicStatusText || 'Sem estado público'}</small></article>
+                      {!isClientContext ? <article><span>Validacao HQ</span><strong>{selected.hqValidationStatus || 'nao_requerida'}</strong><small>{selected.hqValidationNotes || 'Sem notas de validacao'}</small></article> : null}
+                      {!isClientContext ? <article><span>Tempo no terreno</span><strong>{selected.workerTimeMinutes || 0} min</strong><small>{selected.arrivedAt ? `Chegada: ${selected.arrivedAt}` : 'Sem chegada registada'}</small></article> : null}
+                      {!isClientContext ? <article><span>QR origem</span><strong>{selected.qrSourceType || 'Manual'}</strong><small>{selected.qrSourceId || selected.equipamentoId || selected.zonaId || 'Sem QR'}</small></article> : null}
+                    </div>
+                    {isHqContext && selected.requiresHqValidation && selected.hqValidationStatus === 'pendente' ? (
+                      <div class="simple-header-actions">
+                        <button type="button" class="primary-action" onClick$={async () => { await validarResolucao(props.token, selected.id, { decision: 'accept', notes: 'Validado por HQ' }); window.location.reload(); }}>Validar resolução</button>
+                        <button type="button" class="secondary-action" onClick$={async () => { await validarResolucao(props.token, selected.id, { decision: 'reject', notes: 'Rever intervenção e submeter novamente.' }); window.location.reload(); }}>Rejeitar</button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {detailTab.value === 'checklist' ? (
+                  <form class="ops-history" preventdefault:submit onSubmit$={async (event) => {
+                    const form = event.target as HTMLFormElement;
+                    const checklist = checklistFromForm(form, selected.workerChecklist || []);
+                    await executarAcaoFuncionario(props.token, selected.id, { action: selected.status === 'emCurso' ? 'start' : 'start', workerChecklist: checklist, note: 'Checklist atualizada' });
+                    window.location.reload();
+                  }}>
+                    {(selected.workerChecklist?.length ? selected.workerChecklist : defaultChecklistForTicket(selected)).map((step) => (
+                      <label class="worker-check-row" key={step.id}>
+                        <input type="checkbox" name={`check-${step.id}`} checked={step.done} />
+                        <span>{step.label}</span>
+                        <input name={`note-${step.id}`} value={step.note || ''} placeholder="Nota curta" />
+                      </label>
+                    ))}
+                    <button type="submit" class="primary-action">Guardar checklist</button>
+                  </form>
+                ) : null}
+
+                {detailTab.value === 'fotos' ? (
+                  <div class="ops-history">
+                    <div class="detail-kv-grid">
+                      <article><span>Antes</span><strong>Preparado</strong><small>Upload usa kind=before</small></article>
+                      <article><span>Depois</span><strong>Preparado</strong><small>Upload usa kind=after</small></article>
+                      <article><span>Prova</span><strong>Preparado</strong><small>Upload usa kind=proof</small></article>
+                    </div>
+                    <div class="simple-empty-state"><strong>Prova visual preparada</strong><span>Os anexos já suportam antes/depois/prova e visibilidade pública/interna.</span></div>
+                  </div>
+                ) : null}
+
+                {detailTab.value === 'historico' || detailTab.value === 'timeline' ? (
                   <div class="ops-history">
                     <div class="simple-header-actions">
                       <button type="button" class="primary-action action-with-icon" onClick$={() => (showCommentForm.value = !showCommentForm.value)}>
@@ -351,7 +433,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                         if (!commentText.value.trim() || !props.token) return;
                         pageError.value = '';
                         try {
-                          await criarComentario(props.token, selected.id, commentText.value, commentVisibility.value);
+                          await criarComentario(props.token, selected.id, commentText.value, isClientContext ? 'publico' : commentVisibility.value);
                           commentText.value = '';
                           showCommentForm.value = false;
                         } catch (e) {
@@ -360,36 +442,50 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                       }}>
                         <textarea value={commentText.value} onInput$={(e) => (commentText.value = (e.target as HTMLTextAreaElement).value)} placeholder="Escreve um comentário..." rows={3} />
                         <div class="simple-header-actions">
-                          <select value={commentVisibility.value} onChange$={(e) => (commentVisibility.value = (e.target as HTMLSelectElement).value as 'interno' | 'publico')}>
-                            <option value="interno">Interno</option>
-                            <option value="publico">Público</option>
-                          </select>
+                          {!isClientContext ? (
+                            <select value={commentVisibility.value} onChange$={(e) => (commentVisibility.value = (e.target as HTMLSelectElement).value as 'interno' | 'publico')}>
+                              <option value="interno">Interno</option>
+                              <option value="publico">Público</option>
+                            </select>
+                          ) : null}
                           <button type="submit" class="primary-action" disabled={!commentText.value.trim()}>Enviar</button>
                         </div>
                       </form>
                     ) : null}
-                    <article class="audit-entry">
-                      <span>Criação</span>
-                      <p>{selected.titulo} - {selected.descricao}</p>
-                      <small>{selected.criadoEm} por {selected.requisitanteNome || 'Sistema'}</small>
-                    </article>
-                    {selected.status === 'resolvida' ? (
-                      <article class="audit-entry">
-                        <span>Resolução</span>
-                        <p>{selected.motivoResolucao || 'Resolvida sem motivo registado'}</p>
-                        <small>{selected.resolvidoEm || selected.atualizadoEm}</small>
-                      </article>
-                    ) : null}
+                    <article class="audit-entry"><span>Criação</span><p>{selected.titulo} - {isClientContext ? (selected.publicStatusText || selected.publicTimelineStatus) : selected.descricao}</p><small>{selected.criadoEm} por {selected.requisitanteNome || 'Sistema'}</small></article>
+                    {selected.workStartedAt ? <article class="audit-entry"><span>Execução</span><p>Trabalho iniciado</p><small>{selected.workStartedAt}</small></article> : null}
+                    {selected.resolvedByWorkerAt ? <article class="audit-entry"><span>Resolução técnica</span><p>{selected.resolutionSummary || selected.motivoResolucao}</p><small>{selected.resolvedByWorkerAt}</small></article> : null}
                   </div>
                 ) : null}
 
-                {detailTab.value === 'ficheiros' ? (
-                  <div class="ops-history">
-                    <div class="simple-empty-state">
-                      <strong>Sem ficheiros</strong>
-                      <span>Anexa documentos ou imagens à ocorrência.</span>
+                {detailTab.value === 'resolver' ? (
+                  <form class="ops-history" preventdefault:submit onSubmit$={async (event) => {
+                    const form = event.target as HTMLFormElement;
+                    const data = new FormData(form);
+                    await executarAcaoFuncionario(props.token, selected.id, {
+                      action: 'resolve',
+                      resolutionSummary: String(data.get('resolutionSummary') || ''),
+                      workerTimeMinutes: Number(data.get('workerTimeMinutes') || selected.workerTimeMinutes || 0),
+                      workerChecklist: checklistFromForm(form, selected.workerChecklist || [])
+                    });
+                    window.location.reload();
+                  }}>
+                    <div class="simple-header-actions">
+                      <button type="button" class="secondary-action" onClick$={async () => { await executarAcaoFuncionario(props.token, selected.id, { action: 'arrive', note: 'Chegada ao local' }); window.location.reload(); }}>Cheguei</button>
+                      <button type="button" class="primary-action" onClick$={async () => { await executarAcaoFuncionario(props.token, selected.id, { action: 'start', note: 'Intervenção iniciada' }); window.location.reload(); }}>Iniciar</button>
+                      <button type="button" class="secondary-action" onClick$={async () => { await executarAcaoFuncionario(props.token, selected.id, { action: 'await_parts', note: 'A aguardar peças/material' }); window.location.reload(); }}>Aguardar peças</button>
                     </div>
-                  </div>
+                    <label>Resumo da resolução<textarea name="resolutionSummary" placeholder="O que foi feito, resultado e prova recolhida" required /></label>
+                    <label>Tempo no terreno (min)<input name="workerTimeMinutes" value={selected.workerTimeMinutes || ''} placeholder="45" /></label>
+                    {(selected.workerChecklist?.length ? selected.workerChecklist : defaultChecklistForTicket(selected)).map((step) => (
+                      <label class="worker-check-row" key={`resolve-${step.id}`}>
+                        <input type="checkbox" name={`check-${step.id}`} checked={step.done} />
+                        <span>{step.label}</span>
+                        <input name={`note-${step.id}`} value={step.note || ''} placeholder="Nota curta" />
+                      </label>
+                    ))}
+                    <button type="submit" class="primary-action">Resolver e enviar para HQ</button>
+                  </form>
                 ) : null}
 
                 {detailTab.value === 'custos' ? (
@@ -444,7 +540,10 @@ const OcorrenciaForm = component$((props: {
   isSaving: boolean;
   onClose$: PropFunction<() => void>;
   onSubmit$: PropFunction<(payload: Record<string, unknown>) => void>;
-}) => (
+}) => {
+  const isClientForm = props.appContext === 'client';
+
+  return (
   <section class="glass-panel simple-form-panel calendar-form-panel">
     <div class="simple-content-header">
       <div>
@@ -460,16 +559,25 @@ const OcorrenciaForm = component$((props: {
         await props.onSubmit$(payloadFromForm(form, props.ocorrencia, props.appContext));
       }}
     >
+      {props.appContext === 'client' ? (
+        <div class="ticket-quick-wizard">
+          <span>Wizard rápido</span>
+          <strong>1. Condomínio → 2. Local/equipamento → 3. Descrição → 4. Contacto</strong>
+          <small>A prioridade é sugerida automaticamente pela descrição, impacto e urgência.</small>
+        </div>
+      ) : null}
       <div class="ops-form-grid">
         <label>Título<input name="titulo" value={props.ocorrencia?.titulo ?? ''} placeholder="Avaria no elevador" required /></label>
         <label>Condomínio<select name="condominiumId" value={props.ocorrencia?.condominiumId || props.condominiumOptions[1] || 'Geral'}>
           {props.condominiumOptions.map((n) => <option key={n} value={n}>{n}</option>)}
         </select></label>
-        <label>Tipo<select name="tipo" value={props.ocorrencia?.tipo || 'avaria'}>
-          <option value="avaria">Avaria</option><option value="pedido">Pedido</option>
-          <option value="reclamacao">Reclamação</option><option value="pergunta">Pergunta</option>
-          <option value="tarefaInterna">Tarefa interna</option>
-        </select></label>
+        {!isClientForm ? (
+          <label>Tipo<select name="tipo" value={props.ocorrencia?.tipo || 'avaria'}>
+            <option value="avaria">Avaria</option><option value="pedido">Pedido</option>
+            <option value="reclamacao">Reclamacao</option><option value="pergunta">Pergunta</option>
+            <option value="tarefaInterna">Tarefa interna</option>
+          </select></label>
+        ) : null}
         <label>Prioridade<select name="prioridade" value={props.ocorrencia?.prioridade || 'normal'}>
           {PRIORIDADE_OPTS.map((p) => <option key={p} value={p}>{rotuloPri(p)}</option>)}
         </select></label>
@@ -485,24 +593,39 @@ const OcorrenciaForm = component$((props: {
           {CANAIS.map((c) => <option key={c} value={c}>{rotuloCanal(c)}</option>)}
         </select></label>
         <label>Categoria<input name="categoria" value={props.ocorrencia?.categoria ?? ''} placeholder="Elevadores" /></label>
-        <label>Estado<select name="status" value={props.ocorrencia?.status || 'nova'}>
-          {STATUS_OPTS.map((s) => <option key={s} value={s}>{rotuloStatus(s)}</option>)}
-        </select></label>
+        {!isClientForm ? (
+          <label>Estado<select name="status" value={props.ocorrencia?.status || 'nova'}>
+            {STATUS_OPTS.map((s) => <option key={s} value={s}>{rotuloStatus(s)}</option>)}
+          </select></label>
+        ) : null}
         <label>Requerente<input name="requisitanteNome" value={props.ocorrencia?.requisitanteNome ?? ''} placeholder="Carlos Almeida" /></label>
         <label>Email<input name="requisitanteEmail" value={props.ocorrencia?.requisitanteEmail ?? ''} placeholder="morador@example.pt" /></label>
         <label>Telefone<input name="requisitanteTelefone" value={props.ocorrencia?.requisitanteTelefone ?? ''} placeholder="+351 900 000 000" /></label>
-        <label>Atribuído a<input name="atribuidoA" value={props.ocorrencia?.atribuidoA ?? ''} placeholder="João Silva" /></label>
-        <label>Worker ID<input name="assignedWorkerId" value={props.ocorrencia?.assignedWorkerId ?? ''} placeholder="worker-demo-1" /></label>
+        {!isClientForm ? (
+          <>
+            <label>Atribuido a<input name="atribuidoA" value={props.ocorrencia?.atribuidoA ?? ''} placeholder="Joao Silva" /></label>
+            <label>Worker ID<input name="assignedWorkerId" value={props.ocorrencia?.assignedWorkerId ?? ''} placeholder="worker-demo-1" /></label>
+          </>
+        ) : null}
         <label>Bloco<input name="blocoId" value={props.ocorrencia?.blocoId ?? ''} placeholder="A" /></label>
         <label>Piso<input name="pisoId" value={props.ocorrencia?.pisoId ?? ''} placeholder="3" /></label>
         <label>Zona<input name="zonaId" value={props.ocorrencia?.zonaId ?? ''} placeholder="Entrada nascente" /></label>
         <label>Equipamento<input name="equipamentoId" value={props.ocorrencia?.equipamentoId ?? ''} placeholder="Elevador 1" /></label>
-        <label>Custo estimado (€)<input name="custoEstimado" value={props.ocorrencia?.custoEstimado ?? ''} placeholder="250" /></label>
-        <label>Fornecedor<input name="fornecedorId" value={props.ocorrencia?.fornecedorId ?? ''} placeholder="Fornecedor" /></label>
-        <label>Contrato<input name="referenciaContrato" value={props.ocorrencia?.referenciaContrato ?? ''} placeholder="CT-2024-001" /></label>
+        <label>Origem QR<select name="qrSourceType" value={props.ocorrencia?.qrSourceType || ''}>
+          <option value="">Manual</option><option value="condominium">Condomínio</option>
+          <option value="zone">Zona</option><option value="equipment">Equipamento</option>
+        </select></label>
+        <label>ID QR<input name="qrSourceId" value={props.ocorrencia?.qrSourceId ?? ''} placeholder="zona-a-entrada" /></label>
+        {!isClientForm ? (
+          <>
+            <label>Custo estimado (EUR)<input name="custoEstimado" value={props.ocorrencia?.custoEstimado ?? ''} placeholder="250" /></label>
+            <label>Fornecedor<input name="fornecedorId" value={props.ocorrencia?.fornecedorId ?? ''} placeholder="Fornecedor" /></label>
+            <label>Contrato<input name="referenciaContrato" value={props.ocorrencia?.referenciaContrato ?? ''} placeholder="CT-2024-001" /></label>
+          </>
+        ) : null}
         <label>Tags<input name="tags" value={props.ocorrencia?.tags?.join(', ') ?? ''} placeholder="elevador, urgente" /></label>
-        <label>Estado público<input name="publicStatusText" value={props.ocorrencia?.publicStatusText ?? ''} placeholder="Avaria recebida e em análise" /></label>
-        <label class="wide">Notas técnicas<textarea name="technicalNotes" value={props.ocorrencia?.technicalNotes ?? ''} placeholder="Notas internas para HQ/Funcionários" /></label>
+        {!isClientForm ? <label>Estado publico<input name="publicStatusText" value={props.ocorrencia?.publicStatusText ?? ''} placeholder="Avaria recebida e em analise" /></label> : null}
+        {!isClientForm ? <label class="wide">Notas tecnicas<textarea name="technicalNotes" value={props.ocorrencia?.technicalNotes ?? ''} placeholder="Notas internas para HQ/Funcionarios" /></label> : null}
         <label class="wide">Descrição<textarea name="descricao" value={props.ocorrencia?.descricao ?? ''} placeholder="Descrição operacional" /></label>
       </div>
       <div class="simple-header-actions">
@@ -510,18 +633,22 @@ const OcorrenciaForm = component$((props: {
       </div>
     </form>
   </section>
-));
+  );
+});
 
 function payloadFromForm(form: HTMLFormElement, current?: Ocorrencia, appContext: AppContext = 'hq'): Record<string, unknown> {
   const data = new FormData(form);
   const isClient = appContext === 'client';
+  const descricao = stringField(data, 'descricao');
+  const impacto = stringField(data, 'impacto') || 'medio';
+  const urgencia = stringField(data, 'urgencia') || 'media';
   return {
     titulo: stringField(data, 'titulo'),
     tipo: isClient ? 'avaria' : (stringField(data, 'tipo') || 'avaria'),
     condominiumId: stringField(data, 'condominiumId'),
-    prioridade: stringField(data, 'prioridade') || 'normal',
-    impacto: stringField(data, 'impacto') || 'medio',
-    urgencia: stringField(data, 'urgencia') || 'media',
+    prioridade: stringField(data, 'prioridade') || suggestPriority(descricao, impacto, urgencia),
+    impacto,
+    urgencia,
     canal: stringField(data, 'canal') || 'portal',
     categoria: stringField(data, 'categoria'),
     status: stringField(data, 'status') || 'nova',
@@ -534,15 +661,31 @@ function payloadFromForm(form: HTMLFormElement, current?: Ocorrencia, appContext
     pisoId: stringField(data, 'pisoId'),
     zonaId: stringField(data, 'zonaId'),
     equipamentoId: stringField(data, 'equipamentoId'),
+    qrSourceType: stringField(data, 'qrSourceType'),
+    qrSourceId: stringField(data, 'qrSourceId'),
     custoEstimado: stringField(data, 'custoEstimado'),
     fornecedorId: stringField(data, 'fornecedorId'),
     referenciaContrato: stringField(data, 'referenciaContrato'),
-    descricao: stringField(data, 'descricao'),
+    descricao,
     publicStatusText: stringField(data, 'publicStatusText') || (isClient ? 'Avaria recebida' : ''),
     technicalNotes: stringField(data, 'technicalNotes'),
     originChannel: appContext,
     tags: splitList(stringField(data, 'tags'))
   };
+}
+
+function suggestPriority(description: string, impact: string, urgency: string): Prioridade {
+  const text = `${description} ${impact} ${urgency}`.toLowerCase();
+  if (text.includes('urgente') || text.includes('imediata') || text.includes('sem agua') || text.includes('elevador parado') || text.includes('risco')) {
+    return 'urgente';
+  }
+  if (text.includes('alto') || text.includes('alta') || text.includes('infiltracao') || text.includes('infiltração')) {
+    return 'alta';
+  }
+  if (text.includes('baixo') || text.includes('baixa')) {
+    return 'baixa';
+  }
+  return 'normal';
 }
 
 function stringField(data: FormData, key: string): string {
@@ -584,7 +727,7 @@ function rotuloUrgencia(u: string): string {
 }
 
 function iconeTipo(t: string): string {
-  return t === 'avaria' ? '⚡' : t === 'pedido' ? '📋' : '📌';
+  return t === 'avaria' ? '⚡' : t === 'pedido' ? 'ðŸ“‹' : 'ðŸ“Œ';
 }
 
 function tomPrioridade(p: string): string {
@@ -615,6 +758,54 @@ function acaoTransicao(dest: OcorrenciaStatus): string {
     reaberta: 'Reabrir'
   };
   return m[dest] || dest;
+}
+
+function tabLabel(tab: string): string {
+  const m: Record<string, string> = {
+    resumo: 'Resumo',
+    checklist: 'Checklist',
+    fotos: 'Fotos',
+    historico: 'Histórico',
+    resolver: 'Resolver',
+    timeline: 'Timeline',
+    ficheiros: 'Ficheiros',
+    custos: 'Custos'
+  };
+  return m[tab] || tab;
+}
+
+function nextTicketAction(item: Ocorrencia, context: AppContext): string {
+  if (context === 'client') {
+    if (item.status === 'resolvida') return 'Confirmar ou reabrir';
+    return item.publicTimelineStatus || item.publicStatusText || 'Aguardar atualização';
+  }
+  if (context === 'hq') {
+    if (item.requiresHqValidation && item.hqValidationStatus === 'pendente') return 'Validar resolução';
+    if (!item.assignedWorkerId && !item.atribuidoA) return 'Atribuir funcionário';
+    return 'Acompanhar SLA';
+  }
+  if (!item.arrivedAt) return 'Registar chegada';
+  if (item.status !== 'emCurso') return 'Iniciar intervenção';
+  return 'Resolver com prova';
+}
+
+function defaultChecklistForTicket(item: Ocorrencia) {
+  const category = `${item.categoria} ${item.titulo}`.toLowerCase();
+  const labels = category.includes('elev')
+    ? ['Confirmar segurança do elevador', 'Verificar quadro/comando', 'Registar teste final']
+    : category.includes('infil')
+      ? ['Identificar origem da infiltração', 'Fotografar zona afetada', 'Indicar reparação necessária']
+      : ['Confirmar local e segurança', 'Executar intervenção', 'Registar conclusão e evidências'];
+  return labels.map((label, index) => ({ id: `step-${index + 1}`, label, done: false, note: '' }));
+}
+
+function checklistFromForm(form: HTMLFormElement, base: ReturnType<typeof defaultChecklistForTicket>) {
+  const data = new FormData(form);
+  return base.map((step) => ({
+    ...step,
+    done: data.get(`check-${step.id}`) === 'on',
+    note: String(data.get(`note-${step.id}`) || '').trim()
+  }));
 }
 
 function allowedTransitionsForContext(context: AppContext, status: OcorrenciaStatus): OcorrenciaStatus[] {

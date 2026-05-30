@@ -149,8 +149,13 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
   const statusFilter = useSignal('todos');
   const historySearch = useSignal('');
   const historySource = useSignal('');
+  const historyPeriod = useSignal<'all' | '7d' | '30d' | '90d'>('all');
   const contactFilter = useSignal('');
+  const contactTypeFilter = useSignal('');
+  const emergencyOnly = useSignal(false);
   const documentFilter = useSignal('');
+  const documentTypeFilter = useSignal('');
+  const documentStatusFilter = useSignal('');
   const blockOrder = useSignal('name');
   const localSaving = useSignal(false);
   const detailLoading = useSignal(false);
@@ -212,6 +217,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
   const relatedCalendarEvents = props.resources.calendarEvents.filter((event) =>
     contextName ? event.condominium === contextName : true
   );
+  const historyEvents = filterHistoryPeriod(selected?.history ?? [], historyPeriod.value);
 
   useTask$(({ track }) => {
     const requestedArea = track(() => props.focusArea);
@@ -930,7 +936,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                 <form
                   class="simple-form-panel"
                   preventdefault:submit
-                  onSubmit$={async (event) => submitQuickCreate$(event.target as HTMLFormElement)}
+                  onSubmit$={async (event) => submitQuickCreate$(event.currentTarget as HTMLFormElement)}
                 >
                   <strong>Criar condominio rapido</strong>
                   <div class="condo-form-grid compact">
@@ -968,7 +974,7 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                 <form
                   class="simple-form-panel"
                   preventdefault:submit
-                  onSubmit$={async (event) => previewImport$(event.target as HTMLFormElement)}
+                  onSubmit$={async (event) => previewImport$(event.currentTarget as HTMLFormElement)}
                 >
                   <strong>Importar CSV</strong>
                   <label>
@@ -1217,8 +1223,14 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                       <div class="simple-search-row condo-filter-grid">
                         <input value={historySearch.value} placeholder="Filtrar historico..." onInput$={(event) => (historySearch.value = (event.target as HTMLInputElement).value)} />
                         <input value={historySource.value} placeholder="Fonte ou entidade..." onInput$={(event) => (historySource.value = (event.target as HTMLInputElement).value)} />
+                        <select value={historyPeriod.value} onChange$={(event) => (historyPeriod.value = (event.target as HTMLSelectElement).value as 'all' | '7d' | '30d' | '90d')}>
+                          <option value="all">Todo o historico</option>
+                          <option value="7d">Ultimos 7 dias</option>
+                          <option value="30d">Ultimos 30 dias</option>
+                          <option value="90d">Ultimos 90 dias</option>
+                        </select>
                       </div>
-                      <History events={selected.history ?? []} query={historySearch.value} source={historySource.value} />
+                      <History events={historyEvents} query={historySearch.value} source={historySource.value} />
                     </section>
                   ) : null}
                   {activeTab.value === 'future' ? <FuturePanel selected={selected} markers={selected.planMarkers ?? []} onAddMarker$={addPlanMarker$} /> : null}
@@ -1227,11 +1239,18 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                   {activeTab.value === 'documents' ? (
                     <div class="simple-search-row condo-filter-grid">
                       <input value={documentFilter.value} placeholder="Filtrar documentos por titulo, tipo ou estado..." onInput$={(event) => (documentFilter.value = (event.target as HTMLInputElement).value)} />
+                      <input value={documentTypeFilter.value} placeholder="Tipo (seguro, ata, regulamento...)" onInput$={(event) => (documentTypeFilter.value = (event.target as HTMLInputElement).value)} />
+                      <input value={documentStatusFilter.value} placeholder="Estado (ativo, expirado, em revisao...)" onInput$={(event) => (documentStatusFilter.value = (event.target as HTMLInputElement).value)} />
                     </div>
                   ) : null}
                   {activeTab.value === 'contacts' ? (
                     <div class="simple-search-row condo-filter-grid">
                       <input value={contactFilter.value} placeholder="Filtrar contactos por nome, empresa ou servico..." onInput$={(event) => (contactFilter.value = (event.target as HTMLInputElement).value)} />
+                      <input value={contactTypeFilter.value} placeholder="Tipo (gestor, emergencia, tecnico...)" onInput$={(event) => (contactTypeFilter.value = (event.target as HTMLInputElement).value)} />
+                      <label class="condo-inline-field">
+                        <span>So emergencia</span>
+                        <input type="checkbox" checked={emergencyOnly.value} onChange$={(event) => (emergencyOnly.value = (event.target as HTMLInputElement).checked)} />
+                      </label>
                     </div>
                   ) : null}
                   {subresourceTab(activeTab.value) ? (
@@ -1241,7 +1260,11 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                       fields={fieldsForSubresource(activeTab.value)}
                       rows={rowsForSubresource(selected, activeTab.value, {
                         documentFilter: documentFilter.value,
+                        documentTypeFilter: documentTypeFilter.value,
+                        documentStatusFilter: documentStatusFilter.value,
                         contactFilter: contactFilter.value,
+                        contactTypeFilter: contactTypeFilter.value,
+                        emergencyOnly: emergencyOnly.value,
                         blockOrder: blockOrder.value
                       })}
                       orderMode={blockOrder.value}
@@ -1766,7 +1789,15 @@ function fieldsForSubresource(tab: TabId): FieldConfig[] {
 function rowsForSubresource(
   selected: Condominium,
   tab: TabId,
-  filters: { documentFilter?: string; contactFilter?: string; blockOrder?: string } = {}
+  filters: {
+    documentFilter?: string;
+    documentTypeFilter?: string;
+    documentStatusFilter?: string;
+    contactFilter?: string;
+    contactTypeFilter?: string;
+    emergencyOnly?: boolean;
+    blockOrder?: string;
+  } = {}
 ): Array<Record<string, unknown>> {
   let rows: Array<Record<string, unknown>>;
   switch (tab) {
@@ -1801,14 +1832,49 @@ function rowsForSubresource(
   if (tab === 'contacts' && filters.contactFilter) {
     rows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(filters.contactFilter!.toLowerCase()));
   }
+  if (tab === 'contacts' && filters.contactTypeFilter) {
+    rows = rows.filter((row) => String(row.contactType ?? '').toLowerCase().includes(filters.contactTypeFilter!.toLowerCase()));
+  }
+  if (tab === 'contacts' && filters.emergencyOnly) {
+    rows = rows.filter((row) => Boolean(row.isEmergency));
+  }
   if (tab === 'documents' && filters.documentFilter) {
     rows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(filters.documentFilter!.toLowerCase()));
+  }
+  if (tab === 'documents' && filters.documentTypeFilter) {
+    rows = rows.filter((row) => String(row.documentType ?? '').toLowerCase().includes(filters.documentTypeFilter!.toLowerCase()));
+  }
+  if (tab === 'documents' && filters.documentStatusFilter) {
+    rows = rows.filter((row) => String(row.status ?? '').toLowerCase().includes(filters.documentStatusFilter!.toLowerCase()));
   }
   if (tab === 'blocks') {
     const key = filters.blockOrder === 'code' ? 'code' : filters.blockOrder === 'status' ? 'operationalStatus' : 'name';
     rows = [...rows].sort((a, b) => String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'pt'));
   }
   return rows;
+}
+
+function filterHistoryPeriod(
+  events: Array<Record<string, unknown>>,
+  period: 'all' | '7d' | '30d' | '90d'
+): Array<Record<string, unknown>> {
+  if (period === 'all') {
+    return events;
+  }
+  const dayWindow = period === '7d' ? 7 : period === '30d' ? 30 : 90;
+  const now = Date.now();
+  const maxAge = dayWindow * 24 * 60 * 60 * 1000;
+  return events.filter((event) => {
+    const raw = String(event.timestamp ?? event.createdAt ?? '').trim();
+    if (!raw) {
+      return false;
+    }
+    const parsed = Date.parse(raw);
+    if (!Number.isFinite(parsed)) {
+      return false;
+    }
+    return now - parsed <= maxAge;
+  });
 }
 
 function payloadFromForm(form: HTMLFormElement, fields: FieldConfig[]): Record<string, unknown> {

@@ -1,5 +1,8 @@
 export type {
   AccountingPayment,
+  BankReconciliation,
+  BankTransaction,
+  CashMovement,
   AccountingState,
   AccountingSummary,
   AlertItem,
@@ -12,6 +15,8 @@ export type {
   ChatMessage,
   Canal,
   ComentarioVisibilidade,
+  AttachmentKind,
+  AttachmentVisibility,
   CompletenessReport,
   Condominium,
   CondominiumAddress,
@@ -50,6 +55,8 @@ export type {
   InspectionItem,
   LoginResponse,
   MaintenanceItem,
+  PaymentAgreement,
+  PaymentAgreementInstallment,
   Ocorrencia,
   OcorrenciaAnexo,
   OcorrenciaComentario,
@@ -64,6 +71,7 @@ export type {
   PermissionsResponse,
   Prioridade,
   PublicUser,
+  QrOcorrenciaInput,
   Quota,
   Receipt,
   Report,
@@ -74,7 +82,10 @@ export type {
   ResourceState,
   Supplier,
   Ticket,
-  Urgencia
+  Urgencia,
+  ValidateResolutionPayload,
+  WorkerActionPayload,
+  WorkerChecklistItem
 } from './api/types';
 
 export {
@@ -144,14 +155,18 @@ export {
 export {
   apagarOcorrencia,
   atualizarOcorrencia,
+  criarOcorrenciaPorQr,
   criarComentario,
   criarOcorrencia,
+  executarAcaoFuncionario,
+  listarTicketsFuncionario,
   listarComentarios,
   listarOcorrencias,
   obterMetricas,
   obterOcorrencia,
   reabrirOcorrencia,
-  transitarStatus
+  transitarStatus,
+  validarResolucao
 } from './api/ocorrencias';
 
 export { getResources } from './api/resources';

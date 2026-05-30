@@ -1,7 +1,8 @@
 use crate::models::store::{
-    AccountingPayment, Assembly, AuditLogEntry, CalendarEvent, Condominium, Debt, Document,
-    Expense, Inspection, MaintenanceItem, Ocorrencia, OcorrenciaAnexo, OcorrenciaComentario, Quota,
-    Receipt, Report, ReserveFund, Session, Supplier, Tenant, Ticket, UserAccount,
+    AccountingPayment, Assembly, AuditLogEntry, BankReconciliation, BankTransaction, CalendarEvent,
+    CashMovement, Condominium, Debt, Document, Expense, Inspection, MaintenanceItem, Ocorrencia,
+    OcorrenciaAnexo, OcorrenciaComentario, PaymentAgreement, Quota, Receipt, Report, ReserveFund,
+    Session, Supplier, Tenant, Ticket, UserAccount,
 };
 use anyhow::Context;
 use chrono::Utc;
@@ -54,6 +55,10 @@ pub struct FinancialSnapshot {
     pub receipts: Vec<Receipt>,
     pub expenses: Vec<Expense>,
     pub reserve_funds: Vec<ReserveFund>,
+    pub payment_agreements: Vec<PaymentAgreement>,
+    pub cash_movements: Vec<CashMovement>,
+    pub bank_transactions: Vec<BankTransaction>,
+    pub bank_reconciliations: Vec<BankReconciliation>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -64,6 +69,10 @@ pub struct FinancialSnapshotRef<'a> {
     pub receipts: &'a [Receipt],
     pub expenses: &'a [Expense],
     pub reserve_funds: &'a [ReserveFund],
+    pub payment_agreements: &'a [PaymentAgreement],
+    pub cash_movements: &'a [CashMovement],
+    pub bank_transactions: &'a [BankTransaction],
+    pub bank_reconciliations: &'a [BankReconciliation],
 }
 
 impl PostgresRepository {
@@ -1249,6 +1258,58 @@ impl PostgresRepository {
         .await
         .context("failed to load reserve fund snapshots from postgres")?;
 
+        let payment_agreement_rows: Vec<SnapshotRow> = sqlx::query_as(
+            r#"
+            SELECT payload
+            FROM payment_agreement_snapshots
+            WHERE tenant_id = $1
+            ORDER BY next_due_date ASC
+            "#,
+        )
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to load payment agreement snapshots from postgres")?;
+
+        let cash_movement_rows: Vec<SnapshotRow> = sqlx::query_as(
+            r#"
+            SELECT payload
+            FROM cash_movement_snapshots
+            WHERE tenant_id = $1
+            ORDER BY occurred_at DESC
+            "#,
+        )
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to load cash movement snapshots from postgres")?;
+
+        let bank_transaction_rows: Vec<SnapshotRow> = sqlx::query_as(
+            r#"
+            SELECT payload
+            FROM bank_transaction_snapshots
+            WHERE tenant_id = $1
+            ORDER BY occurred_at DESC
+            "#,
+        )
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to load bank transaction snapshots from postgres")?;
+
+        let bank_reconciliation_rows: Vec<SnapshotRow> = sqlx::query_as(
+            r#"
+            SELECT payload
+            FROM bank_reconciliation_snapshots
+            WHERE tenant_id = $1
+            ORDER BY reconciled_at DESC
+            "#,
+        )
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to load bank reconciliation snapshots from postgres")?;
+
         let quotas = quota_rows
             .into_iter()
             .map(|row| {
@@ -1297,6 +1358,38 @@ impl PostgresRepository {
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
+        let payment_agreements = payment_agreement_rows
+            .into_iter()
+            .map(|row| {
+                serde_json::from_value::<PaymentAgreement>(row.payload)
+                    .context("failed to decode payment agreement snapshot payload")
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        let cash_movements = cash_movement_rows
+            .into_iter()
+            .map(|row| {
+                serde_json::from_value::<CashMovement>(row.payload)
+                    .context("failed to decode cash movement snapshot payload")
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        let bank_transactions = bank_transaction_rows
+            .into_iter()
+            .map(|row| {
+                serde_json::from_value::<BankTransaction>(row.payload)
+                    .context("failed to decode bank transaction snapshot payload")
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        let bank_reconciliations = bank_reconciliation_rows
+            .into_iter()
+            .map(|row| {
+                serde_json::from_value::<BankReconciliation>(row.payload)
+                    .context("failed to decode bank reconciliation snapshot payload")
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
         Ok(FinancialSnapshot {
             quotas,
             accounting_payments,
@@ -1304,6 +1397,10 @@ impl PostgresRepository {
             receipts,
             expenses,
             reserve_funds,
+            payment_agreements,
+            cash_movements,
+            bank_transactions,
+            bank_reconciliations,
         })
     }
 
@@ -1348,6 +1445,26 @@ impl PostgresRepository {
             .execute(&mut *tx)
             .await
             .context("failed to clear reserve fund snapshots in postgres")?;
+        sqlx::query("DELETE FROM payment_agreement_snapshots WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .context("failed to clear payment agreement snapshots in postgres")?;
+        sqlx::query("DELETE FROM cash_movement_snapshots WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .context("failed to clear cash movement snapshots in postgres")?;
+        sqlx::query("DELETE FROM bank_transaction_snapshots WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .context("failed to clear bank transaction snapshots in postgres")?;
+        sqlx::query("DELETE FROM bank_reconciliation_snapshots WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .context("failed to clear bank reconciliation snapshots in postgres")?;
 
         let now = Utc::now();
         for quota in snapshot.quotas {
@@ -1519,6 +1636,126 @@ impl PostgresRepository {
                 format!(
                     "failed to persist reserve fund snapshot {} in postgres",
                     reserve_fund.id
+                )
+            })?;
+        }
+
+        for agreement in snapshot.payment_agreements {
+            let payload = serde_json::to_value(agreement)
+                .context("failed to encode payment agreement payload for postgres")?;
+            sqlx::query(
+                r#"
+                INSERT INTO payment_agreement_snapshots
+                    (id, tenant_id, status, condominium, next_due_date, payload, created_at, updated_at)
+                VALUES
+                    ($1, $2, $3, $4, $5, $6, $7, $8)
+                "#,
+            )
+            .bind(&agreement.id)
+            .bind(tenant_id)
+            .bind(&agreement.status)
+            .bind(&agreement.condominium)
+            .bind(&agreement.next_due_date)
+            .bind(payload)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to persist payment agreement snapshot {} in postgres",
+                    agreement.id
+                )
+            })?;
+        }
+
+        for movement in snapshot.cash_movements {
+            let payload = serde_json::to_value(movement)
+                .context("failed to encode cash movement payload for postgres")?;
+            sqlx::query(
+                r#"
+                INSERT INTO cash_movement_snapshots
+                    (id, tenant_id, status, condominium, movement_type, account_type, occurred_at, payload, created_at, updated_at)
+                VALUES
+                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                "#,
+            )
+            .bind(&movement.id)
+            .bind(tenant_id)
+            .bind(&movement.status)
+            .bind(&movement.condominium)
+            .bind(&movement.movement_type)
+            .bind(&movement.account_type)
+            .bind(&movement.occurred_at)
+            .bind(payload)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to persist cash movement snapshot {} in postgres",
+                    movement.id
+                )
+            })?;
+        }
+
+        for transaction in snapshot.bank_transactions {
+            let payload = serde_json::to_value(transaction)
+                .context("failed to encode bank transaction payload for postgres")?;
+            sqlx::query(
+                r#"
+                INSERT INTO bank_transaction_snapshots
+                    (id, tenant_id, status, condominium, occurred_at, direction, payload, created_at, updated_at)
+                VALUES
+                    ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                "#,
+            )
+            .bind(&transaction.id)
+            .bind(tenant_id)
+            .bind(&transaction.reconciliation_status)
+            .bind(&transaction.condominium)
+            .bind(&transaction.occurred_at)
+            .bind(&transaction.direction)
+            .bind(payload)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to persist bank transaction snapshot {} in postgres",
+                    transaction.id
+                )
+            })?;
+        }
+
+        for reconciliation in snapshot.bank_reconciliations {
+            let payload = serde_json::to_value(reconciliation)
+                .context("failed to encode bank reconciliation payload for postgres")?;
+            sqlx::query(
+                r#"
+                INSERT INTO bank_reconciliation_snapshots
+                    (id, tenant_id, bank_transaction_id, target_type, target_id, reconciled_at, payload, created_at, updated_at)
+                VALUES
+                    ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                "#,
+            )
+            .bind(&reconciliation.id)
+            .bind(tenant_id)
+            .bind(&reconciliation.bank_transaction_id)
+            .bind(&reconciliation.target_type)
+            .bind(&reconciliation.target_id)
+            .bind(&reconciliation.reconciled_at)
+            .bind(payload)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to persist bank reconciliation snapshot {} in postgres",
+                    reconciliation.id
                 )
             })?;
         }
