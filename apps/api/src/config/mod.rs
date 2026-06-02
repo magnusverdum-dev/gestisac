@@ -13,18 +13,32 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 const DEFAULT_CORS_ORIGINS: &[&str] = &[
     "http://127.0.0.1:5173",
     "http://localhost:5173",
+    "http://127.0.0.1:5174",
+    "http://localhost:5174",
+    "http://127.0.0.1:5175",
+    "http://localhost:5175",
+    "http://127.0.0.1:5176",
+    "http://localhost:5176",
     "http://127.0.0.1:4173",
     "http://localhost:4173",
+    "http://127.0.0.1:4174",
+    "http://localhost:4174",
+    "http://127.0.0.1:4175",
+    "http://localhost:4175",
+    "http://127.0.0.1:4176",
+    "http://localhost:4176",
 ];
 
 #[derive(Debug, Clone)]
 pub struct ApiConfig {
     pub host: IpAddr,
     pub port: u16,
+    pub environment: String,
     pub data_path: PathBuf,
     pub document_storage_path: PathBuf,
     pub cors_allowed_origins: Vec<String>,
     pub database: Option<DatabaseConfig>,
+    pub allow_demo_seed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +53,8 @@ pub struct PersistenceStatus {
     pub database_configured: bool,
     pub database_url: Option<String>,
     pub json_store_path: String,
+    pub environment: String,
+    pub demo_seed_allowed: bool,
 }
 
 impl ApiConfig {
@@ -53,9 +69,13 @@ impl ApiConfig {
             .and_then(|value| value.parse().ok())
             .unwrap_or(3000);
 
-        let data_path = std::env::var("GESTISAC_DATA_PATH")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/store.json"));
+        let data_path = PathBuf::new();
+        let environment = std::env::var("GESTISAC_ENV")
+            .or_else(|_| std::env::var("APP_ENV"))
+            .or_else(|_| std::env::var("RUST_ENV"))
+            .unwrap_or_else(|_| "development".to_string())
+            .trim()
+            .to_lowercase();
         let document_storage_path = std::env::var("GESTISAC_DOCUMENT_STORAGE_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/documents"));
@@ -65,14 +85,19 @@ impl ApiConfig {
             .ok()
             .map(DatabaseConfig::new)
             .transpose()?;
+        if database.is_none() {
+            bail!("PostgreSQL e obrigatorio: defina GESTISAC_DATABASE_URL");
+        }
 
         Ok(Self {
             host,
             port,
+            environment,
             data_path,
             document_storage_path,
             cors_allowed_origins,
             database,
+            allow_demo_seed: false,
         })
     }
 
@@ -111,15 +136,17 @@ impl ApiConfig {
 
     pub fn persistence_status(&self) -> PersistenceStatus {
         PersistenceStatus {
-            active_backend: if self.database.is_some() {
-                "hybrid-json-postgres"
-            } else {
-                "json-file"
-            },
+            active_backend: "postgresql",
             database_configured: self.database.is_some(),
             database_url: self.database.as_ref().map(DatabaseConfig::redacted_url),
-            json_store_path: self.data_path.display().to_string(),
+            json_store_path: String::new(),
+            environment: self.environment.clone(),
+            demo_seed_allowed: false,
         }
+    }
+
+    pub fn is_production(&self) -> bool {
+        self.environment == "production"
     }
 }
 

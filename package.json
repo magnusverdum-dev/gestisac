@@ -6,7 +6,13 @@
   "packageManager": "pnpm@10.32.1",
   "workspaces": [
     "apps/web",
+    "apps/hq-web",
+    "apps/client-web",
+    "apps/worker-web",
     "apps/api",
+    "packages/api-client",
+    "packages/auth",
+    "packages/domain-types",
     "packages/ui",
     "packages/config",
     "packages/types"
@@ -20,16 +26,31 @@
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,green \"pnpm run dev:web\" \"pnpm run dev:api\"",
     "dev:web": "pnpm --dir apps/web dev",
+    "dev:hq": "pnpm --dir apps/hq-web dev",
+    "dev:client": "pnpm --dir apps/client-web dev",
+    "dev:worker": "pnpm --dir apps/worker-web dev",
     "build:web": "pnpm --dir apps/web build",
+    "build:hq": "pnpm --dir apps/hq-web build",
+    "build:client": "pnpm --dir apps/client-web build",
+    "build:worker": "pnpm --dir apps/worker-web build",
+    "build:apps": "pnpm run build:web && pnpm run build:hq && pnpm run build:client && pnpm run build:worker",
     "typecheck:web": "pnpm --dir apps/web typecheck",
+    "typecheck:hq": "pnpm --dir apps/hq-web typecheck",
+    "typecheck:client": "pnpm --dir apps/client-web typecheck",
+    "typecheck:worker": "pnpm --dir apps/worker-web typecheck",
+    "typecheck:apps": "pnpm run typecheck:web && pnpm run typecheck:hq && pnpm run typecheck:client && pnpm run typecheck:worker",
     "preview:web": "pnpm --dir apps/web preview",
+    "preview:hq": "pnpm --dir apps/hq-web preview",
+    "preview:client": "pnpm --dir apps/client-web preview",
+    "preview:worker": "pnpm --dir apps/worker-web preview",
     "dev:api": "node scripts/run-cargo.mjs run --manifest-path apps/api/Cargo.toml --bin gestisac-api",
     "dev:api:mock": "pnpm --dir apps/api dev:mock",
     "check:api": "node scripts/run-cargo.mjs check --manifest-path apps/api/Cargo.toml",
     "fmt:api": "node scripts/run-cargo.mjs fmt --manifest-path apps/api/Cargo.toml",
     "clippy:api": "node scripts/run-cargo.mjs clippy --manifest-path apps/api/Cargo.toml -- -D warnings",
     "test:api": "node scripts/run-cargo.mjs test --manifest-path apps/api/Cargo.toml",
-    "smoke:api": "node scripts/smoke-api.mjs"
+    "smoke:api": "node scripts/smoke-api.mjs",
+    "migrate:json-to-postgres": "node scripts/migrate-json-to-postgres.mjs"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

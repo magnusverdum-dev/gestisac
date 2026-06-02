@@ -1,6 +1,7 @@
 import { canUseBrowserDemoApi, demoApiRequest } from './demo';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') ?? '';
+const IS_PRODUCTION = import.meta.env.PROD === true;
 
 export async function apiRequest<T>(
   path: string,
@@ -23,6 +24,10 @@ export async function apiRequest<T>(
   }
 
   if (!API_BASE_URL && typeof window !== 'undefined') {
+    if (IS_PRODUCTION) {
+      throw new Error('VITE_API_BASE_URL e obrigatorio em producao');
+    }
+
     return demoApiRequest<T>(path, options);
   }
 
@@ -34,7 +39,7 @@ export async function apiRequest<T>(
       body: options.body
     });
   } catch (error) {
-    if (canUseBrowserDemoApi()) {
+    if (canUseDemoFallback()) {
       return demoApiRequest<T>(path, options);
     }
 
@@ -42,7 +47,7 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
-    if (canUseBrowserDemoApi(response.status)) {
+    if (canUseDemoFallback(response.status)) {
       return demoApiRequest<T>(path, options);
     }
 
@@ -62,7 +67,7 @@ export async function apiRequest<T>(
   }
 
   return response.json().catch((error) => {
-    if (canUseBrowserDemoApi()) {
+    if (canUseDemoFallback()) {
       return demoApiRequest<T>(path, options);
     }
 
@@ -83,7 +88,12 @@ export function resolveApiUrl(path: string): string {
 }
 
 export function isHtmlFallbackResponse(response: Response): boolean {
-  return !API_BASE_URL &&
+  return !IS_PRODUCTION &&
+    !API_BASE_URL &&
     typeof window !== 'undefined' &&
     response.headers.get('content-type')?.toLowerCase().includes('text/html') === true;
+}
+
+function canUseDemoFallback(status?: number): boolean {
+  return !IS_PRODUCTION && canUseBrowserDemoApi(status);
 }

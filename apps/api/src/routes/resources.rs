@@ -7,8 +7,9 @@ use crate::{
             Fraction, Inspection, MaintenanceItem, Report, Resident, Supplier, Ticket,
         },
     },
+    repositories::postgres::RelationalCalendarEventFilter,
     routes::auth::{current_context, current_user, require_delete, require_write},
-    state::AppState,
+    state::{protect_session_secret, AppState},
 };
 use axum::{
     extract::{Multipart, Path, Query, State},
@@ -387,7 +388,14 @@ pub async fn update_active_condominium(
         format!("Condominio ativo alterado para {requested_name}"),
     );
     drop(store);
-    persist(&state).await?;
+    persist_active_condominium_update(
+        &state,
+        &context.tenant_id,
+        &user.id,
+        &context.token,
+        &requested_name,
+    )
+    .await?;
 
     Ok(Json(requested_name))
 }
@@ -520,7 +528,22 @@ pub async fn buildings(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Building>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_buildings_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar edificios na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.buildings, &params)))
 }
@@ -553,7 +576,7 @@ pub async fn create_building(
         format!("Edificio {} criado", item.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_building_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -589,7 +612,7 @@ pub async fn update_building(
         format!("Edificio {} atualizado", response.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_building_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -621,7 +644,7 @@ pub async fn delete_building(
     );
     let response = store.buildings.clone();
     drop(store);
-    persist(&state).await?;
+    persist_building_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -631,7 +654,20 @@ pub async fn fractions(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Fraction>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_fractions_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel listar fracoes na base de dados"))?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.fractions, &params)))
 }
@@ -668,7 +704,7 @@ pub async fn create_fraction(
         format!("Fracao {} criada", item.number),
     );
     drop(store);
-    persist(&state).await?;
+    persist_fraction_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -708,7 +744,7 @@ pub async fn update_fraction(
         format!("Fracao {} atualizada", response.number),
     );
     drop(store);
-    persist(&state).await?;
+    persist_fraction_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -740,7 +776,7 @@ pub async fn delete_fraction(
     );
     let response = store.fractions.clone();
     drop(store);
-    persist(&state).await?;
+    persist_fraction_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -750,7 +786,22 @@ pub async fn residents(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Resident>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_residents_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar residentes na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.residents, &params)))
 }
@@ -786,7 +837,7 @@ pub async fn create_resident(
         format!("Condomino {} criado", item.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_resident_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -825,7 +876,7 @@ pub async fn update_resident(
         format!("Condomino {} atualizado", response.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_resident_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -857,7 +908,7 @@ pub async fn delete_resident(
     );
     let response = store.residents.clone();
     drop(store);
-    persist(&state).await?;
+    persist_resident_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -867,7 +918,20 @@ pub async fn tickets(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Ticket>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_legacy_tickets_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel listar tickets na base de dados"))?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.tickets, &params)))
 }
@@ -918,7 +982,7 @@ pub async fn create_ticket(
         format!("Ticket {} criado", item.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ticket_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -977,7 +1041,7 @@ pub async fn update_ticket(
         format!("Ticket {} atualizado", response.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ticket_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -1009,7 +1073,7 @@ pub async fn delete_ticket(
     );
     let response = store.tickets.clone();
     drop(store);
-    persist(&state).await?;
+    persist_ticket_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -1019,7 +1083,22 @@ pub async fn suppliers(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Supplier>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_suppliers_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar fornecedores na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.suppliers, &params)))
 }
@@ -1052,7 +1131,7 @@ pub async fn create_supplier(
         format!("Fornecedor {} criado", item.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_supplier_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -1088,7 +1167,7 @@ pub async fn update_supplier(
         format!("Fornecedor {} atualizado", response.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_supplier_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -1120,7 +1199,7 @@ pub async fn delete_supplier(
     );
     let response = store.suppliers.clone();
     drop(store);
-    persist(&state).await?;
+    persist_supplier_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -1130,7 +1209,22 @@ pub async fn documents(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Document>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_documents_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar documentos na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.documents, &params)))
 }
@@ -1176,7 +1270,7 @@ pub async fn create_document(
         format!("Documento {} criado", item.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_document_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -1235,7 +1329,7 @@ pub async fn generate_document(
         format!("Documento {} gerado a partir de modelo", item.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_document_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -1337,7 +1431,7 @@ pub async fn upload_document(
         format!("Documento {} carregado", item.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_document_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -1373,7 +1467,7 @@ pub async fn update_document(
         format!("Documento {} atualizado", response.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_document_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -1512,7 +1606,7 @@ pub async fn delete_document(
     );
     let response = store.documents.clone();
     drop(store);
-    persist(&state).await?;
+    persist_document_delete(&state, &user.tenant_id, &id).await?;
     remove_document_file(&state, &deleted_storage_key).await;
 
     Ok(Json(response))
@@ -1523,7 +1617,22 @@ pub async fn reports(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Report>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_reports_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar relatorios na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.reports, &params)))
 }
@@ -1556,7 +1665,7 @@ pub async fn create_report(
         format!("Relatorio {} criado", item.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_report_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -1590,7 +1699,7 @@ pub async fn update_report(
         format!("Relatorio {} atualizado", response.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_report_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -1666,8 +1775,15 @@ pub async fn export_report(
         &document.id,
         format!("Documento {} criado por exportacao", document.title),
     );
+    let updated_report = store
+        .reports
+        .iter()
+        .find(|item| item.id == id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("Relatorio nao encontrado"))?;
     drop(store);
-    persist(&state).await?;
+    persist_report_upsert(&state, &user.tenant_id, &updated_report).await?;
+    persist_document_upsert(&state, &user.tenant_id, &document).await?;
 
     Ok((
         StatusCode::OK,
@@ -1710,7 +1826,7 @@ pub async fn delete_report(
     );
     let response = store.reports.clone();
     drop(store);
-    persist(&state).await?;
+    persist_report_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -1720,7 +1836,22 @@ pub async fn assemblies(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Assembly>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_assemblies_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar assembleias na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.assemblies, &params)))
 }
@@ -1753,7 +1884,7 @@ pub async fn create_assembly(
         format!("Assembleia {} criada", item.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_assembly_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -1789,7 +1920,7 @@ pub async fn update_assembly(
         format!("Assembleia {} atualizada", response.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_assembly_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -1821,7 +1952,7 @@ pub async fn delete_assembly(
     );
     let response = store.assemblies.clone();
     drop(store);
-    persist(&state).await?;
+    persist_assembly_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -1831,7 +1962,22 @@ pub async fn inspections(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Inspection>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_inspections_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar vistorias na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.inspections, &params)))
 }
@@ -1871,6 +2017,11 @@ pub async fn create_inspection(
 
     let mut store = state.store.write().await;
     upsert_calendar_event_for_inspection(&mut store, &mut item);
+    let calendar_event = store
+        .calendar_events
+        .iter()
+        .find(|event| event.id == item.calendar_event_id)
+        .cloned();
     store.inspections.insert(0, item.clone());
     store.add_audit(
         &user,
@@ -1880,7 +2031,10 @@ pub async fn create_inspection(
         format!("Vistoria {} criada", item.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_inspection_upsert(&state, &user.tenant_id, &item).await?;
+    if let Some(calendar_event) = calendar_event {
+        persist_calendar_event_upsert(&state, &user.tenant_id, &calendar_event).await?;
+    }
 
     Ok(Json(item))
 }
@@ -1962,6 +2116,11 @@ pub async fn update_inspection(
     }
 
     upsert_calendar_event_for_inspection(&mut store, &mut next);
+    let calendar_event = store
+        .calendar_events
+        .iter()
+        .find(|event| event.id == next.calendar_event_id)
+        .cloned();
     store.inspections[inspection_index] = next.clone();
     let response = next;
     let (audit_action, summary) = if current_status_key != next_status_key {
@@ -1985,7 +2144,10 @@ pub async fn update_inspection(
     };
     store.add_audit(&user, "operations", audit_action, &response.id, summary);
     drop(store);
-    persist(&state).await?;
+    persist_inspection_upsert(&state, &user.tenant_id, &response).await?;
+    if let Some(calendar_event) = calendar_event {
+        persist_calendar_event_upsert(&state, &user.tenant_id, &calendar_event).await?;
+    }
 
     Ok(Json(response))
 }
@@ -2031,8 +2193,12 @@ pub async fn delete_inspection(
         format!("{deleted_name} apagada"),
     );
     let response = store.inspections.clone();
+    let deleted_calendar_event_id = deleted_inspection
+        .as_ref()
+        .map(|item| item.calendar_event_id.as_str())
+        .filter(|value| !value.trim().is_empty());
     drop(store);
-    persist(&state).await?;
+    persist_inspection_delete(&state, &user.tenant_id, &id, deleted_calendar_event_id).await?;
 
     Ok(Json(response))
 }
@@ -2042,7 +2208,22 @@ pub async fn maintenance(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<MaintenanceItem>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_maintenance_page(
+                &context.tenant_id,
+                params.normalized_page(),
+                params.normalized_page_size(),
+                &params.search,
+            )
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar manutencoes na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.maintenance, &params)))
 }
@@ -2090,7 +2271,7 @@ pub async fn create_maintenance(
         format!("Manutencao {} criada", item.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_maintenance_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -2145,7 +2326,7 @@ pub async fn update_maintenance(
         format!("Manutencao {} atualizada", response.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_maintenance_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -2177,7 +2358,7 @@ pub async fn delete_maintenance(
     );
     let response = store.maintenance.clone();
     drop(store);
-    persist(&state).await?;
+    persist_maintenance_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -2187,7 +2368,29 @@ pub async fn calendar_events(
     headers: HeaderMap,
     Query(query): Query<CalendarEventQuery>,
 ) -> Result<Json<Paginated<CalendarEvent>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let page = repository
+            .list_calendar_events_page(
+                &context.tenant_id,
+                RelationalCalendarEventFilter {
+                    page: query.page.unwrap_or(1),
+                    page_size: query.page_size.unwrap_or(50),
+                    search: query.search.as_deref().unwrap_or_default(),
+                    condominium: query.condominium.as_deref(),
+                    event_type: query.event_type.as_deref(),
+                    status: query.status.as_deref(),
+                    from: query.from.as_deref(),
+                    to: query.to.as_deref(),
+                },
+            )
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar calendario na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     let filtered = store
         .calendar_events
@@ -2242,7 +2445,7 @@ pub async fn create_calendar_event(
         format!("Evento {} criado", item.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_calendar_event_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -2292,7 +2495,7 @@ pub async fn update_calendar_event(
         format!("Evento {} atualizado", response.title),
     );
     drop(store);
-    persist(&state).await?;
+    persist_calendar_event_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -2324,7 +2527,7 @@ pub async fn delete_calendar_event(
     );
     let response = store.calendar_events.clone();
     drop(store);
-    persist(&state).await?;
+    persist_calendar_event_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -2566,6 +2769,451 @@ async fn persist(state: &AppState) -> Result<(), ApiError> {
         .save()
         .await
         .map_err(|_| ApiError::internal("Nao foi possivel persistir os dados"))
+}
+
+async fn persist_active_condominium_update(
+    state: &AppState,
+    tenant_id: &str,
+    user_id: &str,
+    token: &str,
+    active_condominium: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .update_active_condominium(
+                tenant_id,
+                user_id,
+                &protect_session_secret(token),
+                active_condominium,
+            )
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel atualizar condominio ativo na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_building_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    building: &Building,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_building(tenant_id, building)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir edificio na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_building_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_building(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar edificio na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_fraction_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    fraction: &Fraction,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_fraction(tenant_id, fraction)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir fracao na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_fraction_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_fraction(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar fracao na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_resident_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    resident: &Resident,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_resident(tenant_id, resident)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir residente na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_resident_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_resident(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar residente na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_ticket_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    ticket: &Ticket,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_legacy_ticket(tenant_id, ticket)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir ticket na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_ticket_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_legacy_ticket(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar ticket na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_supplier_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    supplier: &Supplier,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_supplier(tenant_id, supplier)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir fornecedor na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_supplier_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_supplier(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar fornecedor na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_document_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    document: &Document,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_document(tenant_id, document)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir documento na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_document_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_document(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar documento na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_report_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    report: &Report,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_report(tenant_id, report)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir relatorio na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_report_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_report(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar relatorio na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_assembly_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    assembly: &Assembly,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_assembly(tenant_id, assembly)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir assembleia na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_assembly_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_assembly(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar assembleia na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_inspection_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    inspection: &Inspection,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_inspection(tenant_id, inspection)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir vistoria na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_inspection_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+    calendar_event_id: Option<&str>,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_inspection(tenant_id, id, calendar_event_id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar vistoria na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_maintenance_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    item: &MaintenanceItem,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_maintenance(tenant_id, item)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir manutencao na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_maintenance_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_maintenance(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar manutencao na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_calendar_event_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    event: &CalendarEvent,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_calendar_event(tenant_id, event)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir evento na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_calendar_event_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_calendar_event(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar evento na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
 }
 
 fn new_id() -> String {

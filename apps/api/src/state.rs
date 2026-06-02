@@ -1,15 +1,12 @@
 use crate::{
     config::ApiConfig,
-    models::{
-        demo::DemoData,
-        store::{default_tenant_id, AppStore},
-    },
+    models::store::{default_tenant_id, AppStore},
     repositories::{
         condominiums::{CondominiumPersistenceRepository, PostgresCondominiumRepository},
         postgres::{FinancialSnapshotRef, PostgresRepository},
     },
 };
-use anyhow::Context;
+use anyhow::{bail, Context};
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
@@ -19,7 +16,6 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-const DEMO_DATA: &str = include_str!("../mock/demo-data.json");
 const DEFAULT_ADMIN_PASSWORD: &str = "Gestisac2026!";
 const SESSION_SECRET_PREFIX: &str = "sha256:";
 
@@ -33,31 +29,18 @@ pub struct AppState {
 impl AppState {
     pub async fn load() -> anyhow::Result<Self> {
         let config = ApiConfig::from_env()?;
-        let demo: DemoData = serde_json::from_str(DEMO_DATA)?;
-        let mut store = if config.data_path.exists() {
-            let contents = std::fs::read_to_string(&config.data_path).with_context(|| {
-                format!(
-                    "failed to read GESTISAC data store at {}",
-                    config.data_path.display()
-                )
-            })?;
-
-            serde_json::from_str(&contents).with_context(|| {
-                format!(
-                    "failed to parse GESTISAC data store at {}",
-                    config.data_path.display()
-                )
-            })?
-        } else {
-            AppStore::seed_from_demo(&demo, hash_password(DEFAULT_ADMIN_PASSWORD)?)
-        };
-        store.ensure_demo_defaults(&demo);
+        let mut store = AppStore::default();
         migrate_legacy_password_hashes(&mut store)?;
         protect_session_secrets(&mut store);
         let postgres = connect_postgres(&config).await?;
         if let Some(repository) = &postgres {
             hydrate_store_from_postgres(repository, &mut store).await?;
             protect_session_secrets(&mut store);
+        }
+        if store.users.is_empty() {
+            bail!(
+                "PostgreSQL sem utilizadores reais: execute a migracao inicial antes de arrancar a API"
+            );
         }
 
         Ok(Self {
@@ -69,33 +52,6 @@ impl AppState {
 
     pub async fn save(&self) -> anyhow::Result<()> {
         let snapshot = self.store.read().await.clone();
-        if let Some(parent) = self.config.data_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .context("failed to create json store directory")?;
-        }
-
-        let contents = serde_json::to_string_pretty(&snapshot)
-            .context("failed to serialize app store snapshot")?;
-        let temporary_path = self.config.data_path.with_extension("json.tmp");
-        tokio::fs::write(&temporary_path, contents)
-            .await
-            .context("failed to write temporary json store file")?;
-        match tokio::fs::rename(&temporary_path, &self.config.data_path)
-            .await
-            .map_err(anyhow::Error::from)
-        {
-            Ok(()) => {}
-            Err(_) if self.config.data_path.exists() => {
-                tokio::fs::remove_file(&self.config.data_path)
-                    .await
-                    .context("failed to replace json store file")?;
-                tokio::fs::rename(&temporary_path, &self.config.data_path)
-                    .await
-                    .context("failed to move temporary json store file")?;
-            }
-            Err(error) => return Err(error.context("failed to persist json store file")),
-        }
 
         if let Some(repository) = &self.postgres {
             let condominium_repository = PostgresCondominiumRepository::new(repository.clone());
@@ -121,9 +77,13 @@ impl AppState {
             .await
             .context("failed to persist condominium snapshots in postgres")?;
             repository
-                .replace_sessions(&snapshot.sessions)
+                .replace_sessions(&tenant_id, &snapshot.sessions)
                 .await
                 .context("failed to persist sessions in postgres")?;
+            repository
+                .replace_chat_messages(&tenant_id, &snapshot.chat_messages)
+                .await
+                .context("failed to persist chat messages in postgres")?;
             repository
                 .replace_ocorrencias_snapshot(
                     &tenant_id,
@@ -171,6 +131,15 @@ impl AppState {
                 )
                 .await
                 .context("failed to persist financial snapshots in postgres")?;
+        } else {
+            #[cfg(test)]
+            {
+                return Ok(());
+            }
+            #[cfg(not(test))]
+            {
+                bail!("PostgreSQL repository indisponivel: persistencia JSON foi removida");
+            }
         }
 
         Ok(())
@@ -226,6 +195,10 @@ async fn hydrate_store_from_postgres(
         if !identity_snapshot.audit_log.is_empty() {
             store.audit_log = identity_snapshot.audit_log;
         }
+        repository
+            .replace_identity_snapshot(&tenant_id, &store.tenants, &store.users, &store.audit_log)
+            .await
+            .context("failed to sync identity snapshots into relational postgres")?;
     }
 
     let condominium_repository = PostgresCondominiumRepository::new(repository.clone());
@@ -238,6 +211,32 @@ async fn hydrate_store_from_postgres(
             .context("failed to seed condominium snapshots in postgres")?;
     } else {
         store.condominiums = loaded_condominiums;
+        persist_condominiums_snapshot(&condominium_repository, &tenant_id, &store.condominiums)
+            .await
+            .context("failed to sync condominium snapshots into relational postgres")?;
+    }
+
+    let property_structure = repository
+        .load_property_structure(&tenant_id)
+        .await
+        .context("failed to load property structure from postgres")?;
+    if property_structure.buildings.is_empty()
+        && property_structure.fractions.is_empty()
+        && property_structure.residents.is_empty()
+    {
+        repository
+            .replace_property_structure(
+                &tenant_id,
+                &store.buildings,
+                &store.fractions,
+                &store.residents,
+            )
+            .await
+            .context("failed to seed property structure in postgres")?;
+    } else {
+        store.buildings = property_structure.buildings;
+        store.fractions = property_structure.fractions;
+        store.residents = property_structure.residents;
     }
 
     let loaded_sessions = repository
@@ -246,11 +245,24 @@ async fn hydrate_store_from_postgres(
         .context("failed to load sessions from postgres")?;
     if loaded_sessions.is_empty() {
         repository
-            .replace_sessions(&store.sessions)
+            .replace_sessions(&tenant_id, &store.sessions)
             .await
             .context("failed to seed sessions in postgres")?;
     } else {
         store.sessions = loaded_sessions;
+    }
+
+    let loaded_chat_messages = repository
+        .load_chat_messages(&tenant_id, 500)
+        .await
+        .context("failed to load chat messages from postgres")?;
+    if loaded_chat_messages.is_empty() {
+        repository
+            .replace_chat_messages(&tenant_id, &store.chat_messages)
+            .await
+            .context("failed to seed chat messages in postgres")?;
+    } else {
+        store.chat_messages = loaded_chat_messages;
     }
 
     let ocorrencias_snapshot = repository
@@ -274,6 +286,15 @@ async fn hydrate_store_from_postgres(
         store.ocorrencias = ocorrencias_snapshot.ocorrencias;
         store.ocorrencia_comentarios = ocorrencias_snapshot.comentarios;
         store.ocorrencia_anexos = ocorrencias_snapshot.anexos;
+        repository
+            .replace_ocorrencias_snapshot(
+                &tenant_id,
+                &store.ocorrencias,
+                &store.ocorrencia_comentarios,
+                &store.ocorrencia_anexos,
+            )
+            .await
+            .context("failed to sync ocorrencia snapshots into relational postgres")?;
     }
 
     let operational_snapshot = repository
@@ -303,6 +324,17 @@ async fn hydrate_store_from_postgres(
         store.inspections = operational_snapshot.inspections;
         store.calendar_events = operational_snapshot.calendar_events;
         store.assemblies = operational_snapshot.assemblies;
+        repository
+            .replace_operational_snapshot(
+                &tenant_id,
+                &store.tickets,
+                &store.maintenance,
+                &store.inspections,
+                &store.calendar_events,
+                &store.assemblies,
+            )
+            .await
+            .context("failed to sync operational snapshots into relational postgres")?;
     }
 
     let documental_snapshot = repository
@@ -326,6 +358,15 @@ async fn hydrate_store_from_postgres(
         store.suppliers = documental_snapshot.suppliers;
         store.documents = documental_snapshot.documents;
         store.reports = documental_snapshot.reports;
+        repository
+            .replace_documental_snapshot(
+                &tenant_id,
+                &store.suppliers,
+                &store.documents,
+                &store.reports,
+            )
+            .await
+            .context("failed to sync documental snapshots into relational postgres")?;
     }
 
     let financial_snapshot = repository

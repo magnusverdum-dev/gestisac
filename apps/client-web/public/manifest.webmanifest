@@ -1,0 +1,8 @@
+{
+  "name": "GESTISAC Cliente",
+  "short_name": "Cliente",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eff7fb",
+  "theme_color": "#17324a"
+}

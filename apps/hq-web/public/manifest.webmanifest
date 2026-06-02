@@ -1,0 +1,8 @@
+{
+  "name": "GESTISAC HQ",
+  "short_name": "HQ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4efe4",
+  "theme_color": "#0d241f"
+}

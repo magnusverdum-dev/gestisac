@@ -81,16 +81,7 @@ export const AccountingPage = component$((props: AccountingPageProps) => {
         </div>
       </header>
 
-      <section class="summary-grid accounting-overview-grid" aria-label="Avisos gerais de contabilidade">
-        <AccountingMetric icon="quota" label="Quotas por validar" value={accounting.overview.quotasToValidate} detail="Registos pendentes" />
-        <AccountingMetric icon="bank" label="Movimentos por reconciliar" value={accounting.overview.unreconciledMovements} detail={ageDetail(accounting.overview.oldestUnreconciledAgeDays)} />
-        <AccountingMetric icon="receipt" label="Recibos por emitir" value={accounting.overview.receiptsToIssue} detail="Pagamentos sem recibo ligado" />
-        <AccountingMetric icon="debt" label="Dividas em acompanhamento" value={accounting.overview.debtsInFollowUp} detail={accounting.overview.overdueDebtSeverity} />
-        <AccountingMetric icon="agreement" label="Acordos ativos" value={accounting.overview.activePaymentAgreements} detail={`${accounting.overview.brokenPaymentAgreements} em incumprimento`} />
-        <AccountingMetric icon="reserve" label="Fundo de reserva" value={accounting.overview.reserveFundStatus} detail="Estado agregado" />
-      </section>
-
-      <section class="accounting-context-bar">
+      <section class="accounting-context-bar clean-tabs">
         {(['general', 'condominium', 'resident', 'supplier', 'bank'] as ContextMode[]).map((item) => (
           <button class={mode.value === item ? 'active' : ''} type="button" key={item} onClick$={() => switchMode$(item)}>
             {contextLabel(item)}
@@ -99,13 +90,55 @@ export const AccountingPage = component$((props: AccountingPageProps) => {
       </section>
 
       {mode.value === 'general' ? (
-        <section class="accounting-safe-panel">
-          <strong>Centro de controlo</strong>
-          <span>Sem nomes de clientes, fornecedores, fracoes ou valores linha a linha neste nivel.</span>
-          <div class="accounting-action-grid">
-            <button type="button" onClick$={() => switchMode$('condominium')}>Abrir por condominio</button>
-            <button type="button" onClick$={() => switchMode$('resident')}>Extrato de cliente</button>
-            <button type="button" onClick$={() => switchMode$('bank')}>Reconciliacao bancaria</button>
+        <section class="accounting-launchpad">
+          <div class="launchpad-grid">
+            <AccountingLaunchCard
+              icon="bank"
+              title="Reconciliação Bancária"
+              description="Aprovar movimentos diários"
+              metric={accounting.overview.unreconciledMovements || undefined}
+              highlight={accounting.overview.unreconciledMovements > 0}
+              onClick$={() => switchMode$('bank')}
+            />
+            <AccountingLaunchCard
+              icon="receipt"
+              title="Faturação e Recibos"
+              description="Emitir recibos de quotas pagas"
+              metric={accounting.overview.receiptsToIssue || undefined}
+              onClick$={() => {
+                switchMode$('condominium');
+                tab.value = 'receipts';
+              }}
+            />
+            <AccountingLaunchCard
+              icon="quota"
+              title="Extratos de Clientes"
+              description="Conta-corrente por fração"
+              onClick$={() => switchMode$('resident')}
+            />
+            <AccountingLaunchCard
+              icon="reserve"
+              title="Saldos por Condomínio"
+              description="Receitas e despesas"
+              onClick$={() => switchMode$('condominium')}
+            />
+            <AccountingLaunchCard
+              icon="debt"
+              title="Gestão de Dívidas"
+              description="Incumprimentos e acordos"
+              metric={accounting.overview.debtsInFollowUp || undefined}
+              highlight={accounting.overview.debtsInFollowUp > 0}
+              onClick$={() => {
+                switchMode$('condominium');
+                tab.value = 'debts';
+              }}
+            />
+            <AccountingLaunchCard
+              icon="payment"
+              title="Pagamentos a Fornecedores"
+              description="Aprovação de despesas"
+              onClick$={() => switchMode$('supplier')}
+            />
           </div>
         </section>
       ) : (
@@ -198,6 +231,30 @@ export const AccountingPage = component$((props: AccountingPageProps) => {
     </section>
   );
 });
+
+const AccountingLaunchCard = component$((props: {
+  icon: string;
+  title: string;
+  description: string;
+  metric?: string | number;
+  highlight?: boolean;
+  onClick$: PropFunction<() => void>;
+}) => (
+  <button
+    type="button"
+    class={`accounting-launch-card ${props.highlight ? 'highlight' : ''}`}
+    onClick$={props.onClick$}
+  >
+    <div class="card-icon">{iconFor(props.icon)}</div>
+    <div class="card-content">
+      <strong>{props.title}</strong>
+      <span>{props.description}</span>
+    </div>
+    {props.metric !== undefined && props.metric !== null && (
+      <div class="card-metric">{props.metric}</div>
+    )}
+  </button>
+));
 
 const AccountingMetric = component$((props: { icon: string; label: string; value: string | number; detail: string }) => (
   <article class="summary-card accounting-summary-card">

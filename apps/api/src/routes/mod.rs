@@ -1,5 +1,6 @@
 pub mod accounting;
 pub mod administration;
+pub mod app_namespaces;
 pub mod auth;
 pub mod chat;
 pub mod condominiums;
@@ -20,6 +21,7 @@ use axum::{
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
+        .merge(app_namespaces::router())
         .route("/api/health", get(health::health))
         .route("/api/version", get(version::version))
         .route("/api/auth/login", post(auth::login))

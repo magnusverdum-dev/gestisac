@@ -1746,7 +1746,7 @@ function buildDemoDashboard(store: DemoStore): DashboardResponse {
       },
       {
         id: 'reports',
-        title: 'Tickets',
+        title: 'Relatorios',
         subtitle: 'Documentos, atas e analytics',
         tone: 'gold',
         cta: 'Gerar relatorio',

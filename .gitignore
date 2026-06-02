@@ -10,6 +10,9 @@ node_modules
 mock
 .codex-e2e-logs/
 .codex-logs/
+.tmp/
+apps/*/dist/
+apps/*/server/
 apps/web/dist/
 apps/web/server/
 apps/api/data/

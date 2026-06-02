@@ -1,0 +1,8 @@
+{
+  "name": "GESTISAC Worker",
+  "short_name": "Worker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f0da",
+  "theme_color": "#201c12"
+}

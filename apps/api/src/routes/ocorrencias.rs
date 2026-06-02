@@ -1,11 +1,15 @@
 use crate::{
     error::ApiError,
     models::store::{
-        default_worker_checklist, AppStore, Canal, ComentarioVisibilidade, Impacto, Ocorrencia,
-        OcorrenciaAnexo, OcorrenciaComentario, OcorrenciaStatus, OcorrenciaTipo,
-        OcorrenciasMetricas, Prioridade, Urgencia, WorkerChecklistItem,
+        default_tenant_id, default_worker_checklist, AppStore, Canal, ComentarioVisibilidade,
+        Impacto, Ocorrencia, OcorrenciaAnexo, OcorrenciaComentario, OcorrenciaStatus,
+        OcorrenciaTipo, OcorrenciasMetricas, Prioridade, Urgencia, WorkerChecklistItem,
     },
-    routes::auth::{current_context, current_user, require_delete, require_write},
+    repositories::postgres::RelationalOcorrenciaFilter,
+    routes::auth::{
+        current_context, current_user, require_context_permission, require_delete, require_write,
+        PermissionAction, ResourceScope,
+    },
     state::AppState,
 };
 use axum::{
@@ -15,6 +19,8 @@ use axum::{
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+const MAX_OCORRENCIA_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
 
 // ── Input structs ──
 
@@ -230,7 +236,33 @@ pub async fn listar(
     headers: axum::http::HeaderMap,
     Query(query): Query<OcorrenciaQuery>,
 ) -> Result<Json<PaginatedOcorrencias>, ApiError> {
-    current_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let filter = RelationalOcorrenciaFilter {
+            page: query.page.unwrap_or(1),
+            page_size: query.page_size.unwrap_or(20),
+            search: query.search.as_deref(),
+            tipo: query.tipo.as_deref(),
+            status: query.status.as_deref(),
+            prioridade: query.prioridade.as_deref(),
+            condominium_id: query.condominium_id.as_deref(),
+            equipamento_id: query.equipamento_id.as_deref(),
+            atribuido_a: query.atribuido_a.as_deref(),
+        };
+        let page = repository
+            .list_relational_ocorrencias_page(&context.tenant_id, &filter)
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar ocorrencias na base de dados")
+            })?;
+        return Ok(Json(PaginatedOcorrencias {
+            data: page.items,
+            total: page.total,
+            page: page.page,
+            page_size: page.page_size,
+        }));
+    }
+
     let store = state.store.read().await;
 
     let mut items: Vec<Ocorrencia> = store.ocorrencias.clone();
@@ -411,7 +443,7 @@ pub async fn criar(
         format!("Ocorrencia {} criada", item.titulo),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -556,7 +588,7 @@ pub async fn atualizar(
         format!("Ocorrencia {} atualizada", response.titulo),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -626,7 +658,7 @@ pub async fn transitar_status(
         transicao_msg,
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -675,7 +707,7 @@ pub async fn apagar(
         format!("{deleted_name} apagada"),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_delete(&state, &user.tenant_id, &id).await?;
     Ok(Json(()))
 }
 
@@ -741,7 +773,7 @@ pub async fn comentarios_criar(
         format!("Comentario adicionado por {}", user.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_comment_upsert(&state, &user.tenant_id, &comentario).await?;
 
     Ok(Json(comentario))
 }
@@ -773,6 +805,12 @@ pub async fn anexos_upload(
             .bytes()
             .await
             .map_err(|e| ApiError::internal(format!("Erro ao ler ficheiro: {e}")))?;
+        if data.is_empty() {
+            return Err(ApiError::validation("Seleciona um ficheiro"));
+        }
+        if data.len() > MAX_OCORRENCIA_ATTACHMENT_BYTES {
+            return Err(ApiError::validation("O anexo excede 10 MB"));
+        }
         let tamanho_bytes = data.len() as u64;
         let storage_key = format!("{}/{}-{}", id, Uuid::new_v4(), nome);
 
@@ -812,7 +850,7 @@ pub async fn anexos_upload(
         format!("{} anexo(s) carregado(s)", anexos.len()),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_attachments_upsert(&state, &user.tenant_id, &anexos).await?;
 
     Ok(Json(anexos))
 }
@@ -848,7 +886,7 @@ pub async fn anexos_apagar(
         "Anexo removido".to_string(),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_attachment_delete(&state, &user.tenant_id, &id, &anexo_id).await?;
     Ok(Json(()))
 }
 
@@ -886,7 +924,7 @@ pub async fn reabrir(
         format!("Ocorrencia reaberta: {motivo}"),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -904,7 +942,15 @@ pub async fn worker_tickets(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
 ) -> Result<Json<Vec<Ocorrencia>>, ApiError> {
-    let context = current_context(&headers, &state).await?;
+    let context = require_context_permission(
+        &headers,
+        &state,
+        "worker",
+        "operations",
+        PermissionAction::Read,
+        ResourceScope::default(),
+    )
+    .await?;
     let store = state.store.read().await;
     let mut items: Vec<Ocorrencia> = store
         .ocorrencias
@@ -922,13 +968,27 @@ pub async fn worker_action(
     Path(id): Path<String>,
     Json(input): Json<WorkerActionInput>,
 ) -> Result<Json<Ocorrencia>, ApiError> {
-    let user = require_write(&headers, &state, "operations").await?;
+    let context = require_context_permission(
+        &headers,
+        &state,
+        "worker",
+        "operations",
+        PermissionAction::Write,
+        ResourceScope::default(),
+    )
+    .await?;
+    let user = context.user.clone();
     let mut store = state.store.write().await;
     let item = store
         .ocorrencias
         .iter_mut()
         .find(|o| o.id == id)
         .ok_or_else(|| ApiError::not_found("Ocorrencia nao encontrada"))?;
+    if !is_assigned_to_worker(item, &user) {
+        return Err(ApiError::forbidden(
+            "Ticket nao atribuido ao funcionario atual",
+        ));
+    }
 
     let now = Utc::now().to_rfc3339();
     let action = input.action.trim().to_lowercase();
@@ -1000,7 +1060,7 @@ pub async fn worker_action(
         format!("Acao trabalhador '{}': {}", action, response.titulo),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_upsert(&state, &context.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -1011,7 +1071,16 @@ pub async fn validate_resolution(
     Path(id): Path<String>,
     Json(input): Json<ValidateResolutionInput>,
 ) -> Result<Json<Ocorrencia>, ApiError> {
-    let user = require_write(&headers, &state, "operations").await?;
+    let context = require_context_permission(
+        &headers,
+        &state,
+        "hq",
+        "operations",
+        PermissionAction::Write,
+        ResourceScope::default(),
+    )
+    .await?;
+    let user = context.user.clone();
     let mut store = state.store.write().await;
     let item = store
         .ocorrencias
@@ -1057,7 +1126,7 @@ pub async fn validate_resolution(
         ),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_upsert(&state, &context.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -1146,7 +1215,7 @@ pub async fn criar_from_qr(
         format!("Ocorrencia criada por QR: {}", item.titulo),
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -1219,6 +1288,11 @@ pub async fn criar_publica(
     };
 
     let mut store = state.store.write().await;
+    let tenant_id = store
+        .tenants
+        .first()
+        .map(|tenant| tenant.id.clone())
+        .unwrap_or_else(default_tenant_id);
     store.ocorrencias.insert(0, ocorrencia.clone());
     // Registar no audit log sem user autenticado — usar nome do requisitante
     let public_id = Uuid::new_v4().to_string();
@@ -1239,7 +1313,7 @@ pub async fn criar_publica(
         },
     );
     drop(store);
-    persist(&state).await?;
+    persist_ocorrencia_upsert(&state, &tenant_id, &ocorrencia).await?;
 
     Ok(Json(PublicaResponse {
         token_acompanhamento: token,
@@ -1421,12 +1495,7 @@ fn is_assigned_to_worker(item: &Ocorrencia, user: &crate::models::store::PublicU
     let user_id = user.id.to_lowercase();
     let user_name = user.name.to_lowercase();
     let user_email = user.email.to_lowercase();
-    assigned.contains(&user_id)
-        || assigned.contains(&user_name)
-        || assigned.contains(&user_email)
-        || assigned.contains("worker")
-        || assigned.contains("tecnico")
-        || assigned.contains("funcionario")
+    assigned.contains(&user_id) || assigned.contains(&user_name) || assigned.contains(&user_email)
 }
 
 fn worker_queue_rank(item: &Ocorrencia) -> (u8, String) {
@@ -1475,11 +1544,110 @@ async fn persist(state: &AppState) -> Result<(), ApiError> {
         .map_err(|_| ApiError::internal("Nao foi possivel persistir os dados"))
 }
 
+async fn persist_ocorrencia_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    ocorrencia: &Ocorrencia,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_ocorrencia(tenant_id, ocorrencia)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir ocorrencia na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_ocorrencia_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_ocorrencia(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar ocorrencia na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_ocorrencia_comment_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    comentario: &OcorrenciaComentario,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_ocorrencia_comment(tenant_id, comentario)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel persistir comentario na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_ocorrencia_attachments_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    anexos: &[OcorrenciaAnexo],
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        for anexo in anexos {
+            repository
+                .upsert_ocorrencia_attachment(tenant_id, anexo)
+                .await
+                .map_err(|error| {
+                    ApiError::internal(format!(
+                        "Nao foi possivel persistir anexo na base de dados: {error}"
+                    ))
+                })?;
+        }
+        Ok(())
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_ocorrencia_attachment_delete(
+    state: &AppState,
+    tenant_id: &str,
+    ocorrencia_id: &str,
+    attachment_id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_ocorrencia_attachment(tenant_id, ocorrencia_id, attachment_id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Nao foi possivel apagar anexo na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::demo::DemoData;
-    use crate::models::store::{ComentarioVisibilidade, Session};
+    use crate::models::store::{ComentarioVisibilidade, Session, UserAccount};
     use crate::routes;
     use axum::{
         body::Body,
@@ -1515,6 +1683,30 @@ mod tests {
             app_context: "hq".to_string(),
             refresh_expires_at: chrono::Utc::now() + chrono::Duration::hours(48),
         });
+        store.users.push(UserAccount {
+            id: "worker-demo-1".to_string(),
+            tenant_id: store.tenants[0].id.clone(),
+            name: "Tecnico Demo".to_string(),
+            email: "worker@gestisac.pt".to_string(),
+            role: "Tecnico".to_string(),
+            password_hash: "fake-hash".to_string(),
+            active_condominium: demo.active_condominium.clone(),
+        });
+        store.sessions.push(Session {
+            user_id: "worker-demo-1".to_string(),
+            tenant_id: store.tenants[0].id.clone(),
+            token: "test-worker-token-raw".to_string(),
+            refresh_token: "test-worker-refresh-token".to_string(),
+            expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+            created_at: chrono::Utc::now(),
+            active_condominium: demo.active_condominium.clone(),
+            app_context: "worker".to_string(),
+            refresh_expires_at: chrono::Utc::now() + chrono::Duration::hours(48),
+        });
+        if let Some(item) = store.ocorrencias.first_mut() {
+            item.assigned_worker_id = "worker-demo-1".to_string();
+            item.atribuido_a = "Tecnico Demo".to_string();
+        }
 
         let tmp = std::env::temp_dir().join(format!("gestisac-test-{}.json", Uuid::new_v4()));
 
@@ -1522,10 +1714,12 @@ mod tests {
             config: crate::config::ApiConfig {
                 host: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
                 port: 0,
+                environment: "test".to_string(),
                 data_path: tmp,
                 document_storage_path: std::env::temp_dir().join("gestisac-test-docs"),
                 cors_allowed_origins: vec![],
                 database: None,
+                allow_demo_seed: true,
             },
             store: Arc::new(RwLock::new(store)),
             postgres: None,
@@ -1821,7 +2015,7 @@ mod tests {
         let req = Request::builder()
             .method(Method::GET)
             .uri("/api/worker/tickets")
-            .header(AUTHORIZATION, "Bearer test-token-raw")
+            .header(AUTHORIZATION, "Bearer test-worker-token-raw")
             .body(Body::empty())
             .unwrap();
         let (status, body) = collect(app.oneshot(req).await.unwrap()).await;
@@ -1847,7 +2041,7 @@ mod tests {
         let req = Request::builder()
             .method(Method::POST)
             .uri(format!("/api/ocorrencias/{target_id}/worker-action"))
-            .header(AUTHORIZATION, "Bearer test-token-raw")
+            .header(AUTHORIZATION, "Bearer test-worker-token-raw")
             .header("Content-Type", "application/json")
             .body(Body::from(serde_json::to_vec(&input).unwrap()))
             .unwrap();
@@ -1857,6 +2051,29 @@ mod tests {
         assert_eq!(parsed.status, OcorrenciaStatus::Resolvida);
         assert!(parsed.requires_hq_validation);
         assert_eq!(parsed.hq_validation_status, "pendente");
+    }
+
+    #[tokio::test]
+    async fn test_hq_context_cannot_execute_worker_action() {
+        let state = test_app_state();
+        let target_id = {
+            let store = state.store.read().await;
+            store.ocorrencias[0].id.clone()
+        };
+        let app = app(state);
+        let input = serde_json::json!({
+            "action": "start"
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/api/ocorrencias/{target_id}/worker-action"))
+            .header(AUTHORIZATION, "Bearer test-token-raw")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&input).unwrap()))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
@@ -1888,6 +2105,34 @@ mod tests {
         let parsed: Ocorrencia = serde_json::from_slice(&body).unwrap();
         assert_eq!(parsed.status, OcorrenciaStatus::EmCurso);
         assert_eq!(parsed.hq_validation_status, "rejeitada");
+    }
+
+    #[tokio::test]
+    async fn test_worker_context_cannot_validate_resolution() {
+        let state = test_app_state();
+        let target_id = {
+            let mut store = state.store.write().await;
+            let item = store.ocorrencias.first_mut().unwrap();
+            item.status = OcorrenciaStatus::Resolvida;
+            item.requires_hq_validation = true;
+            item.hq_validation_status = "pendente".to_string();
+            item.id.clone()
+        };
+        let app = app(state);
+        let input = serde_json::json!({
+            "decision": "accept",
+            "notes": "Validado"
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/api/ocorrencias/{target_id}/validate-resolution"))
+            .header(AUTHORIZATION, "Bearer test-worker-token-raw")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&input).unwrap()))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
@@ -2111,10 +2356,12 @@ mod tests {
             config: crate::config::ApiConfig {
                 host: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
                 port: 0,
+                environment: "test".to_string(),
                 data_path: tmp,
                 document_storage_path: std::env::temp_dir().join("gestisac-test-docs"),
                 cors_allowed_origins: vec![],
                 database: None,
+                allow_demo_seed: true,
             },
             store: Arc::new(RwLock::new(store)),
             postgres: None,

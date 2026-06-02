@@ -10,7 +10,8 @@ use crate::{
             CondominiumStructure, CondominiumZone, PublicUser,
         },
     },
-    routes::auth::{current_user, require_delete, require_write},
+    repositories::postgres::RelationalCondominiumFilter,
+    routes::auth::{current_context, current_user, require_delete, require_write},
     state::AppState,
 };
 use axum::{
@@ -27,6 +28,8 @@ use qrcode::QrCode;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, io::Cursor, path::PathBuf};
 use uuid::Uuid;
+
+const MAX_CONDOMINIUM_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
 
 pub use super::resources::{
     active_condominium, buildings, create_building, create_fraction, create_resident,
@@ -466,7 +469,31 @@ pub async fn condominiums(
     headers: HeaderMap,
     Query(params): Query<CondominiumListParams>,
 ) -> Result<Json<Paginated<Condominium>>, ApiError> {
-    current_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        let filter = RelationalCondominiumFilter {
+            page: params.page,
+            page_size: params.page_size,
+            search: &params.search,
+            status: &params.status,
+            condominium_type: &params.condominium_type,
+            locality: &params.locality,
+            manager: &params.manager,
+            operational_status: &params.operational_status,
+            incomplete: params.incomplete,
+            has_plant: params.has_plant,
+            has_equipment: params.has_equipment,
+            include_archived: params.include_archived,
+        };
+        let page = repository
+            .list_relational_condominiums_page(&context.tenant_id, &filter)
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar condominios na base de dados")
+            })?;
+        return Ok(Json(page));
+    }
+
     let store = state.store.read().await;
     let items = filtered_condominiums(&store, &params);
     let pagination = PaginationParams {
@@ -627,7 +654,7 @@ pub async fn create_condominium(
         format!("Condominio {} criado", item.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -695,7 +722,7 @@ pub async fn update_condominium(
         format!("Condominio {} atualizado", response.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -706,6 +733,7 @@ pub async fn archive_condominium(
     Path(id): Path<String>,
 ) -> Result<Json<Condominium>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
     let before = snapshot(item);
@@ -730,7 +758,7 @@ pub async fn archive_condominium(
         format!("Condominio {} arquivado", response.name),
     );
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -776,7 +804,7 @@ pub async fn delete_condominium(
     );
     let response = store.condominiums.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -788,49 +816,52 @@ pub async fn update_identification(
     Json(input): Json<CondominiumIdentificationInput>,
 ) -> Result<Json<Condominium>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     if let Some(code) = input.internal_code.as_deref() {
         validate_unique_internal_code(&store, &id, code)?;
     }
     let item = find_condominium_mut(&mut store, &id)?;
     let before = snapshot(item);
+    let mut next = item.clone();
     if let Some(value) = input.name {
         validate_required(&value, "Nome do condominio")?;
-        item.name = clean(value);
+        next.name = clean(value);
     }
-    set_string(&mut item.internal_code, input.internal_code);
-    set_string(&mut item.external_reference, input.external_reference);
-    set_string(&mut item.condominium_type, input.condominium_type);
-    set_string(&mut item.subtype, input.subtype);
-    set_string(&mut item.status, input.status);
-    set_string(&mut item.management_start_date, input.management_start_date);
-    set_string(&mut item.management_end_date, input.management_end_date);
-    set_string(&mut item.manager, input.manager);
-    set_string(&mut item.team, input.team);
-    set_string(&mut item.management_company, input.management_company);
-    set_string(&mut item.short_description, input.short_description);
-    set_string(&mut item.administrative_notes, input.administrative_notes);
+    set_string(&mut next.internal_code, input.internal_code);
+    set_string(&mut next.external_reference, input.external_reference);
+    set_string(&mut next.condominium_type, input.condominium_type);
+    set_string(&mut next.subtype, input.subtype);
+    set_string(&mut next.status, input.status);
+    set_string(&mut next.management_start_date, input.management_start_date);
+    set_string(&mut next.management_end_date, input.management_end_date);
+    set_string(&mut next.manager, input.manager);
+    set_string(&mut next.team, input.team);
+    set_string(&mut next.management_company, input.management_company);
+    set_string(&mut next.short_description, input.short_description);
+    set_string(&mut next.administrative_notes, input.administrative_notes);
     if let Some(tags) = input.tags {
-        item.tags = tags
+        next.tags = tags
             .into_iter()
             .map(clean)
             .filter(|tag| !tag.is_empty())
             .collect();
     }
-    item.ensure_profile_defaults();
-    validate_active_ready(item)?;
-    item.push_history(
+    next.ensure_profile_defaults();
+    validate_active_ready(&next)?;
+    next.push_history(
         "identification-updated",
         "Identificacao alterada",
-        user.name,
+        user.name.clone(),
         "identification",
         before,
-        snapshot(item),
+        snapshot(&next),
         "api",
     );
+    *item = next;
     let response = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response).await?;
     Ok(Json(response))
 }
 
@@ -841,10 +872,12 @@ pub async fn update_address(
     Json(input): Json<CondominiumAddressInput>,
 ) -> Result<Json<Condominium>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
     let before = snapshot(item);
-    let address = &mut item.address;
+    let mut next = item.clone();
+    let address = &mut next.address;
     set_string(&mut address.street, input.street);
     set_string(&mut address.number, input.number);
     set_string(&mut address.lot, input.lot);
@@ -872,21 +905,22 @@ pub async fn update_address(
     if input.longitude.is_some() {
         address.longitude = input.longitude;
     }
-    item.location = compact_location(&item.address);
-    item.ensure_profile_defaults();
-    validate_active_ready(item)?;
-    item.push_history(
+    next.location = compact_location(&next.address);
+    next.ensure_profile_defaults();
+    validate_active_ready(&next)?;
+    next.push_history(
         "address-updated",
         "Morada alterada",
         user.name,
         "address",
         before,
-        snapshot(item),
+        snapshot(&next),
         "api",
     );
+    *item = next;
     let response = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response).await?;
     Ok(Json(response))
 }
 
@@ -897,10 +931,12 @@ pub async fn update_structure(
     Json(input): Json<CondominiumStructureInput>,
 ) -> Result<Json<Condominium>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
     let before = snapshot(item);
-    let structure = &mut item.structure;
+    let mut next = item.clone();
+    let structure = &mut next.structure;
     set_u16(&mut structure.total_fractions, input.total_fractions);
     set_u16(
         &mut structure.residential_fractions,
@@ -961,22 +997,23 @@ pub async fn update_structure(
         input.common_area_estimate,
     );
     set_string(&mut structure.structural_notes, input.structural_notes);
-    item.fractions = item.structure.total_fractions;
-    item.buildings = item.structure.blocks_count;
-    item.ensure_profile_defaults();
-    validate_active_ready(item)?;
-    item.push_history(
+    next.fractions = next.structure.total_fractions;
+    next.buildings = next.structure.blocks_count;
+    next.ensure_profile_defaults();
+    validate_active_ready(&next)?;
+    next.push_history(
         "structure-updated",
         "Estrutura fisica alterada",
         user.name,
         "structure",
         before,
-        snapshot(item),
+        snapshot(&next),
         "api",
     );
+    *item = next;
     let response = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response).await?;
     Ok(Json(response))
 }
 
@@ -987,6 +1024,7 @@ pub async fn update_operational_status(
     Json(input): Json<CondominiumOperationalStatusInput>,
 ) -> Result<Json<Condominium>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
     let before = snapshot(item);
@@ -1011,7 +1049,7 @@ pub async fn update_operational_status(
     );
     let response = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response).await?;
     Ok(Json(response))
 }
 
@@ -1022,6 +1060,7 @@ pub async fn save_condominium_draft(
     Json(input): Json<CondominiumDraftInput>,
 ) -> Result<Json<Condominium>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
     let draft = item
@@ -1048,7 +1087,7 @@ pub async fn save_condominium_draft(
     );
     let response = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response).await?;
     Ok(Json(response))
 }
 
@@ -1068,6 +1107,7 @@ pub async fn import_commit(
     Json(input): Json<ImportCommitInput>,
 ) -> Result<Json<ImportReport>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     let mut created = Vec::new();
     let mut skipped = 0;
@@ -1163,7 +1203,9 @@ pub async fn import_commit(
         ),
     );
     drop(store);
-    persist(&state).await?;
+    for condominium in &created {
+        persist_condominium_upsert(&state, &tenant_id, condominium).await?;
+    }
 
     Ok(Json(ImportReport {
         created: created.len(),
@@ -1221,6 +1263,7 @@ pub async fn upload_condominium_document(
     multipart: Multipart,
 ) -> Result<Json<CondominiumManagedDocument>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let (fields, uploaded_file) = read_multipart_upload(multipart).await?;
     let title = field_or_default(&fields, "title", &uploaded_file.original_name);
     validate_required(&title, "Titulo do documento")?;
@@ -1265,8 +1308,9 @@ pub async fn upload_condominium_document(
         snapshot(&document),
         "upload",
     );
+    let response_condominium = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response_condominium).await?;
     Ok(Json(document))
 }
 
@@ -1277,6 +1321,7 @@ pub async fn upload_condominium_media(
     multipart: Multipart,
 ) -> Result<Json<CondominiumMedia>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let (fields, uploaded_file) = read_multipart_upload(multipart).await?;
     let title = field_or_default(&fields, "title", &uploaded_file.original_name);
     validate_required(&title, "Titulo da imagem/planta")?;
@@ -1328,8 +1373,9 @@ pub async fn upload_condominium_media(
         snapshot(&media),
         "upload",
     );
+    let response_condominium = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response_condominium).await?;
     Ok(Json(media))
 }
 
@@ -1462,6 +1508,7 @@ macro_rules! subresource_handlers {
             Json(input): Json<$input>,
         ) -> Result<Json<$model>, ApiError> {
             let user = require_write(&headers, &state, "condominiums").await?;
+            let tenant_id = user.tenant_id.clone();
             let mut store = state.store.write().await;
             let item = find_condominium_mut(&mut store, &id)?;
             let resource = $make(input, item)?;
@@ -1475,8 +1522,9 @@ macro_rules! subresource_handlers {
                 snapshot(&resource),
                 "api",
             );
+            let response_condominium = item.clone();
             drop(store);
-            persist(&state).await?;
+            persist_condominium_upsert(&state, &tenant_id, &response_condominium).await?;
             Ok(Json(resource))
         }
 
@@ -1487,6 +1535,7 @@ macro_rules! subresource_handlers {
             Json(input): Json<$input>,
         ) -> Result<Json<$model>, ApiError> {
             let user = require_write(&headers, &state, "condominiums").await?;
+            let tenant_id = user.tenant_id.clone();
             let mut store = state.store.write().await;
             let item = find_condominium_mut(&mut store, &id)?;
             let index = item
@@ -1507,8 +1556,9 @@ macro_rules! subresource_handlers {
                 snapshot(&response),
                 "api",
             );
+            let response_condominium = item.clone();
             drop(store);
-            persist(&state).await?;
+            persist_condominium_upsert(&state, &tenant_id, &response_condominium).await?;
             Ok(Json(response))
         }
 
@@ -1518,6 +1568,7 @@ macro_rules! subresource_handlers {
             Path((id, resource_id)): Path<(String, String)>,
         ) -> Result<Json<Vec<$model>>, ApiError> {
             let user = require_delete(&headers, &state, "condominiums").await?;
+            let tenant_id = user.tenant_id.clone();
             let mut store = state.store.write().await;
             let item = find_condominium_mut(&mut store, &id)?;
             let original_len = item.$field.len();
@@ -1541,8 +1592,9 @@ macro_rules! subresource_handlers {
                 "api",
             );
             let response = item.$field.clone();
+            let response_condominium = item.clone();
             drop(store);
-            persist(&state).await?;
+            persist_condominium_upsert(&state, &tenant_id, &response_condominium).await?;
             Ok(Json(response))
         }
     };
@@ -1691,6 +1743,7 @@ pub async fn create_condominium_note(
     Json(input): Json<CondominiumNoteInput>,
 ) -> Result<Json<CondominiumInternalNote>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
     let mut resource = make_note(input, item)?;
@@ -1705,8 +1758,9 @@ pub async fn create_condominium_note(
         snapshot(&resource),
         "api",
     );
+    let response_condominium = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response_condominium).await?;
     Ok(Json(resource))
 }
 
@@ -1717,6 +1771,7 @@ pub async fn update_condominium_note(
     Json(input): Json<CondominiumNoteInput>,
 ) -> Result<Json<CondominiumInternalNote>, ApiError> {
     let user = require_write(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
     let index = item
@@ -1743,8 +1798,9 @@ pub async fn update_condominium_note(
         snapshot(&response),
         "api",
     );
+    let response_condominium = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response_condominium).await?;
     Ok(Json(response))
 }
 
@@ -1754,6 +1810,7 @@ pub async fn delete_condominium_note(
     Path((id, resource_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<CondominiumInternalNote>>, ApiError> {
     let user = require_delete(&headers, &state, "condominiums").await?;
+    let tenant_id = user.tenant_id.clone();
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
     let deleted_note = item
@@ -1777,8 +1834,9 @@ pub async fn delete_condominium_note(
         "api",
     );
     let response = visible_notes(&user, &item.internal_notes_registry);
+    let response_condominium = item.clone();
     drop(store);
-    persist(&state).await?;
+    persist_condominium_upsert(&state, &tenant_id, &response_condominium).await?;
     Ok(Json(response))
 }
 
@@ -2582,6 +2640,12 @@ async fn read_multipart_upload(
                 .bytes()
                 .await
                 .map_err(|error| ApiError::validation(format!("Ficheiro invalido: {error}")))?;
+            if bytes.is_empty() {
+                return Err(ApiError::validation("Seleciona um ficheiro"));
+            }
+            if bytes.len() > MAX_CONDOMINIUM_UPLOAD_BYTES {
+                return Err(ApiError::validation("O ficheiro excede 10 MB"));
+            }
             uploaded_file = Some(UploadedCondominiumFile {
                 original_name: safe_file_name(&file_name),
                 mime_type,
@@ -3313,9 +3377,105 @@ async fn persist(state: &AppState) -> Result<(), ApiError> {
         .map_err(|error| ApiError::internal(format!("Falha ao persistir dados: {error}")))
 }
 
+async fn persist_condominium_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    condominium: &Condominium,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .upsert_condominium(tenant_id, condominium)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Falha ao persistir condominio na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
+async fn persist_condominium_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .delete_condominium(tenant_id, id)
+            .await
+            .map_err(|error| {
+                ApiError::internal(format!(
+                    "Falha ao apagar condominio na base de dados: {error}"
+                ))
+            })
+    } else {
+        persist(state).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{demo::DemoData, store::Session};
+    use crate::routes;
+    use axum::http::{header::AUTHORIZATION, Method, Request, StatusCode};
+    use http_body_util::BodyExt;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use tower::ServiceExt;
+
+    async fn collect(res: axum::response::Response<Body>) -> (StatusCode, Vec<u8>) {
+        let status = res.status();
+        let body = res
+            .into_body()
+            .collect()
+            .await
+            .expect("response body should collect")
+            .to_bytes()
+            .to_vec();
+        (status, body)
+    }
+
+    fn test_app_state() -> AppState {
+        let demo: DemoData = serde_json::from_str(include_str!("../../../../mock/demo-data.json"))
+            .expect("demo data should parse");
+        let mut store = AppStore::seed_from_demo(&demo, "fake-hash".to_string());
+        let user_id = store.users[0].id.clone();
+        let tenant_id = store.tenants[0].id.clone();
+        store.sessions.push(Session {
+            user_id,
+            tenant_id,
+            token: "test-token-raw".to_string(),
+            refresh_token: "test-refresh-token".to_string(),
+            expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+            created_at: chrono::Utc::now(),
+            active_condominium: demo.active_condominium.clone(),
+            app_context: "hq".to_string(),
+            refresh_expires_at: chrono::Utc::now() + chrono::Duration::hours(48),
+        });
+        let tmp = std::env::temp_dir().join(format!("gestisac-test-{}.json", Uuid::new_v4()));
+
+        AppState {
+            config: crate::config::ApiConfig {
+                host: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+                port: 0,
+                environment: "test".to_string(),
+                data_path: tmp,
+                document_storage_path: std::env::temp_dir().join("gestisac-test-docs"),
+                cors_allowed_origins: vec![],
+                database: None,
+                allow_demo_seed: true,
+            },
+            store: Arc::new(RwLock::new(store)),
+            postgres: None,
+        }
+    }
+
+    fn app(state: AppState) -> axum::Router {
+        routes::router(state)
+    }
 
     #[test]
     fn completeness_reports_missing_operational_data() {
@@ -3331,6 +3491,47 @@ mod tests {
             .missing_items
             .iter()
             .any(|item| item.contains("morada") || item.contains("rua")));
+    }
+
+    #[tokio::test]
+    async fn failed_identification_update_does_not_mutate_store() {
+        let state = test_app_state();
+        let condominium = {
+            let store = state.store.read().await;
+            store
+                .condominiums
+                .first()
+                .expect("demo should include condominiums")
+                .clone()
+        };
+        let original_name = condominium.name.clone();
+        let original_status = condominium.status.clone();
+
+        let body = serde_json::json!({
+            "name": "Nao deve ficar gravado",
+            "status": "ativo"
+        });
+        let req = Request::builder()
+            .method(Method::PUT)
+            .uri(format!(
+                "/api/condominiums/{}/identification",
+                condominium.id
+            ))
+            .header(AUTHORIZATION, "Bearer test-token-raw")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .expect("request should build");
+        let (status, _body) = collect(app(state.clone()).oneshot(req).await.unwrap()).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let store = state.store.read().await;
+        let current = store
+            .condominiums
+            .iter()
+            .find(|item| item.id == condominium.id)
+            .expect("condominium should still exist");
+        assert_eq!(current.name, original_name);
+        assert_eq!(current.status, original_status);
     }
 
     #[test]

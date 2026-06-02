@@ -16,7 +16,15 @@ pub async fn list_messages(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ChatMessage>>, ApiError> {
-    current_context(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .load_chat_messages(&context.tenant_id, 500)
+            .await
+            .map(Json)
+            .map_err(|_| ApiError::internal("Nao foi possivel listar mensagens na base de dados"));
+    }
+
     let store = state.store.read().await;
     Ok(Json(store.chat_messages.clone()))
 }
@@ -55,7 +63,7 @@ pub async fn create_message(
         "Mensagem enviada no chat de apoio".to_string(),
     );
     drop(store);
-    persist(&state).await?;
+    persist_chat_message(&state, &context.user.tenant_id, &message).await?;
 
     Ok(Json(message))
 }
@@ -65,4 +73,19 @@ async fn persist(state: &AppState) -> Result<(), ApiError> {
         .save()
         .await
         .map_err(|_| ApiError::internal("Nao foi possivel persistir os dados"))
+}
+
+async fn persist_chat_message(
+    state: &AppState,
+    tenant_id: &str,
+    message: &ChatMessage,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        repository
+            .create_chat_message(tenant_id, message)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel gravar mensagem na base de dados"))
+    } else {
+        persist(state).await
+    }
 }

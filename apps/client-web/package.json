@@ -1,0 +1,30 @@
+{
+  "name": "@gestisac/client-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5175",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --host 127.0.0.1 --port 4175"
+  },
+  "dependencies": {
+    "@builder.io/qwik": "^1.20.0",
+    "@builder.io/qwik-city": "^1.20.0",
+    "@gestisac/api-client": "workspace:*",
+    "@gestisac/auth": "workspace:*",
+    "@gestisac/config": "workspace:*",
+    "@gestisac/domain-types": "workspace:*",
+    "@gestisac/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "typescript": "^5.4.5",
+    "vite": "6.4.2",
+    "vite-tsconfig-paths": "^4.3.2"
+  }
+}

@@ -8,7 +8,10 @@ use crate::{
             PaymentAgreementInstallment, Quota, Receipt, ReserveFund,
         },
     },
-    routes::auth::{current_user, require_delete, require_write},
+    routes::auth::{
+        can_access, current_context, require_delete, require_write, AuthContext, PermissionAction,
+        ResourceScope,
+    },
     state::AppState,
 };
 use axum::{
@@ -227,7 +230,7 @@ pub async fn condominium_context(
         bank_transactions: filter_by_condominium(&store.bank_transactions, &name, |item| {
             &item.condominium
         }),
-        bank_reconciliations: store.bank_reconciliations.clone(),
+        bank_reconciliations: bank_reconciliations_for_condominium(&store, &name),
     }))
 }
 
@@ -265,7 +268,20 @@ pub async fn quotas(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Quota>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = require_user(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .list_quotas_page(
+                &context.tenant_id,
+                params.page,
+                params.page_size,
+                &params.search,
+            )
+            .await
+            .map(Json)
+            .map_err(|_| ApiError::internal("Nao foi possivel listar quotas na base de dados"));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.quotas, &params)))
 }
@@ -303,7 +319,7 @@ pub async fn create_quota(
         format!("Quota {} criada para {}", item.period, item.resident),
     );
     drop(store);
-    persist(&state).await?;
+    persist_quota_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -335,7 +351,7 @@ pub async fn delete_quota(
     );
     let response = store.quotas.clone();
     drop(store);
-    persist(&state).await?;
+    persist_quota_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -379,7 +395,7 @@ pub async fn update_quota(
         ),
     );
     drop(store);
-    persist(&state).await?;
+    persist_quota_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -389,7 +405,22 @@ pub async fn payments(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<AccountingPayment>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = require_user(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .list_accounting_payments_page(
+                &context.tenant_id,
+                params.page,
+                params.page_size,
+                &params.search,
+            )
+            .await
+            .map(Json)
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar pagamentos na base de dados")
+            });
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.accounting_payments, &params)))
 }
@@ -426,7 +457,7 @@ pub async fn create_payment(
         format!("Pagamento de {} registado", item.resident),
     );
     drop(store);
-    persist(&state).await?;
+    persist_payment_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -458,7 +489,7 @@ pub async fn delete_payment(
     );
     let response = store.accounting_payments.clone();
     drop(store);
-    persist(&state).await?;
+    persist_payment_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -498,7 +529,7 @@ pub async fn update_payment(
         format!("Pagamento de {} atualizado", response.resident),
     );
     drop(store);
-    persist(&state).await?;
+    persist_payment_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -508,7 +539,20 @@ pub async fn debts(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Debt>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = require_user(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .list_debts_page(
+                &context.tenant_id,
+                params.page,
+                params.page_size,
+                &params.search,
+            )
+            .await
+            .map(Json)
+            .map_err(|_| ApiError::internal("Nao foi possivel listar dividas na base de dados"));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.debts, &params)))
 }
@@ -545,7 +589,7 @@ pub async fn create_debt(
         format!("Divida de {} registada", item.resident),
     );
     drop(store);
-    persist(&state).await?;
+    persist_debt_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -577,7 +621,7 @@ pub async fn delete_debt(
     );
     let response = store.debts.clone();
     drop(store);
-    persist(&state).await?;
+    persist_debt_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -617,7 +661,7 @@ pub async fn update_debt(
         format!("Divida de {} atualizada", response.resident),
     );
     drop(store);
-    persist(&state).await?;
+    persist_debt_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -627,7 +671,20 @@ pub async fn receipts(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Receipt>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = require_user(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .list_receipts_page(
+                &context.tenant_id,
+                params.page,
+                params.page_size,
+                &params.search,
+            )
+            .await
+            .map(Json)
+            .map_err(|_| ApiError::internal("Nao foi possivel listar recibos na base de dados"));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.receipts, &params)))
 }
@@ -663,7 +720,7 @@ pub async fn create_receipt(
         format!("Recibo {} emitido", item.number),
     );
     drop(store);
-    persist(&state).await?;
+    persist_receipt_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -695,7 +752,7 @@ pub async fn delete_receipt(
     );
     let response = store.receipts.clone();
     drop(store);
-    persist(&state).await?;
+    persist_receipt_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -734,7 +791,7 @@ pub async fn update_receipt(
         format!("Recibo {} atualizado", response.number),
     );
     drop(store);
-    persist(&state).await?;
+    persist_receipt_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
@@ -744,7 +801,20 @@ pub async fn expenses(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<Expense>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = require_user(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .list_expenses_page(
+                &context.tenant_id,
+                params.page,
+                params.page_size,
+                &params.search,
+            )
+            .await
+            .map(Json)
+            .map_err(|_| ApiError::internal("Nao foi possivel listar despesas na base de dados"));
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.expenses, &params)))
 }
@@ -754,7 +824,22 @@ pub async fn reserve_funds(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<ReserveFund>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = require_user(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .list_reserve_funds_page(
+                &context.tenant_id,
+                params.page,
+                params.page_size,
+                &params.search,
+            )
+            .await
+            .map(Json)
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar fundos de reserva na base de dados")
+            });
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.reserve_funds, &params)))
 }
@@ -764,7 +849,22 @@ pub async fn payment_agreements(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<PaymentAgreement>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = require_user(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .list_payment_agreements_page(
+                &context.tenant_id,
+                params.page,
+                params.page_size,
+                &params.search,
+            )
+            .await
+            .map(Json)
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar acordos de pagamento na base de dados")
+            });
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.payment_agreements, &params)))
 }
@@ -819,7 +919,7 @@ pub async fn create_payment_agreement(
         format!("Acordo de pagamento criado para {}", item.resident),
     );
     drop(store);
-    persist(&state).await?;
+    persist_payment_agreement_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -829,7 +929,22 @@ pub async fn cash_movements(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<CashMovement>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = require_user(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .list_cash_movements_page(
+                &context.tenant_id,
+                params.page,
+                params.page_size,
+                &params.search,
+            )
+            .await
+            .map(Json)
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar movimentos de caixa na base de dados")
+            });
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.cash_movements, &params)))
 }
@@ -870,7 +985,7 @@ pub async fn create_cash_movement(
         format!("Movimento de caixa {} registado", item.source),
     );
     drop(store);
-    persist(&state).await?;
+    persist_cash_movement_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -880,7 +995,22 @@ pub async fn bank_transactions(
     headers: HeaderMap,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Paginated<BankTransaction>>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = require_user(&headers, &state).await?;
+    if let Some(repository) = &state.postgres {
+        return repository
+            .list_bank_transactions_page(
+                &context.tenant_id,
+                params.page,
+                params.page_size,
+                &params.search,
+            )
+            .await
+            .map(Json)
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel listar movimentos bancarios na base de dados")
+            });
+    }
+
     let store = state.store.read().await;
     Ok(Json(paginate(&store.bank_transactions, &params)))
 }
@@ -919,7 +1049,7 @@ pub async fn create_bank_transaction(
         format!("Movimento bancario {} importado", item.description),
     );
     drop(store);
-    persist(&state).await?;
+    persist_bank_transaction_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -950,6 +1080,7 @@ pub async fn create_reconciliation(
         .find(|item| item.id == input.bank_transaction_id)
         .ok_or_else(|| ApiError::not_found("Movimento bancario nao encontrado"))?;
     transaction.reconciliation_status = "reconciliado".to_string();
+    let updated_transaction = transaction.clone();
 
     let item = BankReconciliation {
         id: new_id(),
@@ -968,7 +1099,8 @@ pub async fn create_reconciliation(
         format!("Movimento bancario reconciliado com {}", item.target_type),
     );
     drop(store);
-    persist(&state).await?;
+    persist_bank_reconciliation_create(&state, &user.tenant_id, &item, &updated_transaction)
+        .await?;
 
     Ok(Json(item))
 }
@@ -1013,7 +1145,7 @@ pub async fn create_expense(
         format!("Despesa {} criada", item.category),
     );
     drop(store);
-    persist(&state).await?;
+    persist_expense_upsert(&state, &user.tenant_id, &item).await?;
 
     Ok(Json(item))
 }
@@ -1045,7 +1177,7 @@ pub async fn delete_expense(
     );
     let response = store.expenses.clone();
     drop(store);
-    persist(&state).await?;
+    persist_expense_delete(&state, &user.tenant_id, &id).await?;
 
     Ok(Json(response))
 }
@@ -1084,13 +1216,28 @@ pub async fn update_expense(
         format!("Despesa {} atualizada", response.category),
     );
     drop(store);
-    persist(&state).await?;
+    persist_expense_upsert(&state, &user.tenant_id, &response).await?;
 
     Ok(Json(response))
 }
 
-async fn require_user(headers: &HeaderMap, state: &AppState) -> Result<(), ApiError> {
-    current_user(headers, state).await.map(|_| ())
+async fn require_user(headers: &HeaderMap, state: &AppState) -> Result<AuthContext, ApiError> {
+    let context = current_context(headers, state).await?;
+    if can_access(
+        &context,
+        "accounting",
+        PermissionAction::Read,
+        ResourceScope {
+            tenant_id: Some(&context.tenant_id),
+            ..ResourceScope::default()
+        },
+    ) {
+        Ok(context)
+    } else {
+        Err(ApiError::forbidden(
+            "Sem permissao para consultar contabilidade",
+        ))
+    }
 }
 
 fn validate_required(value: &str, label: &str) -> Result<(), ApiError> {
@@ -1114,6 +1261,203 @@ async fn persist(state: &AppState) -> Result<(), ApiError> {
         .save()
         .await
         .map_err(|_| ApiError::internal("Nao foi possivel persistir os dados"))
+}
+
+async fn persist_quota_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    item: &Quota,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .upsert_quota(tenant_id, item)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel gravar quota na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_quota_delete(state: &AppState, tenant_id: &str, id: &str) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .delete_quota(tenant_id, id)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel apagar quota na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_payment_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    item: &AccountingPayment,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .upsert_accounting_payment(tenant_id, item)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel gravar pagamento na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_payment_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .delete_accounting_payment(tenant_id, id)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel apagar pagamento na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_debt_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    item: &Debt,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .upsert_debt(tenant_id, item)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel gravar divida na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_debt_delete(state: &AppState, tenant_id: &str, id: &str) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .delete_debt(tenant_id, id)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel apagar divida na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_receipt_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    item: &Receipt,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .upsert_receipt(tenant_id, item)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel gravar recibo na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_receipt_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .delete_receipt(tenant_id, id)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel apagar recibo na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_expense_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    item: &Expense,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .upsert_expense(tenant_id, item)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel gravar despesa na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_expense_delete(
+    state: &AppState,
+    tenant_id: &str,
+    id: &str,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .delete_expense(tenant_id, id)
+            .await
+            .map_err(|_| ApiError::internal("Nao foi possivel apagar despesa na base de dados"));
+    }
+    persist(state).await
+}
+
+async fn persist_payment_agreement_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    item: &PaymentAgreement,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .upsert_payment_agreement(tenant_id, item)
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel gravar acordo de pagamento na base de dados")
+            });
+    }
+    persist(state).await
+}
+
+async fn persist_cash_movement_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    item: &CashMovement,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .upsert_cash_movement(tenant_id, item)
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel gravar movimento de caixa na base de dados")
+            });
+    }
+    persist(state).await
+}
+
+async fn persist_bank_transaction_upsert(
+    state: &AppState,
+    tenant_id: &str,
+    item: &BankTransaction,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .upsert_bank_transaction(tenant_id, item)
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel gravar movimento bancario na base de dados")
+            });
+    }
+    persist(state).await
+}
+
+async fn persist_bank_reconciliation_create(
+    state: &AppState,
+    tenant_id: &str,
+    reconciliation: &BankReconciliation,
+    updated_transaction: &BankTransaction,
+) -> Result<(), ApiError> {
+    if let Some(repository) = &state.postgres {
+        return repository
+            .create_bank_reconciliation(tenant_id, reconciliation, updated_transaction)
+            .await
+            .map_err(|_| {
+                ApiError::internal("Nao foi possivel reconciliar movimento na base de dados")
+            });
+    }
+    persist(state).await
 }
 
 fn accounting_overview(store: &AppStore) -> AccountingOverview {
@@ -1321,6 +1665,23 @@ fn filter_by_condominium<T: Clone>(
         .collect()
 }
 
+fn bank_reconciliations_for_condominium(
+    store: &AppStore,
+    condominium: &str,
+) -> Vec<BankReconciliation> {
+    store
+        .bank_reconciliations
+        .iter()
+        .filter(|reconciliation| {
+            store.bank_transactions.iter().any(|transaction| {
+                transaction.id == reconciliation.bank_transaction_id
+                    && transaction.condominium == condominium
+            })
+        })
+        .cloned()
+        .collect()
+}
+
 fn is_settled_status(status: &str) -> bool {
     let normalized = status.trim().to_lowercase();
     matches!(
@@ -1425,16 +1786,46 @@ mod tests {
                     payment_id: String::new(),
                 }],
             }],
-            bank_transactions: vec![BankTransaction {
-                id: "bank-a".to_string(),
-                condominium: "Condominio A".to_string(),
-                occurred_at: "2026-05-10".to_string(),
-                description: "TRF Maria Cliente".to_string(),
-                amount: Decimal::new(5_000, 2),
-                direction: "entrada".to_string(),
-                reference: String::new(),
-                reconciliation_status: "por reconciliar".to_string(),
-            }],
+            bank_transactions: vec![
+                BankTransaction {
+                    id: "bank-a".to_string(),
+                    condominium: "Condominio A".to_string(),
+                    occurred_at: "2026-05-10".to_string(),
+                    description: "TRF Maria Cliente".to_string(),
+                    amount: Decimal::new(5_000, 2),
+                    direction: "entrada".to_string(),
+                    reference: String::new(),
+                    reconciliation_status: "por reconciliar".to_string(),
+                },
+                BankTransaction {
+                    id: "bank-b".to_string(),
+                    condominium: "Condominio B".to_string(),
+                    occurred_at: "2026-05-10".to_string(),
+                    description: "TRF Outro Cliente".to_string(),
+                    amount: Decimal::new(20_000, 2),
+                    direction: "entrada".to_string(),
+                    reference: String::new(),
+                    reconciliation_status: "reconciliado".to_string(),
+                },
+            ],
+            bank_reconciliations: vec![
+                BankReconciliation {
+                    id: "reconciliation-a".to_string(),
+                    bank_transaction_id: "bank-a".to_string(),
+                    target_type: "payment".to_string(),
+                    target_id: "pay-a".to_string(),
+                    notes: String::new(),
+                    reconciled_at: "2026-05-10T10:00:00Z".to_string(),
+                },
+                BankReconciliation {
+                    id: "reconciliation-b".to_string(),
+                    bank_transaction_id: "bank-b".to_string(),
+                    target_type: "payment".to_string(),
+                    target_id: "pay-b".to_string(),
+                    notes: String::new(),
+                    reconciled_at: "2026-05-10T11:00:00Z".to_string(),
+                },
+            ],
             ..AppStore::default()
         }
     }
@@ -1466,5 +1857,16 @@ mod tests {
         let overview = accounting_overview(&accounting_store());
         assert_eq!(overview.active_payment_agreements, 1);
         assert_eq!(overview.broken_payment_agreements, 1);
+    }
+
+    #[test]
+    fn bank_reconciliations_are_limited_to_condominium_context() {
+        let reconciliations =
+            bank_reconciliations_for_condominium(&accounting_store(), "Condominio A");
+        let ids = reconciliations
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["reconciliation-a"]);
     }
 }
