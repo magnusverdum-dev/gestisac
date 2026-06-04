@@ -84,6 +84,15 @@ Password: Gestisac2026!
 
 Os dados funcionais desta fase ficam persistidos em `apps/api/data/store.json`, gerado automaticamente no primeiro arranque da API Rust. As passwords sao guardadas com Argon2 e as sessoes usam access token curto com refresh token persistido.
 
+## Deploy Online
+
+O caminho recomendado para producao sem servidor proprio e usar Supabase PostgreSQL, API Rust num host gerido e frontend num host gerido.
+
+- `docs/32-managed-cloud-deployment.md`
+- `docs/33-operacao-deploy-e-clones.md`
+- `docs/29-go-live-checklist.md`
+- `.env.production.example`
+
 ## Fase Visual
 
 A arquitetura visual esta documentada em:

@@ -345,7 +345,7 @@ export const PageOverview = component$((props: PageOverviewProps) => {
       <section class="records-panel glass-panel ops-panel">
         <header class="ops-panel-header">
           <div>
-            <small>Dados reais da API local</small>
+            <small>Dados reais da API online</small>
             <h2>Registos operacionais</h2>
           </div>
           <div class="ops-toolbar">

@@ -197,7 +197,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
       <section class="glass-panel ops-workspace">
         <div class="ops-panel-header calendar-toolbar">
           <div>
-            <span class="page-eyebrow">Dados reais da API local</span>
+            <span class="page-eyebrow">Dados reais da API online</span>
             <h2>Registos CMT</h2>
           </div>
           <div class="ops-toolbar calendar-filters">

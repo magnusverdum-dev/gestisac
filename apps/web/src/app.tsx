@@ -154,17 +154,41 @@ export const App = component$(() => {
     version: 0
   });
 
-  const loadWorkspace$ = $(async (token: string) => {
-    const [dashboardData, resourceData] = await Promise.all([
-      getDashboard(token),
-      getResources(token)
-    ]);
+  const applyDashboardData$ = $((dashboardData: typeof fallbackDashboard) => {
     dashboard.value = dashboardData;
-    resources.value = resourceData;
-    pageCache.value = buildPages(resourceData, dashboardData);
-    searchResultCache.value = buildGlobalSearchResults(resourceData);
+    pageCache.value = buildPages(resources.value, dashboardData);
     session.user = dashboardData.user;
     apiStatus.value = 'online';
+  });
+
+  const applyResourceData$ = $((resourceData: typeof emptyResources) => {
+    resources.value = resourceData;
+    pageCache.value = buildPages(resourceData, dashboard.value);
+    searchResultCache.value = buildGlobalSearchResults(resourceData);
+    if (resourceData.loadWarnings?.length) {
+      error.value = `Sessao iniciada, mas alguns modulos carregaram em modo degradado: ${resourceData.loadWarnings.join(', ')}`;
+      return;
+    }
+    if (
+      error.value.startsWith('Sessao iniciada, mas alguns dados ainda nao carregaram') ||
+      error.value.startsWith('Sessao iniciada, mas alguns modulos carregaram em modo degradado')
+    ) {
+      error.value = '';
+    }
+  });
+
+  const loadWorkspace$ = $(async (token: string) => {
+    const dashboardData = await getDashboard(token);
+    await applyDashboardData$(dashboardData);
+
+    void getResources(token)
+      .then((resourceData) => applyResourceData$(resourceData))
+      .catch((err) => {
+        error.value =
+          err instanceof Error
+            ? `Sessao iniciada, mas alguns dados ainda nao carregaram: ${err.message}`
+            : 'Sessao iniciada, mas alguns dados ainda nao carregaram';
+      });
   });
 
   const refreshWorkspace$ = $(async () => {
@@ -685,14 +709,6 @@ export const App = component$(() => {
     } finally {
       session.ready = true;
     }
-  });
-
-  useVisibleTask$(({ cleanup }) => {
-    const timer = window.setInterval(() => {
-      if (!session.token) return;
-      loadWorkspace$(session.token).catch(() => undefined);
-    }, 5000);
-    cleanup(() => window.clearInterval(timer));
   });
 
   if (!session.ready || !session.token) {

@@ -252,8 +252,11 @@ pub async fn listar(
         let page = repository
             .list_relational_ocorrencias_page(&context.tenant_id, &filter)
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar ocorrencias na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar ocorrencias na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(PaginatedOcorrencias {
             data: page.items,

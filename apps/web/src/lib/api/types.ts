@@ -1025,6 +1025,7 @@ export type ResourceState = {
   accounting: AccountingState;
   auditLog: AuditLogEntry[];
   permissions: PermissionsResponse;
+  loadWarnings?: string[];
 };
 
 export type PaginatedResponse<T> = {

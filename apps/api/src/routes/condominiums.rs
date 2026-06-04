@@ -488,8 +488,11 @@ pub async fn condominiums(
         let page = repository
             .list_relational_condominiums_page(&context.tenant_id, &filter)
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar condominios na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar condominios na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }

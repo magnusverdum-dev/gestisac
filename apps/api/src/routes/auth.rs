@@ -382,13 +382,21 @@ pub async fn current_context(
         let session = repository
             .find_active_session_by_token_hash(&token_hash, Utc::now())
             .await
-            .map_err(|_| ApiError::internal("Nao foi possivel validar sessao na base de dados"))?;
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel validar sessao na base de dados",
+                    error,
+                )
+            })?;
         if let Some(session) = session {
             let mut user = repository
                 .find_public_user(&session.tenant_id, &session.user_id)
                 .await
-                .map_err(|_| {
-                    ApiError::internal("Nao foi possivel carregar utilizador da base de dados")
+                .map_err(|error| {
+                    ApiError::internal_with_source(
+                        "Nao foi possivel carregar utilizador da base de dados",
+                        error,
+                    )
                 })?
                 .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
             let active_condominium = if session.active_condominium.is_empty() {

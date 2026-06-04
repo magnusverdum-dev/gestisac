@@ -709,6 +709,7 @@ dependencies = [
  "axum",
  "calamine",
  "chrono",
+ "dotenvy",
  "http-body-util",
  "qrcode",
  "rand_core",

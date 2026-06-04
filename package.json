@@ -50,6 +50,12 @@
     "clippy:api": "node scripts/run-cargo.mjs clippy --manifest-path apps/api/Cargo.toml -- -D warnings",
     "test:api": "node scripts/run-cargo.mjs test --manifest-path apps/api/Cargo.toml",
     "smoke:api": "node scripts/smoke-api.mjs",
+    "check:prod-api": "node scripts/check-production-api.mjs",
+    "check:prod-env": "node scripts/check-production-env.mjs",
+    "build:postgres-seed": "node scripts/build-postgres-snapshot-seed.mjs",
+    "deploy:api:prod": "npx vercel deploy --prod --yes --cwd apps/api",
+    "deploy:web:build": "node scripts/vercel-build-web-production.mjs",
+    "deploy:web:prod": "npx vercel deploy --prebuilt --prod --yes --cwd apps/web",
     "migrate:json-to-postgres": "node scripts/migrate-json-to-postgres.mjs"
   },
   "devDependencies": {

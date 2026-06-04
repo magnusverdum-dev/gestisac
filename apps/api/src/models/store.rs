@@ -678,10 +678,7 @@ pub struct CondominiumOnboardingDraft {
 impl Condominium {
     pub fn ensure_profile_defaults(&mut self) {
         if self.internal_code.trim().is_empty() {
-            self.internal_code = format!(
-                "COND-{}",
-                self.name.chars().take(6).collect::<String>().to_uppercase()
-            );
+            self.internal_code = generated_condominium_internal_code(&self.name, &self.id);
         }
         if self.condominium_type.trim().is_empty() {
             self.condominium_type = "residencial".to_string();
@@ -747,6 +744,41 @@ impl Condominium {
         self.history.truncate(300);
         self.touch();
     }
+}
+
+fn generated_condominium_internal_code(name: &str, id: &str) -> String {
+    let base = internal_code_slug(name);
+    let suffix = id
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .take(8)
+        .collect::<String>()
+        .to_ascii_uppercase();
+
+    match (base.is_empty(), suffix.is_empty()) {
+        (false, false) => format!("COND-{base}-{suffix}"),
+        (false, true) => format!("COND-{base}"),
+        (true, false) => format!("COND-{suffix}"),
+        (true, true) => "COND-SEM-CODIGO".to_string(),
+    }
+}
+
+fn internal_code_slug(value: &str) -> String {
+    let mut slug = String::new();
+
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character.to_ascii_uppercase());
+        } else if !slug.ends_with('-') && !slug.is_empty() {
+            slug.push('-');
+        }
+
+        if slug.len() >= 16 {
+            break;
+        }
+    }
+
+    slug.trim_matches('-').to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -3022,6 +3054,41 @@ mod tests {
         let demo: DemoData = serde_json::from_str(include_str!("../../../../mock/demo-data.json"))
             .expect("demo-data.json must remain valid test fixture JSON");
         AppStore::seed_from_demo(&demo, "password-hash".to_string())
+    }
+
+    #[test]
+    fn condominium_defaults_generate_unique_internal_codes_from_id() {
+        let mut first = Condominium {
+            id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_string(),
+            name: "Smoke Condominio 1".to_string(),
+            ..Default::default()
+        };
+        let mut second = Condominium {
+            id: "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee".to_string(),
+            name: "Smoke Condominio 2".to_string(),
+            ..Default::default()
+        };
+
+        first.ensure_profile_defaults();
+        second.ensure_profile_defaults();
+
+        assert_ne!(first.internal_code, second.internal_code);
+        assert!(first.internal_code.starts_with("COND-SMOKE-CONDOMIN"));
+        assert!(second.internal_code.starts_with("COND-SMOKE-CONDOMIN"));
+    }
+
+    #[test]
+    fn condominium_defaults_keep_manual_internal_code() {
+        let mut condominium = Condominium {
+            id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_string(),
+            name: "Edificio Manual".to_string(),
+            internal_code: "MANUAL-001".to_string(),
+            ..Default::default()
+        };
+
+        condominium.ensure_profile_defaults();
+
+        assert_eq!(condominium.internal_code, "MANUAL-001");
     }
 
     // ── Accounting ──

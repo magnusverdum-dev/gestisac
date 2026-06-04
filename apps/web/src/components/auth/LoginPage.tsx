@@ -88,6 +88,11 @@ export const LoginPage = component$((props: LoginPageProps) => {
           <button class="primary-action" type="submit" disabled={props.isLoading}>
             {props.isLoading ? 'A entrar...' : 'Entrar'}
           </button>
+          {props.isLoading ? (
+            <p class="form-hint">
+              A ligar a API online. No primeiro arranque pode demorar alguns segundos.
+            </p>
+          ) : null}
           <button
             class="secondary-action"
             type="button"

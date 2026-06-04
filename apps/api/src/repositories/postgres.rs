@@ -12,10 +12,33 @@ use anyhow::{bail, Context};
 use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use sqlx::{migrate::Migrator, postgres::PgPoolOptions, PgPool, Postgres, QueryBuilder};
+use sqlx::{
+    migrate::Migrator,
+    postgres::{PgConnectOptions, PgPoolOptions},
+    PgPool, Postgres, QueryBuilder,
+};
+use std::str::FromStr;
 use uuid::Uuid;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
+
+macro_rules! query_np {
+    ($sql:expr $(,)?) => {
+        sqlx::query($sql).persistent(false)
+    };
+}
+
+macro_rules! query_as_np {
+    ($sql:expr $(,)?) => {
+        sqlx::query_as($sql).persistent(false)
+    };
+}
+
+macro_rules! query_scalar_np {
+    ($sql:expr $(,)?) => {
+        sqlx::query_scalar($sql).persistent(false)
+    };
+}
 
 #[derive(Debug, Clone)]
 pub struct PostgresRepository {
@@ -159,9 +182,11 @@ pub struct RelationalCalendarEventFilter<'a> {
 
 impl PostgresRepository {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
+        // Supabase transaction poolers do not support cached prepared statements.
+        let connect_options = PgConnectOptions::from_str(database_url)?.statement_cache_capacity(0);
         let pool = PgPoolOptions::new()
-            .max_connections(8)
-            .connect(database_url)
+            .max_connections(database_pool_max_connections())
+            .connect_with(connect_options)
             .await?;
         Ok(Self { pool })
     }
@@ -184,7 +209,7 @@ impl PostgresRepository {
             payload: Value,
         }
 
-        let rows: Vec<Row> = sqlx::query_as(
+        let rows: Vec<Row> = query_as_np!(
             r#"
             SELECT payload
             FROM (
@@ -203,12 +228,10 @@ impl PostgresRepository {
         .await
         .context("failed to load chat messages from postgres")?;
 
-        rows.into_iter()
-            .map(|row| {
-                serde_json::from_value::<ChatMessage>(row.payload)
-                    .context("failed to decode chat message payload")
-            })
-            .collect()
+        Ok(decode_payload_values(
+            rows.into_iter().map(|row| row.payload),
+            "chat message",
+        ))
     }
 
     pub async fn replace_chat_messages(
@@ -221,7 +244,7 @@ impl PostgresRepository {
             .begin()
             .await
             .context("failed to begin postgres transaction for chat messages")?;
-        sqlx::query("DELETE FROM chat_message_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM chat_message_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
@@ -273,7 +296,7 @@ impl PostgresRepository {
             refresh_expires_at: DateTime<Utc>,
         }
 
-        let row: Option<Row> = sqlx::query_as(
+        let row: Option<Row> = query_as_np!(
             r#"
             SELECT tenant_id, user_id, token_hash, refresh_token_hash,
                    active_condominium, app_context, created_at, expires_at, refresh_expires_at
@@ -317,7 +340,7 @@ impl PostgresRepository {
             active_condominium_id: String,
         }
 
-        let row: Option<Row> = sqlx::query_as(
+        let row: Option<Row> = query_as_np!(
             r#"
             SELECT id, tenant_id, name, email, role, active_condominium_id
             FROM users
@@ -341,6 +364,7 @@ impl PostgresRepository {
             WHERE tenant_id = $1 AND deleted_at IS NULL
             "#,
         )
+        .persistent(false)
         .bind(tenant_id)
         .fetch_one(&self.pool)
         .await
@@ -362,10 +386,15 @@ impl PostgresRepository {
         tenant_id: &str,
         page: usize,
         page_size: usize,
-    ) -> anyhow::Result<Paginated<UserAccount>> {
+    ) -> anyhow::Result<Paginated<PublicUser>> {
         #[derive(sqlx::FromRow)]
         struct Row {
-            metadata: Value,
+            id: String,
+            tenant_id: String,
+            name: String,
+            email: String,
+            role: String,
+            active_condominium_id: String,
         }
 
         let page = normalized_page(page);
@@ -377,14 +406,28 @@ impl PostgresRepository {
             WHERE tenant_id = $1 AND deleted_at IS NULL
             "#,
         )
+        .persistent(false)
         .bind(tenant_id)
         .fetch_one(&self.pool)
         .await
         .context("failed to count relational users from postgres")?;
 
-        let rows: Vec<Row> = sqlx::query_as(
+        let active_condominiums = sqlx::query_scalar::<_, i64>(
             r#"
-            SELECT metadata
+            SELECT COUNT(*)::BIGINT
+            FROM condominiums
+            WHERE tenant_id = $1 AND deleted_at IS NULL
+            "#,
+        )
+        .persistent(false)
+        .bind(tenant_id)
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to count relational condominiums for users from postgres")?;
+
+        let rows: Vec<Row> = query_as_np!(
+            r#"
+            SELECT id, tenant_id, name, email, role, active_condominium_id
             FROM users
             WHERE tenant_id = $1 AND deleted_at IS NULL
             ORDER BY lower(name) ASC
@@ -398,13 +441,19 @@ impl PostgresRepository {
         .await
         .context("failed to list relational users from postgres")?;
 
+        let active_condominiums = usize_from_i64(active_condominiums);
         let items = rows
             .into_iter()
-            .map(|row| {
-                serde_json::from_value::<UserAccount>(row.metadata)
-                    .context("failed to decode relational user metadata")
+            .map(|row| PublicUser {
+                id: row.id,
+                tenant_id: row.tenant_id,
+                name: row.name,
+                email: row.email,
+                role: row.role,
+                active_condominium: row.active_condominium_id,
+                active_condominiums,
             })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+            .collect();
 
         Ok(sql_page(items, page, page_size, total))
     }
@@ -428,6 +477,7 @@ impl PostgresRepository {
         append_condominium_filters(&mut count, filter);
         let total = count
             .build_query_scalar::<i64>()
+            .persistent(false)
             .fetch_one(&self.pool)
             .await
             .context("failed to count relational condominiums from postgres")?;
@@ -443,17 +493,16 @@ impl PostgresRepository {
 
         let rows: Vec<Row> = query
             .build_query_as()
+            .persistent(false)
             .fetch_all(&self.pool)
             .await
             .context("failed to list relational condominiums from postgres")?;
 
-        let items = rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Condominium>(row.metadata)
-                    .context("failed to decode relational condominium metadata")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let items = decode_json_values(
+            rows.into_iter().map(|row| row.metadata),
+            "relational metadata",
+            "condominium",
+        );
 
         Ok(sql_page(items, page, page_size, total))
     }
@@ -477,6 +526,7 @@ impl PostgresRepository {
         append_ocorrencia_filters(&mut count, filter);
         let total = count
             .build_query_scalar::<i64>()
+            .persistent(false)
             .fetch_one(&self.pool)
             .await
             .context("failed to count relational ocorrencias from postgres")?;
@@ -492,17 +542,16 @@ impl PostgresRepository {
 
         let rows: Vec<Row> = query
             .build_query_as()
+            .persistent(false)
             .fetch_all(&self.pool)
             .await
             .context("failed to list relational ocorrencias from postgres")?;
 
-        let items = rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Ocorrencia>(row.metadata)
-                    .context("failed to decode relational ocorrencia metadata")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let items = decode_json_values(
+            rows.into_iter().map(|row| row.metadata),
+            "relational metadata",
+            "ocorrencia",
+        );
 
         Ok(sql_page(items, page, page_size, total))
     }
@@ -533,6 +582,7 @@ impl PostgresRepository {
         }
         let total = count
             .build_query_scalar::<i64>()
+            .persistent(false)
             .fetch_one(&self.pool)
             .await
             .context("failed to count legacy tickets from postgres")?;
@@ -552,17 +602,12 @@ impl PostgresRepository {
 
         let rows: Vec<Row> = query
             .build_query_as()
+            .persistent(false)
             .fetch_all(&self.pool)
             .await
             .context("failed to list legacy tickets from postgres")?;
 
-        let items = rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Ticket>(row.payload)
-                    .context("failed to decode legacy ticket payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let items = decode_payload_values(rows.into_iter().map(|row| row.payload), "legacy ticket");
 
         Ok(sql_page(items, page, page_size, total))
     }
@@ -601,7 +646,7 @@ impl PostgresRepository {
             payload: Value,
         }
 
-        let rows: Vec<CondominiumSnapshotRow> = sqlx::query_as(
+        let rows: Vec<CondominiumSnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM condominium_snapshots
@@ -614,12 +659,10 @@ impl PostgresRepository {
         .await
         .context("failed to load condominium snapshots from postgres")?;
 
-        rows.into_iter()
-            .map(|row| {
-                serde_json::from_value::<Condominium>(row.payload)
-                    .context("failed to decode condominium snapshot payload")
-            })
-            .collect()
+        Ok(decode_payload_values(
+            rows.into_iter().map(|row| row.payload),
+            "condominium",
+        ))
     }
 
     pub async fn replace_condominiums(
@@ -633,14 +676,14 @@ impl PostgresRepository {
             .await
             .context("failed to begin postgres transaction for condominiums")?;
 
-        sqlx::query("DELETE FROM condominium_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM condominium_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear condominium snapshots in postgres")?;
 
         let now = Utc::now();
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE condominiums
             SET deleted_at = $2, updated_at = $2
@@ -688,14 +731,14 @@ impl PostgresRepository {
             .context("failed to begin postgres transaction for condominium delete")?;
         let now = Utc::now();
 
-        sqlx::query("DELETE FROM condominium_snapshots WHERE tenant_id = $1 AND id = $2")
+        query_np!("DELETE FROM condominium_snapshots WHERE tenant_id = $1 AND id = $2")
             .bind(tenant_id)
             .bind(id)
             .execute(&mut *tx)
             .await
             .context("failed to delete condominium snapshot from postgres")?;
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE condominiums
             SET deleted_at = $3, updated_at = $3
@@ -718,7 +761,7 @@ impl PostgresRepository {
         &self,
         tenant_id: &str,
     ) -> anyhow::Result<PropertyStructureSnapshot> {
-        let building_rows: Vec<MetadataRow> = sqlx::query_as(
+        let building_rows: Vec<MetadataRow> = query_as_np!(
             r#"
             SELECT metadata
             FROM buildings
@@ -731,7 +774,7 @@ impl PostgresRepository {
         .await
         .context("failed to load relational buildings from postgres")?;
 
-        let fraction_rows: Vec<MetadataRow> = sqlx::query_as(
+        let fraction_rows: Vec<MetadataRow> = query_as_np!(
             r#"
             SELECT metadata
             FROM fractions
@@ -744,7 +787,7 @@ impl PostgresRepository {
         .await
         .context("failed to load relational fractions from postgres")?;
 
-        let resident_rows: Vec<MetadataRow> = sqlx::query_as(
+        let resident_rows: Vec<MetadataRow> = query_as_np!(
             r#"
             SELECT metadata
             FROM residents
@@ -778,7 +821,7 @@ impl PostgresRepository {
             .context("failed to begin postgres transaction for property structure")?;
         let now = Utc::now();
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE residents
             SET deleted_at = $2, updated_at = $2
@@ -791,7 +834,7 @@ impl PostgresRepository {
         .await
         .context("failed to soft-delete stale residents in postgres")?;
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE fractions
             SET deleted_at = $2, updated_at = $2
@@ -804,7 +847,7 @@ impl PostgresRepository {
         .await
         .context("failed to soft-delete stale fractions in postgres")?;
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE buildings
             SET deleted_at = $2, updated_at = $2
@@ -972,7 +1015,7 @@ impl PostgresRepository {
             refresh_expires_at: chrono::DateTime<Utc>,
         }
 
-        let rows: Vec<SessionRow> = sqlx::query_as(
+        let rows: Vec<SessionRow> = query_as_np!(
             r#"
             SELECT tenant_id, user_id, token_hash, refresh_token_hash,
                    active_condominium, app_context, created_at, expires_at, refresh_expires_at
@@ -1011,12 +1054,12 @@ impl PostgresRepository {
             .await
             .context("failed to begin postgres transaction for sessions")?;
 
-        sqlx::query("DELETE FROM app_sessions WHERE tenant_id = $1")
+        query_np!("DELETE FROM app_sessions WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear tenant sessions in postgres")?;
-        sqlx::query("DELETE FROM sessions WHERE tenant_id = $1")
+        query_np!("DELETE FROM sessions WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
@@ -1026,7 +1069,7 @@ impl PostgresRepository {
             .iter()
             .filter(|session| session.tenant_id == tenant_id)
         {
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO app_sessions
                     (id, tenant_id, user_id, token_hash, refresh_token_hash, active_condominium,
@@ -1054,7 +1097,7 @@ impl PostgresRepository {
                 )
             })?;
 
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO sessions
                     (id, tenant_id, user_id, app_context, token_hash, refresh_token_hash,
@@ -1100,7 +1143,7 @@ impl PostgresRepository {
             .context("failed to begin postgres transaction for session upsert")?;
 
         if let Some(previous) = previous {
-            sqlx::query(
+            query_np!(
                 r#"
                 DELETE FROM app_sessions
                 WHERE tenant_id = $1 AND (token_hash = $2 OR refresh_token_hash = $3)
@@ -1113,7 +1156,7 @@ impl PostgresRepository {
             .await
             .context("failed to remove previous app session from postgres")?;
 
-            sqlx::query(
+            query_np!(
                 r#"
                 DELETE FROM sessions
                 WHERE tenant_id = $1 AND (token_hash = $2 OR refresh_token_hash = $3)
@@ -1127,7 +1170,7 @@ impl PostgresRepository {
             .context("failed to remove previous relational session from postgres")?;
         }
 
-        sqlx::query(
+        query_np!(
             r#"
             DELETE FROM app_sessions
             WHERE tenant_id = $1 AND (token_hash = $2 OR refresh_token_hash = $3)
@@ -1140,7 +1183,7 @@ impl PostgresRepository {
         .await
         .context("failed to remove duplicate app session from postgres")?;
 
-        sqlx::query(
+        query_np!(
             r#"
             DELETE FROM sessions
             WHERE tenant_id = $1 AND (token_hash = $2 OR refresh_token_hash = $3)
@@ -1171,14 +1214,14 @@ impl PostgresRepository {
             .await
             .context("failed to begin postgres transaction for session delete")?;
 
-        sqlx::query("DELETE FROM app_sessions WHERE tenant_id = $1 AND token_hash = $2")
+        query_np!("DELETE FROM app_sessions WHERE tenant_id = $1 AND token_hash = $2")
             .bind(tenant_id)
             .bind(token_hash)
             .execute(&mut *tx)
             .await
             .context("failed to delete app session from postgres")?;
 
-        sqlx::query("DELETE FROM sessions WHERE tenant_id = $1 AND token_hash = $2")
+        query_np!("DELETE FROM sessions WHERE tenant_id = $1 AND token_hash = $2")
             .bind(tenant_id)
             .bind(token_hash)
             .execute(&mut *tx)
@@ -1204,7 +1247,7 @@ impl PostgresRepository {
             .context("failed to begin postgres transaction for active condominium update")?;
         let now = Utc::now();
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE app_sessions
             SET active_condominium = $4
@@ -1219,7 +1262,7 @@ impl PostgresRepository {
         .await
         .context("failed to update app session active condominium in postgres")?;
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE sessions
             SET active_condominium_id = $4
@@ -1234,7 +1277,7 @@ impl PostgresRepository {
         .await
         .context("failed to update relational session active condominium in postgres")?;
 
-        let user_result = sqlx::query(
+        let user_result = query_np!(
             r#"
             UPDATE users
             SET active_condominium_id = $3, updated_at = $4
@@ -1254,7 +1297,7 @@ impl PostgresRepository {
             user_id,
         )?;
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE user_snapshots
             SET payload = jsonb_set(payload, '{activeCondominium}', to_jsonb($3::text), true),
@@ -1284,7 +1327,7 @@ impl PostgresRepository {
             payload: Value,
         }
 
-        let ocorrencias_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let ocorrencias_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM ocorrencia_snapshots
@@ -1297,7 +1340,7 @@ impl PostgresRepository {
         .await
         .context("failed to load ocorrencia snapshots from postgres")?;
 
-        let comentarios_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let comentarios_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM ocorrencia_comment_snapshots
@@ -1310,7 +1353,7 @@ impl PostgresRepository {
         .await
         .context("failed to load ocorrencia comments from postgres")?;
 
-        let anexos_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let anexos_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM ocorrencia_attachment_snapshots
@@ -1323,29 +1366,18 @@ impl PostgresRepository {
         .await
         .context("failed to load ocorrencia attachments from postgres")?;
 
-        let ocorrencias = ocorrencias_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Ocorrencia>(row.payload)
-                    .context("failed to decode ocorrencia snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let comentarios = comentarios_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<OcorrenciaComentario>(row.payload)
-                    .context("failed to decode ocorrencia comment payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let anexos = anexos_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<OcorrenciaAnexo>(row.payload)
-                    .context("failed to decode ocorrencia attachment payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let ocorrencias = decode_payload_values(
+            ocorrencias_rows.into_iter().map(|row| row.payload),
+            "ocorrencia",
+        );
+        let comentarios = decode_payload_values(
+            comentarios_rows.into_iter().map(|row| row.payload),
+            "ocorrencia comment",
+        );
+        let anexos = decode_payload_values(
+            anexos_rows.into_iter().map(|row| row.payload),
+            "ocorrencia attachment",
+        );
 
         Ok(OcorrenciasSnapshot {
             ocorrencias,
@@ -1367,37 +1399,37 @@ impl PostgresRepository {
             .await
             .context("failed to begin postgres transaction for ocorrencias")?;
 
-        sqlx::query("DELETE FROM ocorrencia_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM ocorrencia_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear ocorrencia snapshots in postgres")?;
-        sqlx::query("DELETE FROM ocorrencia_comment_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM ocorrencia_comment_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear ocorrencia comments in postgres")?;
-        sqlx::query("DELETE FROM ocorrencia_attachment_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM ocorrencia_attachment_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear ocorrencia attachments in postgres")?;
-        sqlx::query("DELETE FROM ticket_attachments WHERE tenant_id = $1")
+        query_np!("DELETE FROM ticket_attachments WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear relational ticket attachments in postgres")?;
-        sqlx::query("DELETE FROM ticket_comments WHERE tenant_id = $1")
+        query_np!("DELETE FROM ticket_comments WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear relational ticket comments in postgres")?;
-        sqlx::query("DELETE FROM ticket_events WHERE tenant_id = $1")
+        query_np!("DELETE FROM ticket_events WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear relational ticket events in postgres")?;
-        sqlx::query("DELETE FROM tickets WHERE tenant_id = $1")
+        query_np!("DELETE FROM tickets WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
@@ -1488,7 +1520,7 @@ impl PostgresRepository {
             .context("failed to begin postgres transaction for ocorrencia attachment delete")?;
         let now = Utc::now();
 
-        sqlx::query(
+        query_np!(
             r#"
             DELETE FROM ocorrencia_attachment_snapshots
             WHERE tenant_id = $1 AND ocorrencia_id = $2 AND id = $3
@@ -1501,7 +1533,7 @@ impl PostgresRepository {
         .await
         .context("failed to delete ocorrencia attachment snapshot from postgres")?;
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE ticket_attachments
             SET deleted_at = $4
@@ -1529,13 +1561,13 @@ impl PostgresRepository {
             .context("failed to begin postgres transaction for ocorrencia delete")?;
         let now = Utc::now();
 
-        sqlx::query("DELETE FROM ocorrencia_snapshots WHERE tenant_id = $1 AND id = $2")
+        query_np!("DELETE FROM ocorrencia_snapshots WHERE tenant_id = $1 AND id = $2")
             .bind(tenant_id)
             .bind(id)
             .execute(&mut *tx)
             .await
             .context("failed to delete ocorrencia snapshot from postgres")?;
-        sqlx::query(
+        query_np!(
             "DELETE FROM ocorrencia_comment_snapshots WHERE tenant_id = $1 AND ocorrencia_id = $2",
         )
         .bind(tenant_id)
@@ -1543,14 +1575,14 @@ impl PostgresRepository {
         .execute(&mut *tx)
         .await
         .context("failed to delete ocorrencia comment snapshots from postgres")?;
-        sqlx::query("DELETE FROM ocorrencia_attachment_snapshots WHERE tenant_id = $1 AND ocorrencia_id = $2")
+        query_np!("DELETE FROM ocorrencia_attachment_snapshots WHERE tenant_id = $1 AND ocorrencia_id = $2")
             .bind(tenant_id)
             .bind(id)
             .execute(&mut *tx)
             .await
             .context("failed to delete ocorrencia attachment snapshots from postgres")?;
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE tickets
             SET deleted_at = $3, updated_at = $3
@@ -1564,7 +1596,7 @@ impl PostgresRepository {
         .await
         .context("failed to soft-delete relational ticket from postgres")?;
 
-        sqlx::query(
+        query_np!(
             "UPDATE ticket_comments SET deleted_at = $3 WHERE tenant_id = $1 AND ticket_id = $2",
         )
         .bind(tenant_id)
@@ -1574,7 +1606,7 @@ impl PostgresRepository {
         .await
         .context("failed to soft-delete relational ticket comments from postgres")?;
 
-        sqlx::query(
+        query_np!(
             "UPDATE ticket_attachments SET deleted_at = $3 WHERE tenant_id = $1 AND ticket_id = $2",
         )
         .bind(tenant_id)
@@ -1598,7 +1630,7 @@ impl PostgresRepository {
             payload: Value,
         }
 
-        let tenant_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let tenant_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM tenant_snapshots
@@ -1610,20 +1642,31 @@ impl PostgresRepository {
         .await
         .context("failed to load tenant snapshots from postgres")?;
 
-        let user_rows: Vec<SnapshotRow> = sqlx::query_as(
+        #[derive(sqlx::FromRow)]
+        struct UserRow {
+            id: String,
+            tenant_id: String,
+            name: String,
+            email: String,
+            role: String,
+            password_hash: String,
+            active_condominium_id: String,
+        }
+
+        let user_rows: Vec<UserRow> = query_as_np!(
             r#"
-            SELECT payload
-            FROM user_snapshots
-            WHERE tenant_id = $1
-            ORDER BY lower(COALESCE(payload->>'name', email)) ASC
+            SELECT id, tenant_id, name, email, role, password_hash, active_condominium_id
+            FROM users
+            WHERE tenant_id = $1 AND deleted_at IS NULL
+            ORDER BY lower(name) ASC
             "#,
         )
         .bind(tenant_id)
         .fetch_all(&self.pool)
         .await
-        .context("failed to load user snapshots from postgres")?;
+        .context("failed to load relational users from postgres")?;
 
-        let audit_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let audit_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM audit_log_snapshots
@@ -1636,29 +1679,22 @@ impl PostgresRepository {
         .await
         .context("failed to load audit log snapshots from postgres")?;
 
-        let tenants = tenant_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Tenant>(row.payload)
-                    .context("failed to decode tenant snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
+        let tenants =
+            decode_payload_values(tenant_rows.into_iter().map(|row| row.payload), "tenant");
         let users = user_rows
             .into_iter()
-            .map(|row| {
-                serde_json::from_value::<UserAccount>(row.payload)
-                    .context("failed to decode user snapshot payload")
+            .map(|row| UserAccount {
+                id: row.id,
+                tenant_id: row.tenant_id,
+                name: row.name,
+                email: row.email,
+                role: row.role,
+                password_hash: row.password_hash,
+                active_condominium: row.active_condominium_id,
             })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let audit_log = audit_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<AuditLogEntry>(row.payload)
-                    .context("failed to decode audit log snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+            .collect();
+        let audit_log =
+            decode_payload_values(audit_rows.into_iter().map(|row| row.payload), "audit log");
 
         Ok(IdentitySnapshot {
             tenants,
@@ -1680,17 +1716,17 @@ impl PostgresRepository {
             .await
             .context("failed to begin postgres transaction for identity snapshots")?;
 
-        sqlx::query("DELETE FROM tenant_snapshots WHERE id = $1")
+        query_np!("DELETE FROM tenant_snapshots WHERE id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear tenant snapshots in postgres")?;
-        sqlx::query("DELETE FROM user_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM user_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear user snapshots in postgres")?;
-        sqlx::query("DELETE FROM audit_log_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM audit_log_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
@@ -1700,7 +1736,7 @@ impl PostgresRepository {
         if let Some(tenant) = tenants.iter().find(|candidate| candidate.id == tenant_id) {
             let payload = serde_json::to_value(tenant)
                 .context("failed to encode tenant payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO tenant_snapshots
                     (id, name, slug, status, payload, created_at, updated_at)
@@ -1723,7 +1759,7 @@ impl PostgresRepository {
                     tenant.id
                 )
             })?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO tenants
                     (id, name, slug, status, metadata, created_at, updated_at, deleted_at)
@@ -1757,9 +1793,9 @@ impl PostgresRepository {
             .iter()
             .filter(|candidate| candidate.tenant_id == tenant_id)
         {
-            let payload =
-                serde_json::to_value(user).context("failed to encode user payload for postgres")?;
-            sqlx::query(
+            let payload = sanitized_user_json(user)
+                .context("failed to encode safe user payload for postgres")?;
+            query_np!(
                 r#"
                 INSERT INTO user_snapshots
                     (id, tenant_id, email, role, payload, created_at, updated_at)
@@ -1778,7 +1814,7 @@ impl PostgresRepository {
             .await
             .with_context(|| format!("failed to persist user snapshot {} in postgres", user.id))?;
 
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO users
                     (id, tenant_id, name, email, role, password_hash, active_condominium_id,
@@ -1805,8 +1841,8 @@ impl PostgresRepository {
             .bind(&user.password_hash)
             .bind(&user.active_condominium)
             .bind(
-                serde_json::to_value(user)
-                    .context("failed to encode user metadata for relational postgres")?,
+                sanitized_user_json(user)
+                    .context("failed to encode safe user metadata for relational postgres")?,
             )
             .bind(now)
             .bind(now)
@@ -1818,7 +1854,7 @@ impl PostgresRepository {
         for entry in audit_log {
             let payload = serde_json::to_value(entry)
                 .context("failed to encode audit log payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO audit_log_snapshots
                     (id, tenant_id, module, action, created_at, payload)
@@ -1856,7 +1892,7 @@ impl PostgresRepository {
             payload: Value,
         }
 
-        let ticket_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let ticket_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM ticket_snapshots
@@ -1869,7 +1905,7 @@ impl PostgresRepository {
         .await
         .context("failed to load ticket snapshots from postgres")?;
 
-        let maintenance_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let maintenance_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM maintenance_snapshots
@@ -1882,7 +1918,7 @@ impl PostgresRepository {
         .await
         .context("failed to load maintenance snapshots from postgres")?;
 
-        let inspection_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let inspection_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM inspection_snapshots
@@ -1895,7 +1931,7 @@ impl PostgresRepository {
         .await
         .context("failed to load inspection snapshots from postgres")?;
 
-        let calendar_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let calendar_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM calendar_event_snapshots
@@ -1908,7 +1944,7 @@ impl PostgresRepository {
         .await
         .context("failed to load calendar event snapshots from postgres")?;
 
-        let assembly_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let assembly_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM assembly_snapshots
@@ -1921,45 +1957,22 @@ impl PostgresRepository {
         .await
         .context("failed to load assembly snapshots from postgres")?;
 
-        let tickets = ticket_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Ticket>(row.payload)
-                    .context("failed to decode ticket snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let maintenance = maintenance_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<MaintenanceItem>(row.payload)
-                    .context("failed to decode maintenance snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let inspections = inspection_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Inspection>(row.payload)
-                    .context("failed to decode inspection snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let calendar_events = calendar_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<CalendarEvent>(row.payload)
-                    .context("failed to decode calendar event snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let assemblies = assembly_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Assembly>(row.payload)
-                    .context("failed to decode assembly snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let tickets =
+            decode_payload_values(ticket_rows.into_iter().map(|row| row.payload), "ticket");
+        let maintenance = decode_payload_values(
+            maintenance_rows.into_iter().map(|row| row.payload),
+            "maintenance",
+        );
+        let inspections = decode_payload_values(
+            inspection_rows.into_iter().map(|row| row.payload),
+            "inspection",
+        );
+        let calendar_events = decode_payload_values(
+            calendar_rows.into_iter().map(|row| row.payload),
+            "calendar event",
+        );
+        let assemblies =
+            decode_payload_values(assembly_rows.into_iter().map(|row| row.payload), "assembly");
 
         Ok(OperationalSnapshot {
             tickets,
@@ -1985,34 +1998,34 @@ impl PostgresRepository {
             .await
             .context("failed to begin postgres transaction for operational snapshots")?;
 
-        sqlx::query("DELETE FROM ticket_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM ticket_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear ticket snapshots in postgres")?;
-        sqlx::query("DELETE FROM maintenance_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM maintenance_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear maintenance snapshots in postgres")?;
-        sqlx::query("DELETE FROM inspection_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM inspection_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear inspection snapshots in postgres")?;
-        sqlx::query("DELETE FROM calendar_event_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM calendar_event_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear calendar event snapshots in postgres")?;
-        sqlx::query("DELETE FROM assembly_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM assembly_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear assembly snapshots in postgres")?;
 
         let now = Utc::now();
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE calendar_events
             SET deleted_at = $2, updated_at = $2
@@ -2024,7 +2037,7 @@ impl PostgresRepository {
         .execute(&mut *tx)
         .await
         .context("failed to soft-delete stale calendar events in postgres")?;
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE inspections
             SET deleted_at = $2, updated_at = $2
@@ -2036,7 +2049,7 @@ impl PostgresRepository {
         .execute(&mut *tx)
         .await
         .context("failed to soft-delete stale inspections in postgres")?;
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE maintenance_items
             SET deleted_at = $2, updated_at = $2
@@ -2052,7 +2065,7 @@ impl PostgresRepository {
         for ticket in tickets {
             let payload = serde_json::to_value(ticket)
                 .context("failed to encode ticket payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO ticket_snapshots
                     (id, tenant_id, status, priority, condominium, payload, created_at, updated_at)
@@ -2318,7 +2331,7 @@ impl PostgresRepository {
             payload: Value,
         }
 
-        let supplier_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let supplier_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM supplier_snapshots
@@ -2331,7 +2344,7 @@ impl PostgresRepository {
         .await
         .context("failed to load supplier snapshots from postgres")?;
 
-        let document_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let document_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM document_snapshots
@@ -2344,7 +2357,7 @@ impl PostgresRepository {
         .await
         .context("failed to load document snapshots from postgres")?;
 
-        let report_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let report_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM report_snapshots
@@ -2357,29 +2370,12 @@ impl PostgresRepository {
         .await
         .context("failed to load report snapshots from postgres")?;
 
-        let suppliers = supplier_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Supplier>(row.payload)
-                    .context("failed to decode supplier snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let documents = document_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Document>(row.payload)
-                    .context("failed to decode document snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let reports = report_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Report>(row.payload)
-                    .context("failed to decode report snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let suppliers =
+            decode_payload_values(supplier_rows.into_iter().map(|row| row.payload), "supplier");
+        let documents =
+            decode_payload_values(document_rows.into_iter().map(|row| row.payload), "document");
+        let reports =
+            decode_payload_values(report_rows.into_iter().map(|row| row.payload), "report");
 
         Ok(DocumentalSnapshot {
             suppliers,
@@ -2401,24 +2397,24 @@ impl PostgresRepository {
             .await
             .context("failed to begin postgres transaction for documental snapshots")?;
 
-        sqlx::query("DELETE FROM supplier_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM supplier_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear supplier snapshots in postgres")?;
-        sqlx::query("DELETE FROM document_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM document_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear document snapshots in postgres")?;
-        sqlx::query("DELETE FROM report_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM report_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear report snapshots in postgres")?;
 
         let now = Utc::now();
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE suppliers
             SET deleted_at = $2, updated_at = $2
@@ -2431,7 +2427,7 @@ impl PostgresRepository {
         .await
         .context("failed to soft-delete stale suppliers in postgres")?;
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE document_links
             SET deleted_at = $2
@@ -2444,7 +2440,7 @@ impl PostgresRepository {
         .await
         .context("failed to soft-delete stale document links in postgres")?;
 
-        sqlx::query(
+        query_np!(
             r#"
             UPDATE documents
             SET deleted_at = $2, updated_at = $2
@@ -2631,7 +2627,7 @@ impl PostgresRepository {
             payload: Value,
         }
 
-        let quota_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let quota_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM quota_snapshots
@@ -2644,7 +2640,7 @@ impl PostgresRepository {
         .await
         .context("failed to load quota snapshots from postgres")?;
 
-        let payment_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let payment_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM accounting_payment_snapshots
@@ -2657,7 +2653,7 @@ impl PostgresRepository {
         .await
         .context("failed to load accounting payment snapshots from postgres")?;
 
-        let debt_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let debt_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM debt_snapshots
@@ -2670,7 +2666,7 @@ impl PostgresRepository {
         .await
         .context("failed to load debt snapshots from postgres")?;
 
-        let receipt_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let receipt_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM receipt_snapshots
@@ -2683,7 +2679,7 @@ impl PostgresRepository {
         .await
         .context("failed to load receipt snapshots from postgres")?;
 
-        let expense_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let expense_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM expense_snapshots
@@ -2696,7 +2692,7 @@ impl PostgresRepository {
         .await
         .context("failed to load expense snapshots from postgres")?;
 
-        let reserve_fund_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let reserve_fund_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM reserve_fund_snapshots
@@ -2709,7 +2705,7 @@ impl PostgresRepository {
         .await
         .context("failed to load reserve fund snapshots from postgres")?;
 
-        let payment_agreement_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let payment_agreement_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM payment_agreement_snapshots
@@ -2722,7 +2718,7 @@ impl PostgresRepository {
         .await
         .context("failed to load payment agreement snapshots from postgres")?;
 
-        let cash_movement_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let cash_movement_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM cash_movement_snapshots
@@ -2735,7 +2731,7 @@ impl PostgresRepository {
         .await
         .context("failed to load cash movement snapshots from postgres")?;
 
-        let bank_transaction_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let bank_transaction_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM bank_transaction_snapshots
@@ -2748,7 +2744,7 @@ impl PostgresRepository {
         .await
         .context("failed to load bank transaction snapshots from postgres")?;
 
-        let bank_reconciliation_rows: Vec<SnapshotRow> = sqlx::query_as(
+        let bank_reconciliation_rows: Vec<SnapshotRow> = query_as_np!(
             r#"
             SELECT payload
             FROM bank_reconciliation_snapshots
@@ -2761,85 +2757,36 @@ impl PostgresRepository {
         .await
         .context("failed to load bank reconciliation snapshots from postgres")?;
 
-        let quotas = quota_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Quota>(row.payload)
-                    .context("failed to decode quota snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let accounting_payments = payment_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<AccountingPayment>(row.payload)
-                    .context("failed to decode accounting payment snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let debts = debt_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Debt>(row.payload)
-                    .context("failed to decode debt snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let receipts = receipt_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Receipt>(row.payload)
-                    .context("failed to decode receipt snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let expenses = expense_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<Expense>(row.payload)
-                    .context("failed to decode expense snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let reserve_funds = reserve_fund_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<ReserveFund>(row.payload)
-                    .context("failed to decode reserve fund snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let payment_agreements = payment_agreement_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<PaymentAgreement>(row.payload)
-                    .context("failed to decode payment agreement snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let cash_movements = cash_movement_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<CashMovement>(row.payload)
-                    .context("failed to decode cash movement snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let bank_transactions = bank_transaction_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<BankTransaction>(row.payload)
-                    .context("failed to decode bank transaction snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let bank_reconciliations = bank_reconciliation_rows
-            .into_iter()
-            .map(|row| {
-                serde_json::from_value::<BankReconciliation>(row.payload)
-                    .context("failed to decode bank reconciliation snapshot payload")
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let quotas = decode_payload_values(quota_rows.into_iter().map(|row| row.payload), "quota");
+        let accounting_payments = decode_payload_values(
+            payment_rows.into_iter().map(|row| row.payload),
+            "accounting payment",
+        );
+        let debts = decode_payload_values(debt_rows.into_iter().map(|row| row.payload), "debt");
+        let receipts =
+            decode_payload_values(receipt_rows.into_iter().map(|row| row.payload), "receipt");
+        let expenses =
+            decode_payload_values(expense_rows.into_iter().map(|row| row.payload), "expense");
+        let reserve_funds = decode_payload_values(
+            reserve_fund_rows.into_iter().map(|row| row.payload),
+            "reserve fund",
+        );
+        let payment_agreements = decode_payload_values(
+            payment_agreement_rows.into_iter().map(|row| row.payload),
+            "payment agreement",
+        );
+        let cash_movements = decode_payload_values(
+            cash_movement_rows.into_iter().map(|row| row.payload),
+            "cash movement",
+        );
+        let bank_transactions = decode_payload_values(
+            bank_transaction_rows.into_iter().map(|row| row.payload),
+            "bank transaction",
+        );
+        let bank_reconciliations = decode_payload_values(
+            bank_reconciliation_rows.into_iter().map(|row| row.payload),
+            "bank reconciliation",
+        );
 
         Ok(FinancialSnapshot {
             quotas,
@@ -2866,52 +2813,52 @@ impl PostgresRepository {
             .await
             .context("failed to begin postgres transaction for financial snapshots")?;
 
-        sqlx::query("DELETE FROM quota_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM quota_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear quota snapshots in postgres")?;
-        sqlx::query("DELETE FROM accounting_payment_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM accounting_payment_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear accounting payment snapshots in postgres")?;
-        sqlx::query("DELETE FROM debt_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM debt_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear debt snapshots in postgres")?;
-        sqlx::query("DELETE FROM receipt_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM receipt_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear receipt snapshots in postgres")?;
-        sqlx::query("DELETE FROM expense_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM expense_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear expense snapshots in postgres")?;
-        sqlx::query("DELETE FROM reserve_fund_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM reserve_fund_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear reserve fund snapshots in postgres")?;
-        sqlx::query("DELETE FROM payment_agreement_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM payment_agreement_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear payment agreement snapshots in postgres")?;
-        sqlx::query("DELETE FROM cash_movement_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM cash_movement_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear cash movement snapshots in postgres")?;
-        sqlx::query("DELETE FROM bank_transaction_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM bank_transaction_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .context("failed to clear bank transaction snapshots in postgres")?;
-        sqlx::query("DELETE FROM bank_reconciliation_snapshots WHERE tenant_id = $1")
+        query_np!("DELETE FROM bank_reconciliation_snapshots WHERE tenant_id = $1")
             .bind(tenant_id)
             .execute(&mut *tx)
             .await
@@ -2921,7 +2868,7 @@ impl PostgresRepository {
         for quota in snapshot.quotas {
             let payload = serde_json::to_value(quota)
                 .context("failed to encode quota payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO quota_snapshots
                     (id, tenant_id, status, condominium, period, due_date, payload, created_at, updated_at)
@@ -2948,7 +2895,7 @@ impl PostgresRepository {
         for payment in snapshot.accounting_payments {
             let payload = serde_json::to_value(payment)
                 .context("failed to encode accounting payment payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO accounting_payment_snapshots
                     (id, tenant_id, status, condominium, paid_at, method,
@@ -2979,7 +2926,7 @@ impl PostgresRepository {
         for debt in snapshot.debts {
             let payload =
                 serde_json::to_value(debt).context("failed to encode debt payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO debt_snapshots
                     (id, tenant_id, status, condominium, due_date, days_overdue,
@@ -3005,7 +2952,7 @@ impl PostgresRepository {
         for receipt in snapshot.receipts {
             let payload = serde_json::to_value(receipt)
                 .context("failed to encode receipt payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO receipt_snapshots
                     (id, tenant_id, status, condominium, number, issued_at, payload, created_at, updated_at)
@@ -3035,7 +2982,7 @@ impl PostgresRepository {
         for expense in snapshot.expenses {
             let payload = serde_json::to_value(expense)
                 .context("failed to encode expense payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO expense_snapshots
                     (id, tenant_id, status, condominium, category, due_date,
@@ -3066,7 +3013,7 @@ impl PostgresRepository {
         for reserve_fund in snapshot.reserve_funds {
             let payload = serde_json::to_value(reserve_fund)
                 .context("failed to encode reserve fund payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO reserve_fund_snapshots
                     (id, tenant_id, status, condominium, payload, created_at, updated_at)
@@ -3094,7 +3041,7 @@ impl PostgresRepository {
         for agreement in snapshot.payment_agreements {
             let payload = serde_json::to_value(agreement)
                 .context("failed to encode payment agreement payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO payment_agreement_snapshots
                     (id, tenant_id, status, condominium, next_due_date, payload, created_at, updated_at)
@@ -3123,7 +3070,7 @@ impl PostgresRepository {
         for movement in snapshot.cash_movements {
             let payload = serde_json::to_value(movement)
                 .context("failed to encode cash movement payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO cash_movement_snapshots
                     (id, tenant_id, status, condominium, movement_type, account_type, occurred_at, payload, created_at, updated_at)
@@ -3154,7 +3101,7 @@ impl PostgresRepository {
         for transaction in snapshot.bank_transactions {
             let payload = serde_json::to_value(transaction)
                 .context("failed to encode bank transaction payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO bank_transaction_snapshots
                     (id, tenant_id, status, condominium, occurred_at, direction, payload, created_at, updated_at)
@@ -3184,7 +3131,7 @@ impl PostgresRepository {
         for reconciliation in snapshot.bank_reconciliations {
             let payload = serde_json::to_value(reconciliation)
                 .context("failed to encode bank reconciliation payload for postgres")?;
-            sqlx::query(
+            query_np!(
                 r#"
                 INSERT INTO bank_reconciliation_snapshots
                     (id, tenant_id, bank_transaction_id, target_type, target_id, reconciled_at, payload, created_at, updated_at)
@@ -3570,6 +3517,7 @@ impl PostgresRepository {
             WHERE tenant_id = $1 AND bank_transaction_id = $2
             "#,
         )
+        .persistent(false)
         .bind(tenant_id)
         .bind(&reconciliation.bank_transaction_id)
         .fetch_one(&mut *tx)
@@ -3672,6 +3620,7 @@ where
     }
     let total = count
         .build_query_scalar::<i64>()
+        .persistent(false)
         .fetch_one(pool)
         .await
         .with_context(|| format!("failed to count relational {}s from postgres", params.label))?;
@@ -3694,6 +3643,7 @@ where
 
     let rows: Vec<MetadataRow> = query
         .build_query_as()
+        .persistent(false)
         .fetch_all(pool)
         .await
         .with_context(|| format!("failed to list relational {}s from postgres", params.label))?;
@@ -3702,16 +3652,82 @@ where
     Ok(sql_page(items, page, page_size, total))
 }
 
+fn sanitized_user_json(user: &UserAccount) -> serde_json::Result<Value> {
+    let mut value = serde_json::to_value(user)?;
+    remove_user_secret_fields(&mut value);
+    Ok(value)
+}
+
+fn remove_user_secret_fields(value: &mut Value) {
+    if let Some(object) = value.as_object_mut() {
+        object.remove("passwordHash");
+        object.remove("password_hash");
+    }
+}
+
 fn decode_metadata_rows<T>(rows: Vec<MetadataRow>, label: &str) -> anyhow::Result<Vec<T>>
 where
     T: DeserializeOwned,
 {
-    rows.into_iter()
-        .map(|row| {
-            serde_json::from_value::<T>(row.metadata)
-                .with_context(|| format!("failed to decode relational {label} metadata"))
-        })
-        .collect()
+    Ok(decode_json_values(
+        rows.into_iter().map(|row| row.metadata),
+        "relational metadata",
+        label,
+    ))
+}
+
+fn decode_payload_values<T>(values: impl IntoIterator<Item = Value>, label: &str) -> Vec<T>
+where
+    T: DeserializeOwned,
+{
+    decode_json_values(values, "snapshot payload", label)
+}
+
+fn database_pool_max_connections() -> u32 {
+    std::env::var("GESTISAC_DATABASE_POOL_MAX")
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .map(|value| value.clamp(1, 8))
+        .unwrap_or(2)
+}
+
+fn decode_json_values<T>(
+    values: impl IntoIterator<Item = Value>,
+    source: &'static str,
+    label: &str,
+) -> Vec<T>
+where
+    T: DeserializeOwned,
+{
+    let mut items = Vec::new();
+    let mut skipped = 0usize;
+
+    for value in values {
+        match serde_json::from_value::<T>(value) {
+            Ok(item) => items.push(item),
+            Err(error) => {
+                skipped += 1;
+                tracing::warn!(
+                    %error,
+                    source,
+                    label,
+                    "skipping invalid postgres json row"
+                );
+            }
+        }
+    }
+
+    if skipped > 0 {
+        tracing::warn!(
+            source,
+            label,
+            skipped,
+            kept = items.len(),
+            "postgres json rows skipped"
+        );
+    }
+
+    items
 }
 
 async fn list_payload_page<T>(
@@ -3741,6 +3757,7 @@ where
     }
     let total = count
         .build_query_scalar::<i64>()
+        .persistent(false)
         .fetch_one(pool)
         .await
         .with_context(|| format!("failed to count {} snapshots from postgres", params.label))?;
@@ -3762,17 +3779,12 @@ where
 
     let rows: Vec<PayloadRow> = query
         .build_query_as()
+        .persistent(false)
         .fetch_all(pool)
         .await
         .with_context(|| format!("failed to list {} snapshots from postgres", params.label))?;
 
-    let items = rows
-        .into_iter()
-        .map(|row| {
-            serde_json::from_value::<T>(row.payload)
-                .with_context(|| format!("failed to decode {} snapshot payload", params.label))
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
+    let items = decode_payload_values(rows.into_iter().map(|row| row.payload), params.label);
 
     Ok(sql_page(items, page, page_size, total))
 }
@@ -3791,6 +3803,7 @@ async fn list_calendar_events_filtered(
     append_calendar_event_filters(&mut count, filter);
     let total = count
         .build_query_scalar::<i64>()
+        .persistent(false)
         .fetch_one(pool)
         .await
         .context("failed to count relational calendar events from postgres")?;
@@ -3806,6 +3819,7 @@ async fn list_calendar_events_filtered(
 
     let rows: Vec<MetadataRow> = query
         .build_query_as()
+        .persistent(false)
         .fetch_all(pool)
         .await
         .context("failed to list relational calendar events from postgres")?;
@@ -3881,10 +3895,12 @@ async fn soft_delete_by_id(
     query.push_bind(id);
     query.push(" AND deleted_at IS NULL");
 
-    let result =
-        query.build().execute(pool).await.with_context(|| {
-            format!("failed to soft-delete relational {label} {id} in postgres")
-        })?;
+    let result = query
+        .build()
+        .persistent(false)
+        .execute(pool)
+        .await
+        .with_context(|| format!("failed to soft-delete relational {label} {id} in postgres"))?;
 
     if result.rows_affected() == 0 {
         bail!("relational {label} {id} not found in postgres");
@@ -3898,7 +3914,7 @@ async fn resolve_condominium_id(
     tenant_id: &str,
     name: &str,
 ) -> anyhow::Result<String> {
-    let rows: Vec<IdNameRow> = sqlx::query_as(
+    let rows: Vec<IdNameRow> = query_as_np!(
         r#"
         SELECT id, name
         FROM condominiums
@@ -3919,7 +3935,7 @@ async fn resolve_building_id(
     condominium_id: &str,
     name: &str,
 ) -> anyhow::Result<String> {
-    let rows: Vec<IdNameRow> = sqlx::query_as(
+    let rows: Vec<IdNameRow> = query_as_np!(
         r#"
         SELECT id, name
         FROM buildings
@@ -3947,7 +3963,7 @@ async fn resolve_fraction_id(
         code: String,
     }
 
-    let rows: Vec<IdCodeRow> = sqlx::query_as(
+    let rows: Vec<IdCodeRow> = query_as_np!(
         r#"
         SELECT id, code
         FROM fractions
@@ -4015,6 +4031,7 @@ async fn delete_snapshot_by_id(
 
     let result = query
         .build()
+        .persistent(false)
         .execute(&mut **tx)
         .await
         .with_context(|| format!("failed to delete {label} snapshot {id} from postgres"))?;
@@ -4041,10 +4058,12 @@ async fn soft_delete_table_by_id(
     query.push_bind(id);
     query.push(" AND deleted_at IS NULL");
 
-    let result =
-        query.build().execute(&mut **tx).await.with_context(|| {
-            format!("failed to soft-delete relational {label} {id} in postgres")
-        })?;
+    let result = query
+        .build()
+        .persistent(false)
+        .execute(&mut **tx)
+        .await
+        .with_context(|| format!("failed to soft-delete relational {label} {id} in postgres"))?;
 
     ensure_changed(result.rows_affected(), label, id)
 }
@@ -4057,7 +4076,7 @@ async fn upsert_legacy_ticket_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(ticket).context("failed to encode ticket payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO ticket_snapshots
             (id, tenant_id, status, priority, condominium, payload, created_at, updated_at)
@@ -4099,7 +4118,7 @@ async fn upsert_chat_message_rows(
     now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(message).context("failed to encode chat message payload")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO chat_message_snapshots
             (id, tenant_id, source_app, sender_role, created_at, payload, inserted_at, updated_at)
@@ -4139,7 +4158,7 @@ async fn trim_chat_messages_rows(
     tenant_id: &str,
     limit: usize,
 ) -> anyhow::Result<()> {
-    sqlx::query(
+    query_np!(
         r#"
         DELETE FROM chat_message_snapshots
         WHERE tenant_id = $1
@@ -4169,7 +4188,7 @@ async fn upsert_quota_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(quota).context("failed to encode quota payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO quota_snapshots
             (id, tenant_id, status, condominium, period, due_date, payload, created_at, updated_at)
@@ -4209,7 +4228,7 @@ async fn upsert_accounting_payment_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(payment)
         .context("failed to encode accounting payment payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO accounting_payment_snapshots
             (id, tenant_id, status, condominium, paid_at, method, payload, created_at, updated_at)
@@ -4254,7 +4273,7 @@ async fn upsert_debt_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(debt).context("failed to encode debt payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO debt_snapshots
             (id, tenant_id, status, condominium, due_date, days_overdue, payload, created_at, updated_at)
@@ -4294,7 +4313,7 @@ async fn upsert_receipt_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(receipt).context("failed to encode receipt payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO receipt_snapshots
             (id, tenant_id, status, condominium, number, issued_at, payload, created_at, updated_at)
@@ -4339,7 +4358,7 @@ async fn upsert_expense_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(expense).context("failed to encode expense payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO expense_snapshots
             (id, tenant_id, status, condominium, category, due_date, payload, created_at, updated_at)
@@ -4384,7 +4403,7 @@ async fn upsert_payment_agreement_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(agreement)
         .context("failed to encode payment agreement payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO payment_agreement_snapshots
             (id, tenant_id, status, condominium, next_due_date, payload, created_at, updated_at)
@@ -4427,7 +4446,7 @@ async fn upsert_cash_movement_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(movement)
         .context("failed to encode cash movement payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO cash_movement_snapshots
             (id, tenant_id, status, condominium, movement_type, account_type, occurred_at, payload, created_at, updated_at)
@@ -4474,7 +4493,7 @@ async fn upsert_bank_transaction_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(transaction)
         .context("failed to encode bank transaction payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO bank_transaction_snapshots
             (id, tenant_id, status, condominium, occurred_at, direction, payload, created_at, updated_at)
@@ -4519,7 +4538,7 @@ async fn upsert_bank_reconciliation_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(reconciliation)
         .context("failed to encode bank reconciliation payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO bank_reconciliation_snapshots
             (id, tenant_id, bank_transaction_id, target_type, target_id, reconciled_at, payload, created_at, updated_at)
@@ -4564,7 +4583,7 @@ async fn upsert_supplier_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(supplier).context("failed to encode supplier payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO supplier_snapshots
             (id, tenant_id, name, category, status, payload, created_at, updated_at)
@@ -4597,7 +4616,7 @@ async fn upsert_supplier_rows(
     })?;
 
     let (email, phone) = supplier_contact_parts(&supplier.contact);
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO suppliers
             (id, tenant_id, name, tax_id, email, phone, category, metadata,
@@ -4639,7 +4658,7 @@ async fn upsert_document_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(document).context("failed to encode document payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO document_snapshots
             (id, tenant_id, kind, status, condominium, uploaded_at,
@@ -4674,7 +4693,7 @@ async fn upsert_document_rows(
         )
     })?;
 
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO documents
             (id, tenant_id, title, document_type, storage_key, visibility,
@@ -4714,7 +4733,7 @@ async fn upsert_report_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(report).context("failed to encode report payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO report_snapshots
             (id, tenant_id, status, period, payload, created_at, updated_at)
@@ -4753,7 +4772,7 @@ async fn soft_delete_document_rows(
     id: &str,
 ) -> anyhow::Result<()> {
     let now = Utc::now();
-    sqlx::query(
+    query_np!(
         r#"
         UPDATE document_links
         SET deleted_at = $3
@@ -4767,7 +4786,7 @@ async fn soft_delete_document_rows(
     .await
     .context("failed to soft-delete document links in postgres")?;
 
-    let result = sqlx::query(
+    let result = query_np!(
         r#"
         UPDATE documents
         SET deleted_at = $3, updated_at = $3
@@ -4790,7 +4809,7 @@ async fn refresh_document_condominium_link(
     document: &Document,
     now: DateTime<Utc>,
 ) -> anyhow::Result<()> {
-    sqlx::query(
+    query_np!(
         r#"
         UPDATE document_links
         SET deleted_at = $3
@@ -4811,7 +4830,7 @@ async fn refresh_document_condominium_link(
     };
     let link_id = format!("{}:condominium", document.id);
 
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO document_links
             (id, tenant_id, document_id, target_type, target_id, created_at, deleted_at)
@@ -4869,7 +4888,7 @@ async fn upsert_maintenance_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(item).context("failed to encode maintenance payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO maintenance_snapshots
             (id, tenant_id, status, kind, condominium, scheduled_start,
@@ -4905,7 +4924,7 @@ async fn upsert_maintenance_rows(
     })?;
 
     let condominium_id = resolve_optional_condominium_id(tx, tenant_id, &item.condominium).await?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO maintenance_items
             (id, tenant_id, condominium_id, equipment_id, title, status, due_at,
@@ -4951,7 +4970,7 @@ async fn upsert_inspection_rows(
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(inspection)
         .context("failed to encode inspection payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO inspection_snapshots
             (id, tenant_id, status, required_date, condominium,
@@ -4986,7 +5005,7 @@ async fn upsert_inspection_rows(
 
     let condominium_id =
         resolve_optional_condominium_id(tx, tenant_id, &inspection.condominium).await?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO inspections
             (id, tenant_id, condominium_id, assigned_worker_id, title, status,
@@ -5032,7 +5051,7 @@ async fn upsert_calendar_event_rows(
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(event)
         .context("failed to encode calendar event payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO calendar_event_snapshots
             (id, tenant_id, event_type, status, condominium, start_at,
@@ -5068,7 +5087,7 @@ async fn upsert_calendar_event_rows(
     })?;
 
     let condominium_id = resolve_optional_condominium_id(tx, tenant_id, &event.condominium).await?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO calendar_events
             (id, tenant_id, condominium_id, title, event_type, starts_at, ends_at,
@@ -5112,7 +5131,7 @@ async fn upsert_assembly_snapshot_rows(
 ) -> anyhow::Result<()> {
     let payload =
         serde_json::to_value(assembly).context("failed to encode assembly payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO assembly_snapshots
             (id, tenant_id, status, condominium, date, payload, created_at, updated_at)
@@ -5161,7 +5180,7 @@ async fn delete_calendar_event_for_inspection(
         return Ok(());
     }
 
-    let event_ids: Vec<String> = sqlx::query_scalar(
+    let event_ids: Vec<String> = query_scalar_np!(
         r#"
         SELECT id
         FROM calendar_events
@@ -5209,7 +5228,7 @@ async fn upsert_condominium_rows(
     let payload = serde_json::to_value(condominium)
         .context("failed to encode condominium payload for postgres")?;
 
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO condominium_snapshots
             (id, tenant_id, name, internal_code, status, payload, created_at, updated_at)
@@ -5241,7 +5260,7 @@ async fn upsert_condominium_rows(
         )
     })?;
 
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO condominiums
             (id, tenant_id, name, internal_code, external_reference, status, location,
@@ -5291,7 +5310,7 @@ async fn upsert_building_rows(
     let payload =
         serde_json::to_value(building).context("failed to encode building payload for postgres")?;
     let condominium_id = resolve_condominium_id(tx, tenant_id, &building.condominium).await?;
-    let result = sqlx::query(
+    let result = query_np!(
         r#"
         INSERT INTO buildings
             (id, tenant_id, condominium_id, name, metadata, created_at, updated_at, deleted_at)
@@ -5333,7 +5352,7 @@ async fn upsert_fraction_rows(
     let condominium_id = resolve_condominium_id(tx, tenant_id, &fraction.condominium).await?;
     let building_id =
         resolve_building_id(tx, tenant_id, &condominium_id, &fraction.building).await?;
-    let result = sqlx::query(
+    let result = query_np!(
         r#"
         INSERT INTO fractions
             (id, tenant_id, condominium_id, building_id, code, floor, permillage,
@@ -5380,7 +5399,7 @@ async fn upsert_resident_rows(
     let condominium_id = resolve_condominium_id(tx, tenant_id, &resident.condominium).await?;
     let fraction_id =
         resolve_fraction_id(tx, tenant_id, &condominium_id, &resident.fraction).await?;
-    let result = sqlx::query(
+    let result = query_np!(
         r#"
         INSERT INTO residents
             (id, tenant_id, condominium_id, fraction_id, name, email, phone, role,
@@ -5428,7 +5447,7 @@ async fn upsert_ocorrencia_rows(
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(ocorrencia)
         .context("failed to encode ocorrencia payload for postgres")?;
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO ocorrencia_snapshots
             (id, tenant_id, tipo, status, payload, created_at, updated_at)
@@ -5460,7 +5479,7 @@ async fn upsert_ocorrencia_rows(
 
     let created_at = timestamp_from_text(&ocorrencia.criado_em).unwrap_or(now);
     let updated_at = timestamp_from_text(&ocorrencia.atualizado_em).unwrap_or(now);
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO tickets
             (id, tenant_id, condominium_id, fraction_id, resident_id, supplier_id,
@@ -5575,7 +5594,7 @@ async fn upsert_ocorrencia_comment_rows(
         .context("failed to encode ocorrencia comment payload for postgres")?;
     let created_at = timestamp_from_text(&comentario.criado_em).unwrap_or(now);
 
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO ocorrencia_comment_snapshots
             (id, tenant_id, ocorrencia_id, payload, created_at)
@@ -5602,7 +5621,7 @@ async fn upsert_ocorrencia_comment_rows(
         )
     })?;
 
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO ticket_comments
             (id, tenant_id, ticket_id, author_id, author_name, body, visibility, created_at, deleted_at)
@@ -5651,7 +5670,7 @@ async fn upsert_ocorrencia_attachment_rows(
         .context("failed to encode ocorrencia attachment payload for postgres")?;
     let created_at = timestamp_from_text(&anexo.criado_em).unwrap_or(now);
 
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO ocorrencia_attachment_snapshots
             (id, tenant_id, ocorrencia_id, payload, created_at)
@@ -5678,7 +5697,7 @@ async fn upsert_ocorrencia_attachment_rows(
         )
     })?;
 
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO ticket_attachments
             (id, tenant_id, ticket_id, file_name, mime_type, storage_key, size_bytes,
@@ -5724,7 +5743,7 @@ async fn insert_session_rows(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     session: &Session,
 ) -> anyhow::Result<()> {
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO app_sessions
             (id, tenant_id, user_id, token_hash, refresh_token_hash, active_condominium,
@@ -5752,7 +5771,7 @@ async fn insert_session_rows(
         )
     })?;
 
-    sqlx::query(
+    query_np!(
         r#"
         INSERT INTO sessions
             (id, tenant_id, user_id, app_context, token_hash, refresh_token_hash,

@@ -54,10 +54,24 @@ impl ApiError {
             message: message.into(),
         }
     }
+
+    pub fn internal_with_source(message: impl Into<String>, error: impl std::fmt::Display) -> Self {
+        let message = message.into();
+        tracing::error!(%error, user_message = %message, "internal api error");
+        Self::internal(message)
+    }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
+        if self.status.is_server_error() {
+            tracing::error!(
+                status = %self.status,
+                code = %self.code,
+                message = %self.message,
+                "api error response"
+            );
+        }
         let body = Json(ApiErrorBody {
             code: self.code,
             message: self.message,

@@ -1,5 +1,16 @@
 target
 data
+.tmp
+.codex-logs
+.codex-e2e-logs
+.vercel
 *.log
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.zip
 *.err.log
 *.out.log
+.env.local
+.env.*.local

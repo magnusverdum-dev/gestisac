@@ -13,7 +13,7 @@ use argon2::{
 };
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
+use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 use tokio::sync::RwLock;
 
 const DEFAULT_ADMIN_PASSWORD: &str = "Gestisac2026!";
@@ -28,13 +28,18 @@ pub struct AppState {
 
 impl AppState {
     pub async fn load() -> anyhow::Result<Self> {
+        let started_at = Instant::now();
         let config = ApiConfig::from_env()?;
-        let mut store = AppStore::default();
+        let mut store = if config.allow_demo_seed {
+            load_local_seed_store().context("failed to load local JSON seed store")?
+        } else {
+            AppStore::default()
+        };
         migrate_legacy_password_hashes(&mut store)?;
         protect_session_secrets(&mut store);
         let postgres = connect_postgres(&config).await?;
         if let Some(repository) = &postgres {
-            hydrate_store_from_postgres(repository, &mut store).await?;
+            hydrate_store_from_postgres(repository, &mut store, &config).await?;
             protect_session_secrets(&mut store);
         }
         if store.users.is_empty() {
@@ -42,6 +47,16 @@ impl AppState {
                 "PostgreSQL sem utilizadores reais: execute a migracao inicial antes de arrancar a API"
             );
         }
+
+        tracing::info!(
+            elapsed_ms = started_at.elapsed().as_millis(),
+            active_backend = if postgres.is_some() {
+                "postgresql"
+            } else {
+                "memory"
+            },
+            "GESTISAC API state loaded"
+        );
 
         Ok(Self {
             config,
@@ -146,6 +161,22 @@ impl AppState {
     }
 }
 
+fn load_local_seed_store() -> anyhow::Result<AppStore> {
+    let seed_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/store.json");
+    let seed_json = fs::read_to_string(&seed_path).with_context(|| {
+        format!(
+            "failed to read JSON seed store from {}",
+            seed_path.display()
+        )
+    })?;
+    serde_json::from_str(&seed_json).with_context(|| {
+        format!(
+            "failed to parse JSON seed store from {}",
+            seed_path.display()
+        )
+    })
+}
+
 async fn connect_postgres(config: &ApiConfig) -> anyhow::Result<Option<PostgresRepository>> {
     let Some(database) = &config.database else {
         return Ok(None);
@@ -155,18 +186,30 @@ async fn connect_postgres(config: &ApiConfig) -> anyhow::Result<Option<PostgresR
         .await
         .context("failed to connect to postgres")?;
 
-    repository
-        .migrate()
-        .await
-        .context("failed to run postgres migrations")?;
+    if should_run_migrations(config) {
+        repository
+            .migrate()
+            .await
+            .context("failed to run postgres migrations")?;
+    }
 
     Ok(Some(repository))
+}
+
+fn should_run_migrations(config: &ApiConfig) -> bool {
+    parse_optional_bool_env("GESTISAC_RUN_MIGRATIONS").unwrap_or(!config.is_production())
+}
+
+fn should_sync_on_startup(config: &ApiConfig) -> bool {
+    parse_optional_bool_env("GESTISAC_SYNC_ON_STARTUP").unwrap_or(!config.is_production())
 }
 
 async fn hydrate_store_from_postgres(
     repository: &PostgresRepository,
     store: &mut AppStore,
+    config: &ApiConfig,
 ) -> anyhow::Result<()> {
+    let sync_on_startup = should_sync_on_startup(config);
     let tenant_id = store
         .tenants
         .first()
@@ -181,10 +224,17 @@ async fn hydrate_store_from_postgres(
         && identity_snapshot.users.is_empty()
         && identity_snapshot.audit_log.is_empty()
     {
-        repository
-            .replace_identity_snapshot(&tenant_id, &store.tenants, &store.users, &store.audit_log)
-            .await
-            .context("failed to seed identity snapshots in postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_identity_snapshot(
+                    &tenant_id,
+                    &store.tenants,
+                    &store.users,
+                    &store.audit_log,
+                )
+                .await
+                .context("failed to seed identity snapshots in postgres")?;
+        }
     } else {
         if !identity_snapshot.tenants.is_empty() {
             store.tenants = identity_snapshot.tenants;
@@ -195,10 +245,21 @@ async fn hydrate_store_from_postgres(
         if !identity_snapshot.audit_log.is_empty() {
             store.audit_log = identity_snapshot.audit_log;
         }
-        repository
-            .replace_identity_snapshot(&tenant_id, &store.tenants, &store.users, &store.audit_log)
-            .await
-            .context("failed to sync identity snapshots into relational postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_identity_snapshot(
+                    &tenant_id,
+                    &store.tenants,
+                    &store.users,
+                    &store.audit_log,
+                )
+                .await
+                .context("failed to sync identity snapshots into relational postgres")?;
+        }
+    }
+
+    if !sync_on_startup {
+        return hydrate_store_read_only_from_postgres(repository, store, &tenant_id).await;
     }
 
     let condominium_repository = PostgresCondominiumRepository::new(repository.clone());
@@ -206,14 +267,18 @@ async fn hydrate_store_from_postgres(
         .await
         .context("failed to load condominium snapshots from postgres")?;
     if loaded_condominiums.is_empty() {
-        persist_condominiums_snapshot(&condominium_repository, &tenant_id, &store.condominiums)
-            .await
-            .context("failed to seed condominium snapshots in postgres")?;
+        if sync_on_startup {
+            persist_condominiums_snapshot(&condominium_repository, &tenant_id, &store.condominiums)
+                .await
+                .context("failed to seed condominium snapshots in postgres")?;
+        }
     } else {
         store.condominiums = loaded_condominiums;
-        persist_condominiums_snapshot(&condominium_repository, &tenant_id, &store.condominiums)
-            .await
-            .context("failed to sync condominium snapshots into relational postgres")?;
+        if sync_on_startup {
+            persist_condominiums_snapshot(&condominium_repository, &tenant_id, &store.condominiums)
+                .await
+                .context("failed to sync condominium snapshots into relational postgres")?;
+        }
     }
 
     let property_structure = repository
@@ -224,15 +289,17 @@ async fn hydrate_store_from_postgres(
         && property_structure.fractions.is_empty()
         && property_structure.residents.is_empty()
     {
-        repository
-            .replace_property_structure(
-                &tenant_id,
-                &store.buildings,
-                &store.fractions,
-                &store.residents,
-            )
-            .await
-            .context("failed to seed property structure in postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_property_structure(
+                    &tenant_id,
+                    &store.buildings,
+                    &store.fractions,
+                    &store.residents,
+                )
+                .await
+                .context("failed to seed property structure in postgres")?;
+        }
     } else {
         store.buildings = property_structure.buildings;
         store.fractions = property_structure.fractions;
@@ -244,10 +311,12 @@ async fn hydrate_store_from_postgres(
         .await
         .context("failed to load sessions from postgres")?;
     if loaded_sessions.is_empty() {
-        repository
-            .replace_sessions(&tenant_id, &store.sessions)
-            .await
-            .context("failed to seed sessions in postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_sessions(&tenant_id, &store.sessions)
+                .await
+                .context("failed to seed sessions in postgres")?;
+        }
     } else {
         store.sessions = loaded_sessions;
     }
@@ -257,10 +326,12 @@ async fn hydrate_store_from_postgres(
         .await
         .context("failed to load chat messages from postgres")?;
     if loaded_chat_messages.is_empty() {
-        repository
-            .replace_chat_messages(&tenant_id, &store.chat_messages)
-            .await
-            .context("failed to seed chat messages in postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_chat_messages(&tenant_id, &store.chat_messages)
+                .await
+                .context("failed to seed chat messages in postgres")?;
+        }
     } else {
         store.chat_messages = loaded_chat_messages;
     }
@@ -273,28 +344,32 @@ async fn hydrate_store_from_postgres(
         && ocorrencias_snapshot.comentarios.is_empty()
         && ocorrencias_snapshot.anexos.is_empty()
     {
-        repository
-            .replace_ocorrencias_snapshot(
-                &tenant_id,
-                &store.ocorrencias,
-                &store.ocorrencia_comentarios,
-                &store.ocorrencia_anexos,
-            )
-            .await
-            .context("failed to seed ocorrencia snapshots in postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_ocorrencias_snapshot(
+                    &tenant_id,
+                    &store.ocorrencias,
+                    &store.ocorrencia_comentarios,
+                    &store.ocorrencia_anexos,
+                )
+                .await
+                .context("failed to seed ocorrencia snapshots in postgres")?;
+        }
     } else {
         store.ocorrencias = ocorrencias_snapshot.ocorrencias;
         store.ocorrencia_comentarios = ocorrencias_snapshot.comentarios;
         store.ocorrencia_anexos = ocorrencias_snapshot.anexos;
-        repository
-            .replace_ocorrencias_snapshot(
-                &tenant_id,
-                &store.ocorrencias,
-                &store.ocorrencia_comentarios,
-                &store.ocorrencia_anexos,
-            )
-            .await
-            .context("failed to sync ocorrencia snapshots into relational postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_ocorrencias_snapshot(
+                    &tenant_id,
+                    &store.ocorrencias,
+                    &store.ocorrencia_comentarios,
+                    &store.ocorrencia_anexos,
+                )
+                .await
+                .context("failed to sync ocorrencia snapshots into relational postgres")?;
+        }
     }
 
     let operational_snapshot = repository
@@ -307,34 +382,38 @@ async fn hydrate_store_from_postgres(
         && operational_snapshot.calendar_events.is_empty()
         && operational_snapshot.assemblies.is_empty()
     {
-        repository
-            .replace_operational_snapshot(
-                &tenant_id,
-                &store.tickets,
-                &store.maintenance,
-                &store.inspections,
-                &store.calendar_events,
-                &store.assemblies,
-            )
-            .await
-            .context("failed to seed operational snapshots in postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_operational_snapshot(
+                    &tenant_id,
+                    &store.tickets,
+                    &store.maintenance,
+                    &store.inspections,
+                    &store.calendar_events,
+                    &store.assemblies,
+                )
+                .await
+                .context("failed to seed operational snapshots in postgres")?;
+        }
     } else {
         store.tickets = operational_snapshot.tickets;
         store.maintenance = operational_snapshot.maintenance;
         store.inspections = operational_snapshot.inspections;
         store.calendar_events = operational_snapshot.calendar_events;
         store.assemblies = operational_snapshot.assemblies;
-        repository
-            .replace_operational_snapshot(
-                &tenant_id,
-                &store.tickets,
-                &store.maintenance,
-                &store.inspections,
-                &store.calendar_events,
-                &store.assemblies,
-            )
-            .await
-            .context("failed to sync operational snapshots into relational postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_operational_snapshot(
+                    &tenant_id,
+                    &store.tickets,
+                    &store.maintenance,
+                    &store.inspections,
+                    &store.calendar_events,
+                    &store.assemblies,
+                )
+                .await
+                .context("failed to sync operational snapshots into relational postgres")?;
+        }
     }
 
     let documental_snapshot = repository
@@ -345,28 +424,32 @@ async fn hydrate_store_from_postgres(
         && documental_snapshot.documents.is_empty()
         && documental_snapshot.reports.is_empty()
     {
-        repository
-            .replace_documental_snapshot(
-                &tenant_id,
-                &store.suppliers,
-                &store.documents,
-                &store.reports,
-            )
-            .await
-            .context("failed to seed documental snapshots in postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_documental_snapshot(
+                    &tenant_id,
+                    &store.suppliers,
+                    &store.documents,
+                    &store.reports,
+                )
+                .await
+                .context("failed to seed documental snapshots in postgres")?;
+        }
     } else {
         store.suppliers = documental_snapshot.suppliers;
         store.documents = documental_snapshot.documents;
         store.reports = documental_snapshot.reports;
-        repository
-            .replace_documental_snapshot(
-                &tenant_id,
-                &store.suppliers,
-                &store.documents,
-                &store.reports,
-            )
-            .await
-            .context("failed to sync documental snapshots into relational postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_documental_snapshot(
+                    &tenant_id,
+                    &store.suppliers,
+                    &store.documents,
+                    &store.reports,
+                )
+                .await
+                .context("failed to sync documental snapshots into relational postgres")?;
+        }
     }
 
     let financial_snapshot = repository
@@ -384,25 +467,180 @@ async fn hydrate_store_from_postgres(
         && financial_snapshot.bank_transactions.is_empty()
         && financial_snapshot.bank_reconciliations.is_empty()
     {
-        repository
-            .replace_financial_snapshot(
-                &tenant_id,
-                FinancialSnapshotRef {
-                    quotas: &store.quotas,
-                    accounting_payments: &store.accounting_payments,
-                    debts: &store.debts,
-                    receipts: &store.receipts,
-                    expenses: &store.expenses,
-                    reserve_funds: &store.reserve_funds,
-                    payment_agreements: &store.payment_agreements,
-                    cash_movements: &store.cash_movements,
-                    bank_transactions: &store.bank_transactions,
-                    bank_reconciliations: &store.bank_reconciliations,
-                },
-            )
-            .await
-            .context("failed to seed financial snapshots in postgres")?;
+        if sync_on_startup {
+            repository
+                .replace_financial_snapshot(
+                    &tenant_id,
+                    FinancialSnapshotRef {
+                        quotas: &store.quotas,
+                        accounting_payments: &store.accounting_payments,
+                        debts: &store.debts,
+                        receipts: &store.receipts,
+                        expenses: &store.expenses,
+                        reserve_funds: &store.reserve_funds,
+                        payment_agreements: &store.payment_agreements,
+                        cash_movements: &store.cash_movements,
+                        bank_transactions: &store.bank_transactions,
+                        bank_reconciliations: &store.bank_reconciliations,
+                    },
+                )
+                .await
+                .context("failed to seed financial snapshots in postgres")?;
+        }
     } else {
+        store.quotas = financial_snapshot.quotas;
+        store.accounting_payments = financial_snapshot.accounting_payments;
+        store.debts = financial_snapshot.debts;
+        store.receipts = financial_snapshot.receipts;
+        store.expenses = financial_snapshot.expenses;
+        store.reserve_funds = financial_snapshot.reserve_funds;
+        store.payment_agreements = financial_snapshot.payment_agreements;
+        store.cash_movements = financial_snapshot.cash_movements;
+        store.bank_transactions = financial_snapshot.bank_transactions;
+        store.bank_reconciliations = financial_snapshot.bank_reconciliations;
+    }
+
+    Ok(())
+}
+
+async fn hydrate_store_read_only_from_postgres(
+    repository: &PostgresRepository,
+    store: &mut AppStore,
+    tenant_id: &str,
+) -> anyhow::Result<()> {
+    let condominium_repository = PostgresCondominiumRepository::new(repository.clone());
+
+    let loaded_condominiums_future = async {
+        load_condominiums_snapshot(&condominium_repository, tenant_id)
+            .await
+            .context("failed to load condominium snapshots from postgres")
+    };
+    let property_structure_future = async {
+        repository
+            .load_property_structure(tenant_id)
+            .await
+            .context("failed to load property structure from postgres")
+    };
+    let loaded_sessions_future = async {
+        repository
+            .load_sessions()
+            .await
+            .context("failed to load sessions from postgres")
+    };
+    let loaded_chat_messages_future = async {
+        repository
+            .load_chat_messages(tenant_id, 500)
+            .await
+            .context("failed to load chat messages from postgres")
+    };
+    let ocorrencias_snapshot_future = async {
+        repository
+            .load_ocorrencias_snapshot(tenant_id)
+            .await
+            .context("failed to load ocorrencia snapshots from postgres")
+    };
+    let operational_snapshot_future = async {
+        repository
+            .load_operational_snapshot(tenant_id)
+            .await
+            .context("failed to load operational snapshots from postgres")
+    };
+    let documental_snapshot_future = async {
+        repository
+            .load_documental_snapshot(tenant_id)
+            .await
+            .context("failed to load documental snapshots from postgres")
+    };
+    let financial_snapshot_future = async {
+        repository
+            .load_financial_snapshot(tenant_id)
+            .await
+            .context("failed to load financial snapshots from postgres")
+    };
+
+    let (
+        loaded_condominiums,
+        property_structure,
+        loaded_sessions,
+        loaded_chat_messages,
+        ocorrencias_snapshot,
+        operational_snapshot,
+        documental_snapshot,
+        financial_snapshot,
+    ) = tokio::try_join!(
+        loaded_condominiums_future,
+        property_structure_future,
+        loaded_sessions_future,
+        loaded_chat_messages_future,
+        ocorrencias_snapshot_future,
+        operational_snapshot_future,
+        documental_snapshot_future,
+        financial_snapshot_future
+    )?;
+
+    if !loaded_condominiums.is_empty() {
+        store.condominiums = loaded_condominiums;
+    }
+
+    if !property_structure.buildings.is_empty()
+        || !property_structure.fractions.is_empty()
+        || !property_structure.residents.is_empty()
+    {
+        store.buildings = property_structure.buildings;
+        store.fractions = property_structure.fractions;
+        store.residents = property_structure.residents;
+    }
+
+    if !loaded_sessions.is_empty() {
+        store.sessions = loaded_sessions;
+    }
+
+    if !loaded_chat_messages.is_empty() {
+        store.chat_messages = loaded_chat_messages;
+    }
+
+    if !ocorrencias_snapshot.ocorrencias.is_empty()
+        || !ocorrencias_snapshot.comentarios.is_empty()
+        || !ocorrencias_snapshot.anexos.is_empty()
+    {
+        store.ocorrencias = ocorrencias_snapshot.ocorrencias;
+        store.ocorrencia_comentarios = ocorrencias_snapshot.comentarios;
+        store.ocorrencia_anexos = ocorrencias_snapshot.anexos;
+    }
+
+    if !operational_snapshot.tickets.is_empty()
+        || !operational_snapshot.maintenance.is_empty()
+        || !operational_snapshot.inspections.is_empty()
+        || !operational_snapshot.calendar_events.is_empty()
+        || !operational_snapshot.assemblies.is_empty()
+    {
+        store.tickets = operational_snapshot.tickets;
+        store.maintenance = operational_snapshot.maintenance;
+        store.inspections = operational_snapshot.inspections;
+        store.calendar_events = operational_snapshot.calendar_events;
+        store.assemblies = operational_snapshot.assemblies;
+    }
+
+    if !documental_snapshot.suppliers.is_empty()
+        || !documental_snapshot.documents.is_empty()
+        || !documental_snapshot.reports.is_empty()
+    {
+        store.suppliers = documental_snapshot.suppliers;
+        store.documents = documental_snapshot.documents;
+        store.reports = documental_snapshot.reports;
+    }
+
+    if !financial_snapshot.quotas.is_empty()
+        || !financial_snapshot.accounting_payments.is_empty()
+        || !financial_snapshot.debts.is_empty()
+        || !financial_snapshot.receipts.is_empty()
+        || !financial_snapshot.expenses.is_empty()
+        || !financial_snapshot.reserve_funds.is_empty()
+        || !financial_snapshot.payment_agreements.is_empty()
+        || !financial_snapshot.cash_movements.is_empty()
+        || !financial_snapshot.bank_transactions.is_empty()
+        || !financial_snapshot.bank_reconciliations.is_empty()
+    {
         store.quotas = financial_snapshot.quotas;
         store.accounting_payments = financial_snapshot.accounting_payments;
         store.debts = financial_snapshot.debts;
@@ -423,6 +661,15 @@ async fn load_condominiums_snapshot(
     tenant_id: &str,
 ) -> anyhow::Result<Vec<crate::models::store::Condominium>> {
     repository.load_condominiums(tenant_id).await
+}
+
+fn parse_optional_bool_env(name: &str) -> Option<bool> {
+    let value = std::env::var(name).ok()?;
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
 }
 
 async fn persist_condominiums_snapshot(

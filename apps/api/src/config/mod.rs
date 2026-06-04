@@ -59,6 +59,8 @@ pub struct PersistenceStatus {
 
 impl ApiConfig {
     pub fn from_env() -> anyhow::Result<Self> {
+        load_local_env_files();
+
         let host = std::env::var("GESTISAC_API_HOST")
             .ok()
             .and_then(|value| value.parse().ok())
@@ -88,6 +90,8 @@ impl ApiConfig {
         if database.is_none() {
             bail!("PostgreSQL e obrigatorio: defina GESTISAC_DATABASE_URL");
         }
+        let allow_demo_seed = parse_bool_env("GESTISAC_ALLOW_DEMO_SEED").unwrap_or(false)
+            && environment != "production";
 
         Ok(Self {
             host,
@@ -97,7 +101,7 @@ impl ApiConfig {
             document_storage_path,
             cors_allowed_origins,
             database,
-            allow_demo_seed: false,
+            allow_demo_seed,
         })
     }
 
@@ -139,9 +143,12 @@ impl ApiConfig {
             active_backend: "postgresql",
             database_configured: self.database.is_some(),
             database_url: self.database.as_ref().map(DatabaseConfig::redacted_url),
-            json_store_path: String::new(),
+            json_store_path: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("data/store.json")
+                .display()
+                .to_string(),
             environment: self.environment.clone(),
-            demo_seed_allowed: false,
+            demo_seed_allowed: self.allow_demo_seed,
         }
     }
 
@@ -189,6 +196,23 @@ fn parse_cors_origins() -> Vec<String> {
                 .map(|origin| origin.to_string())
                 .collect()
         })
+}
+
+fn parse_bool_env(name: &str) -> Option<bool> {
+    let value = std::env::var(name).ok()?;
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn load_local_env_files() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for file_name in [".env.local", ".env"] {
+        let path = manifest_dir.join(file_name);
+        let _ = dotenvy::from_path(&path);
+    }
 }
 
 fn redact_database_url(url: &str) -> String {

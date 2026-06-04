@@ -538,8 +538,11 @@ pub async fn buildings(
                 &params.search,
             )
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar edificios na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar edificios na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }
@@ -664,7 +667,12 @@ pub async fn fractions(
                 &params.search,
             )
             .await
-            .map_err(|_| ApiError::internal("Nao foi possivel listar fracoes na base de dados"))?;
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar fracoes na base de dados",
+                    error,
+                )
+            })?;
         return Ok(Json(page));
     }
 
@@ -796,8 +804,11 @@ pub async fn residents(
                 &params.search,
             )
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar residentes na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar residentes na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }
@@ -928,7 +939,12 @@ pub async fn tickets(
                 &params.search,
             )
             .await
-            .map_err(|_| ApiError::internal("Nao foi possivel listar tickets na base de dados"))?;
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar tickets na base de dados",
+                    error,
+                )
+            })?;
         return Ok(Json(page));
     }
 
@@ -1093,8 +1109,11 @@ pub async fn suppliers(
                 &params.search,
             )
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar fornecedores na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar fornecedores na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }
@@ -1219,8 +1238,11 @@ pub async fn documents(
                 &params.search,
             )
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar documentos na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar documentos na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }
@@ -1627,8 +1649,11 @@ pub async fn reports(
                 &params.search,
             )
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar relatorios na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar relatorios na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }
@@ -1846,8 +1871,11 @@ pub async fn assemblies(
                 &params.search,
             )
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar assembleias na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar assembleias na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }
@@ -1972,8 +2000,11 @@ pub async fn inspections(
                 &params.search,
             )
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar vistorias na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar vistorias na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }
@@ -2218,8 +2249,11 @@ pub async fn maintenance(
                 &params.search,
             )
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar manutencoes na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar manutencoes na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }
@@ -2385,8 +2419,11 @@ pub async fn calendar_events(
                 },
             )
             .await
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar calendario na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar calendario na base de dados",
+                    error,
+                )
             })?;
         return Ok(Json(page));
     }

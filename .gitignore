@@ -16,3 +16,6 @@ apps/*/server/
 apps/web/dist/
 apps/web/server/
 apps/api/data/
+**/.env.local
+**/.env.*.local
+**/.vercel/

@@ -279,7 +279,12 @@ pub async fn quotas(
             )
             .await
             .map(Json)
-            .map_err(|_| ApiError::internal("Nao foi possivel listar quotas na base de dados"));
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar quotas na base de dados",
+                    error,
+                )
+            });
     }
 
     let store = state.store.read().await;
@@ -416,8 +421,11 @@ pub async fn payments(
             )
             .await
             .map(Json)
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar pagamentos na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar pagamentos na base de dados",
+                    error,
+                )
             });
     }
 
@@ -550,7 +558,12 @@ pub async fn debts(
             )
             .await
             .map(Json)
-            .map_err(|_| ApiError::internal("Nao foi possivel listar dividas na base de dados"));
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar dividas na base de dados",
+                    error,
+                )
+            });
     }
 
     let store = state.store.read().await;
@@ -682,7 +695,12 @@ pub async fn receipts(
             )
             .await
             .map(Json)
-            .map_err(|_| ApiError::internal("Nao foi possivel listar recibos na base de dados"));
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar recibos na base de dados",
+                    error,
+                )
+            });
     }
 
     let store = state.store.read().await;
@@ -812,7 +830,12 @@ pub async fn expenses(
             )
             .await
             .map(Json)
-            .map_err(|_| ApiError::internal("Nao foi possivel listar despesas na base de dados"));
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar despesas na base de dados",
+                    error,
+                )
+            });
     }
 
     let store = state.store.read().await;
@@ -835,8 +858,11 @@ pub async fn reserve_funds(
             )
             .await
             .map(Json)
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar fundos de reserva na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar fundos de reserva na base de dados",
+                    error,
+                )
             });
     }
 
@@ -860,8 +886,11 @@ pub async fn payment_agreements(
             )
             .await
             .map(Json)
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar acordos de pagamento na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar acordos de pagamento na base de dados",
+                    error,
+                )
             });
     }
 
@@ -940,8 +969,11 @@ pub async fn cash_movements(
             )
             .await
             .map(Json)
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar movimentos de caixa na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar movimentos de caixa na base de dados",
+                    error,
+                )
             });
     }
 
@@ -1006,8 +1038,11 @@ pub async fn bank_transactions(
             )
             .await
             .map(Json)
-            .map_err(|_| {
-                ApiError::internal("Nao foi possivel listar movimentos bancarios na base de dados")
+            .map_err(|error| {
+                ApiError::internal_with_source(
+                    "Nao foi possivel listar movimentos bancarios na base de dados",
+                    error,
+                )
             });
     }
 
