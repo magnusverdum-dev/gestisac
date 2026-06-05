@@ -10,6 +10,7 @@ type LoginPageProps = {
   defaultEmail?: string;
   defaultPassword?: string;
   onLogin$: PropFunction<(email: string, password: string, appContext: AppContext) => void>;
+  onBrowserSession$?: PropFunction<() => void>;
   onBackToEntry$: PropFunction<() => void>;
 };
 
@@ -87,6 +88,14 @@ export const LoginPage = component$((props: LoginPageProps) => {
 
           <button class="primary-action" type="submit" disabled={props.isLoading}>
             {props.isLoading ? 'A entrar...' : 'Entrar'}
+          </button>
+          <button
+            class="secondary-action"
+            type="button"
+            disabled={props.isLoading || !props.onBrowserSession$}
+            onClick$={props.onBrowserSession$}
+          >
+            Sessão de browser
           </button>
           <button
             class="secondary-action"

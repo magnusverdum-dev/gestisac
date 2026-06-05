@@ -403,6 +403,13 @@ export const App = component$(() => {
     }
   });
 
+  const openBrowserSession$ = $(() => {
+    error.value = '';
+    notice.value = '';
+    const target = `/api/auth/browser-session?appContext=${encodeURIComponent(appContext.value)}`;
+    window.location.assign(target);
+  });
+
   const switchApp$ = $(() => {
     const token = session.token;
     showEntry.value = true;
@@ -888,6 +895,7 @@ export const App = component$(() => {
         defaultEmail={devLoginEmail}
         defaultPassword={devLoginPassword}
         onLogin$={login$}
+        onBrowserSession$={openBrowserSession$}
         onBackToEntry$={switchApp$}
       />
     );

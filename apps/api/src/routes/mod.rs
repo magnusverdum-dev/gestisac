@@ -26,6 +26,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/health", get(health::health))
         .route("/api/version", get(version::version))
         .route("/api/auth/login", post(auth::login))
+        .route("/api/auth/browser-session", get(auth::browser_session))
         .route("/api/auth/refresh", post(auth::refresh))
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/me", get(auth::me))

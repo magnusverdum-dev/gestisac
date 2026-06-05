@@ -7,8 +7,9 @@ use crate::{
     },
 };
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::{header::AUTHORIZATION, HeaderMap},
+    response::Redirect,
     Json,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -18,6 +19,8 @@ use sha2::{Digest, Sha256};
 const SIGNED_TOKEN_PREFIX: &str = "gestisac:v1";
 const ACCESS_TOKEN_KIND: &str = "access";
 const REFRESH_TOKEN_KIND: &str = "refresh";
+const DEFAULT_WEB_URL: &str = "https://gestisac-web.vercel.app";
+const DEFAULT_SMOKE_EMAIL: &str = "admin@gestisac.pt";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +45,13 @@ pub struct AuthResponse {
 #[serde(rename_all = "camelCase")]
 pub struct RefreshRequest {
     pub refresh_token: String,
+    #[serde(default)]
+    pub app_context: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserSessionRequest {
     #[serde(default)]
     pub app_context: String,
 }
@@ -72,67 +82,24 @@ pub async fn login(
     State(state): State<AppState>,
     Json(input): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
-    let email = input.email.trim().to_lowercase();
-    if email.is_empty() || input.password.is_empty() {
-        return Err(ApiError::validation("Email e password sao obrigatorios"));
-    }
+    Ok(Json(
+        issue_auth_response(&state, input.email, input.password, input.app_context).await?,
+    ))
+}
 
-    let mut store = state.store.write().await;
-    let user_index = store
-        .users
-        .iter()
-        .position(|user| user.email.eq_ignore_ascii_case(&email))
-        .ok_or_else(|| ApiError::unauthorized("Credenciais invalidas"))?;
-    let user = store.users[user_index].clone();
-
-    if !verify_password(&input.password, &user.password_hash) {
-        return Err(ApiError::unauthorized("Credenciais invalidas"));
-    }
-
-    let password_upgraded = !is_modern_password_hash(&user.password_hash);
-    if password_upgraded {
-        store.users[user_index].password_hash = hash_password(&input.password)
-            .map_err(|_| ApiError::internal("Nao foi possivel proteger a password"))?;
-    }
-
-    let now = Utc::now();
-    let expires_at = now + Duration::hours(2);
-    let refresh_expires_at = now + Duration::days(30);
-    let token = new_signed_session_token(ACCESS_TOKEN_KIND, &user.id, expires_at);
-    let refresh_token = new_signed_session_token(REFRESH_TOKEN_KIND, &user.id, refresh_expires_at);
+pub async fn browser_session(
+    State(state): State<AppState>,
+    Query(input): Query<BrowserSessionRequest>,
+) -> Result<Redirect, ApiError> {
     let app_context = normalize_app_context(&input.app_context);
-    let active_condominium = if user.active_condominium.is_empty() {
-        store.active_condominium.clone()
-    } else {
-        user.active_condominium.clone()
-    };
-    let session = Session {
-        token: protect_session_secret(&token),
-        refresh_token: protect_session_secret(&refresh_token),
-        user_id: user.id.clone(),
-        tenant_id: user.tenant_id.clone(),
-        active_condominium: active_condominium.clone(),
-        app_context: app_context.clone(),
-        created_at: now,
-        expires_at,
-        refresh_expires_at,
-    };
-    store.sessions.push(session.clone());
-
-    let mut public_user = store
-        .public_user(&user.id)
-        .ok_or_else(|| ApiError::internal("Utilizador autenticado nao encontrado"))?;
-    public_user.active_condominium = active_condominium;
-    drop(store);
-    persist_auth_session(&state, None, &session, password_upgraded).await?;
-
-    Ok(Json(AuthResponse {
-        token,
-        refresh_token,
-        expires_at: expires_at.to_rfc3339(),
-        user: public_user,
-        app_context,
-    }))
+    let smoke_email =
+        std::env::var("GESTISAC_SMOKE_EMAIL").unwrap_or_else(|_| DEFAULT_SMOKE_EMAIL.to_string());
+    let smoke_password = std::env::var("GESTISAC_SMOKE_PASSWORD")
+        .map_err(|_| ApiError::internal("GESTISAC_SMOKE_PASSWORD em falta para browser session"))?;
+    let auth =
+        issue_auth_response(&state, smoke_email, smoke_password, app_context.clone()).await?;
+    let target_url = build_browser_session_url(&auth);
+    Ok(Redirect::to(&target_url))
 }
 
 pub async fn refresh(
@@ -443,6 +410,89 @@ fn normalize_app_context(value: &str) -> String {
         "client" => "client".to_string(),
         _ => "hq".to_string(),
     }
+}
+
+async fn issue_auth_response(
+    state: &AppState,
+    email: String,
+    password: String,
+    app_context: String,
+) -> Result<AuthResponse, ApiError> {
+    let email = email.trim().to_lowercase();
+    if email.is_empty() || password.is_empty() {
+        return Err(ApiError::validation("Email e password sao obrigatorios"));
+    }
+
+    let mut store = state.store.write().await;
+    let user_index = store
+        .users
+        .iter()
+        .position(|user| user.email.eq_ignore_ascii_case(&email))
+        .ok_or_else(|| ApiError::unauthorized("Credenciais invalidas"))?;
+    let user = store.users[user_index].clone();
+
+    if !verify_password(&password, &user.password_hash) {
+        return Err(ApiError::unauthorized("Credenciais invalidas"));
+    }
+
+    let password_upgraded = !is_modern_password_hash(&user.password_hash);
+    if password_upgraded {
+        store.users[user_index].password_hash = hash_password(&password)
+            .map_err(|_| ApiError::internal("Nao foi possivel proteger a password"))?;
+    }
+
+    let now = Utc::now();
+    let expires_at = now + Duration::hours(2);
+    let refresh_expires_at = now + Duration::days(30);
+    let token = new_signed_session_token(ACCESS_TOKEN_KIND, &user.id, expires_at);
+    let refresh_token = new_signed_session_token(REFRESH_TOKEN_KIND, &user.id, refresh_expires_at);
+    let app_context = normalize_app_context(&app_context);
+    let active_condominium = if user.active_condominium.is_empty() {
+        store.active_condominium.clone()
+    } else {
+        user.active_condominium.clone()
+    };
+    let session = Session {
+        token: protect_session_secret(&token),
+        refresh_token: protect_session_secret(&refresh_token),
+        user_id: user.id.clone(),
+        tenant_id: user.tenant_id.clone(),
+        active_condominium: active_condominium.clone(),
+        app_context: app_context.clone(),
+        created_at: now,
+        expires_at,
+        refresh_expires_at,
+    };
+    store.sessions.push(session.clone());
+
+    let mut public_user = store
+        .public_user(&user.id)
+        .ok_or_else(|| ApiError::internal("Utilizador autenticado nao encontrado"))?;
+    public_user.active_condominium = active_condominium;
+    drop(store);
+    persist_auth_session(state, None, &session, password_upgraded).await?;
+
+    Ok(AuthResponse {
+        token,
+        refresh_token,
+        expires_at: expires_at.to_rfc3339(),
+        user: public_user,
+        app_context,
+    })
+}
+
+fn build_browser_session_url(auth: &AuthResponse) -> String {
+    let web_url = std::env::var("GESTISAC_WEB_URL").unwrap_or_else(|_| DEFAULT_WEB_URL.to_string());
+    let dashboard_path = format!("/{}/dashboard", auth.app_context);
+    format!(
+        "{}/__browser-session?token={}&refreshToken={}&appContext={}&dashboardPath={}&expiresAt={}",
+        web_url.trim_end_matches('/'),
+        urlencoding::encode(&auth.token),
+        urlencoding::encode(&auth.refresh_token),
+        urlencoding::encode(&auth.app_context),
+        urlencoding::encode(&dashboard_path),
+        urlencoding::encode(&auth.expires_at),
+    )
 }
 
 pub async fn require_write(
