@@ -1,7 +1,14 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
-const webCwd = 'apps/web';
 const preflightOnly = process.argv.includes('--preflight-only');
+const repo = JSON.parse(readFileSync('.vercel/repo.json', 'utf8'));
+const project = repo.projects.find((item) => item.name === 'gestisac-web');
+
+if (!project) {
+  console.error('[deploy-web-production] Unable to find gestisac-web in .vercel/repo.json.');
+  process.exit(1);
+}
 
 const preflightSteps = [
   ['Vercel project roots', 'node', ['scripts/check-vercel-projects.mjs']],
@@ -26,9 +33,15 @@ if (preflightOnly) {
   process.exit(0);
 }
 
-console.log(`[deploy-web-production] Deploying Web to Vercel Production from ${webCwd}.`);
+console.log('[deploy-web-production] Deploying Web to Vercel Production.');
 
-const result = run('npx', ['vercel', 'deploy', '--prebuilt', '--prod', '--yes', '--cwd', webCwd]);
+const result = run('npx', ['vercel', 'deploy', '--prod', '--yes'], {
+  env: {
+    ...process.env,
+    VERCEL_ORG_ID: project.orgId,
+    VERCEL_PROJECT_ID: project.id
+  }
+});
 process.exit(result.status ?? 1);
 
 function run(command, args, options = {}) {

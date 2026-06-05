@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-const project = JSON.parse(readFileSync('apps/api/.vercel/project.json', 'utf8'));
 const preflightOnly = process.argv.includes('--preflight-only');
-const apiCwd = 'apps/api';
+const project = JSON.parse(readFileSync('apps/api/.vercel/project.json', 'utf8'));
 
 const preflightSteps = [
   ['Vercel project roots', 'node', ['scripts/check-vercel-projects.mjs']],
@@ -41,9 +40,9 @@ if (preflightOnly) {
   process.exit(0);
 }
 
-console.log(`[deploy-api-production] Deploying API to Vercel Production from ${apiCwd}.`);
+console.log('[deploy-api-production] Deploying API to Vercel Production.');
 
-const result = run('npx', ['vercel', 'deploy', '--prod', '--yes', '--cwd', apiCwd], {
+const result = run('npx', ['vercel', 'deploy', '--prod', '--yes'], {
   env: {
     ...process.env,
     VERCEL_ORG_ID: project.orgId,
