@@ -10,6 +10,13 @@ export type PublicUser = {
   activeCondominiums: number;
 };
 
+export type TeamMember = PublicUser & {
+  openTasks: number;
+  inProgressTasks: number;
+  pendingValidation: number;
+  lastActivityAt: string;
+};
+
 export type DashboardMetric = {
   value: string;
   label: string;
@@ -1013,6 +1020,7 @@ export type ResourceState = {
   buildings: Building[];
   fractions: Fraction[];
   residents: Resident[];
+  team: TeamMember[];
   tickets: Ticket[];
   ocorrencias: Ocorrencia[];
   suppliers: Supplier[];

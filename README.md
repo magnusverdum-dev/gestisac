@@ -79,7 +79,7 @@ Login local inicial:
 
 ```text
 Email: admin@gestisac.pt
-Password: Gestisac2026!
+Password: configurar localmente ou pedir a credencial ao responsavel
 ```
 
 Os dados funcionais desta fase ficam persistidos em `apps/api/data/store.json`, gerado automaticamente no primeiro arranque da API Rust. As passwords sao guardadas com Argon2 e as sessoes usam access token curto com refresh token persistido.

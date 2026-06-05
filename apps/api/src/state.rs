@@ -16,8 +16,8 @@ use sha2::{Digest, Sha256};
 use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 use tokio::sync::RwLock;
 
-const DEFAULT_ADMIN_PASSWORD: &str = "Gestisac2026!";
 const SESSION_SECRET_PREFIX: &str = "sha256:";
+const DEFAULT_BOOTSTRAP_ADMIN_EMAIL: &str = "admin@gestisac.pt";
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -35,13 +35,13 @@ impl AppState {
         } else {
             AppStore::default()
         };
-        migrate_legacy_password_hashes(&mut store)?;
         protect_session_secrets(&mut store);
         let postgres = connect_postgres(&config).await?;
         if let Some(repository) = &postgres {
             hydrate_store_from_postgres(repository, &mut store, &config).await?;
             protect_session_secrets(&mut store);
         }
+        apply_bootstrap_admin_password(postgres.as_ref(), &mut store).await?;
         if store.users.is_empty() {
             bail!(
                 "PostgreSQL sem utilizadores reais: execute a migracao inicial antes de arrancar a API"
@@ -663,6 +663,72 @@ async fn load_condominiums_snapshot(
     repository.load_condominiums(tenant_id).await
 }
 
+async fn apply_bootstrap_admin_password(
+    repository: Option<&PostgresRepository>,
+    store: &mut AppStore,
+) -> anyhow::Result<()> {
+    let Some(password) = bootstrap_admin_password() else {
+        return Ok(());
+    };
+    let email = bootstrap_admin_email()?;
+    let user_index = store
+        .users
+        .iter()
+        .position(|user| user.email.eq_ignore_ascii_case(&email))
+        .with_context(|| format!("bootstrap admin user not found for email {email}"))?;
+
+    if verify_password(&password, &store.users[user_index].password_hash) {
+        tracing::info!(email = %email, "Bootstrap admin password already matches configured value");
+        return Ok(());
+    }
+
+    let password_hash =
+        hash_password(&password).context("failed to hash bootstrap admin password")?;
+    let tenant_id = store.users[user_index].tenant_id.clone();
+    let user_id = store.users[user_index].id.clone();
+    if let Some(repository) = repository {
+        let updated_user_id = repository
+            .update_user_password_hash(&tenant_id, &email, &password_hash)
+            .await?;
+        if updated_user_id.as_deref() != Some(user_id.as_str()) {
+            bail!("bootstrap admin user not found in postgres for email {email}");
+        }
+    }
+    store.users[user_index].password_hash = password_hash;
+
+    tracing::warn!(
+        email = %email,
+        user_id = %user_id,
+        "Applied bootstrap admin password from environment"
+    );
+
+    Ok(())
+}
+
+fn bootstrap_admin_password() -> Option<String> {
+    let password = std::env::var("GESTISAC_BOOTSTRAP_ADMIN_PASSWORD").ok()?;
+    let password = password.trim().to_string();
+    if password.is_empty() {
+        return None;
+    }
+    if password.len() < 12 {
+        tracing::warn!("Ignoring GESTISAC_BOOTSTRAP_ADMIN_PASSWORD shorter than 12 characters");
+        return None;
+    }
+    Some(password)
+}
+
+fn bootstrap_admin_email() -> anyhow::Result<String> {
+    let email = std::env::var("GESTISAC_BOOTSTRAP_ADMIN_EMAIL")
+        .unwrap_or_else(|_| DEFAULT_BOOTSTRAP_ADMIN_EMAIL.to_string())
+        .trim()
+        .to_ascii_lowercase();
+    if email.is_empty() || !email.contains('@') {
+        bail!("GESTISAC_BOOTSTRAP_ADMIN_EMAIL must be a valid email when defined");
+    }
+    Ok(email)
+}
+
 fn parse_optional_bool_env(name: &str) -> Option<bool> {
     let value = std::env::var(name).ok()?;
     match value.trim().to_ascii_lowercase().as_str() {
@@ -725,18 +791,6 @@ pub fn session_secret_matches(stored_secret: &str, presented_secret: &str) -> bo
     stored_secret == presented_secret || stored_secret == protect_session_secret(presented_secret)
 }
 
-fn migrate_legacy_password_hashes(store: &mut AppStore) -> anyhow::Result<()> {
-    for user in &mut store.users {
-        if !is_modern_password_hash(&user.password_hash)
-            && verify_password(DEFAULT_ADMIN_PASSWORD, &user.password_hash)
-        {
-            user.password_hash = hash_password(DEFAULT_ADMIN_PASSWORD)?;
-        }
-    }
-
-    Ok(())
-}
-
 fn protect_session_secrets(store: &mut AppStore) {
     for session in &mut store.sessions {
         session.token = protect_session_secret(&session.token);
@@ -766,9 +820,9 @@ mod tests {
 
     #[test]
     fn legacy_sha256_hash_is_still_verified_for_migration() {
-        let legacy_hash = legacy_sha256_password("Gestisac2026!");
+        let legacy_hash = legacy_sha256_password("legacy-password");
 
-        assert!(verify_password("Gestisac2026!", &legacy_hash));
+        assert!(verify_password("legacy-password", &legacy_hash));
         assert!(!verify_password("wrong-password", &legacy_hash));
     }
 

@@ -144,7 +144,7 @@ export function matchEntityRoute(path: string): EntityRouteMatch {
 
 export function isTicketClosed(status: string): boolean {
   const normalized = normalize(status);
-  return normalized.includes('resolvido') || normalized.includes('fechado');
+  return normalized.includes('resolvid') || normalized.includes('fechad');
 }
 
 export function isTicketPending(status: string): boolean {

@@ -2,6 +2,7 @@ import type {
   AppContext,
   NamespacedDashboardResponse,
   SharedMeResponse,
+  TeamMember,
   TicketSummary
 } from '@gestisac/domain-types';
 
@@ -50,6 +51,8 @@ export const createApiClient = (options: ApiClientOptions) => {
       request<NamespacedDashboardResponse>(`/api/${appContext}/dashboard`, requestOptions),
     tickets: (appContext: AppContext, requestOptions?: ApiRequestOptions) =>
       request<TicketSummary[]>(`/api/${appContext}/tickets`, requestOptions),
+    team: (requestOptions?: ApiRequestOptions) =>
+      request<{ items: TeamMember[] }>('/api/team', requestOptions),
     hqAccountingOverview: (requestOptions?: ApiRequestOptions) =>
       request('/api/hq/accounting/overview', requestOptions),
     hqAccountingCondominium: (condominiumId: string, requestOptions?: ApiRequestOptions) =>

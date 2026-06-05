@@ -5,31 +5,31 @@ import { PortalFrame } from '@gestisac/ui';
 const config = createRuntimeConfig('client', import.meta.env);
 
 const kpis = [
-  { label: 'Modo', value: 'Cliente', detail: 'Apenas dados publicos e do seu contexto.' },
-  { label: 'API', value: '/api/client', detail: 'Payloads curtos e sem campos internos.' },
+  { label: 'Hoje', value: 'Cliente', detail: 'Estado simples dos pedidos e proximos eventos.' },
+  { label: 'Menu', value: '3 areas', detail: 'Hoje, Pedidos e Agenda.' },
   { label: 'Privacidade', value: 'Bloqueada', detail: 'Sem custos internos, notas tecnicas ou fornecedores.' }
 ];
 
 const sections = [
   {
-    title: 'Criar avaria',
+    title: 'Hoje',
+    description: 'Resumo simples do que interessa ao cliente.',
+    endpoint: '/api/client/dashboard'
+  },
+  {
+    title: 'Pedidos',
     description: 'Wizard rapido com condominio, local, descricao, foto e contacto.',
     endpoint: '/api/ocorrencias/publica'
   },
   {
-    title: 'Acompanhar estado',
+    title: 'Acompanhar pedidos',
     description: 'Timeline publica, mensagens permitidas e confirmacao ou reabertura quando aplicavel.',
     endpoint: '/api/client/tickets'
   },
   {
-    title: 'Documentos permitidos',
-    description: 'Acesso apenas a documentos publicados para o cliente ou para a fracao.',
-    endpoint: '/api/client/documents'
-  },
-  {
-    title: 'Perfil e permissoes',
-    description: 'Sessao contextualizada por tenant e app, pronta para URLs/deploys separados.',
-    endpoint: '/api/shared/me'
+    title: 'Agenda',
+    description: 'Eventos publicos e datas relevantes sem expor operacao interna.',
+    endpoint: '/api/client/dashboard'
   }
 ];
 
@@ -37,8 +37,8 @@ export const App = component$(() => (
   <PortalFrame
     appContext={config.appContext}
     eyebrow="Portal autonomo"
-    title="Cliente simples, privado e direto"
-    subtitle="Esta app e desenhada para abrir pedidos e acompanhar estado sem expor informacao interna da administracao."
+    title="Cliente simples e direto"
+    subtitle="A experiencia fica centrada em Hoje, Pedidos e Agenda, sem ruido interno."
     kpis={kpis}
     sections={sections}
   >

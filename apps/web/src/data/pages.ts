@@ -96,6 +96,7 @@ export const emptyResources: ResourceState = {
   buildings: [],
   fractions: [],
   residents: [],
+  team: [],
   tickets: [],
   ocorrencias: [],
   suppliers: [],
@@ -167,14 +168,16 @@ export const fallbackDashboard: DashboardResponse = {
 };
 
 export const navPages: Array<Pick<DemoPage, 'path' | 'navLabel' | 'icon'>> = [
-  { path: '/dashboard', navLabel: 'Dashboard', icon: 'D' },
+  { path: '/dashboard', navLabel: 'Hoje', icon: 'H' },
   { path: '/condominios', navLabel: 'Condominios', icon: 'C' },
+  { path: '/equipa', navLabel: 'Equipa', icon: 'E' },
+  { path: '/tarefas', navLabel: 'Tarefas', icon: 'T' },
+  { path: '/tickets', navLabel: 'Pedidos', icon: 'P' },
+  { path: '/calendario', navLabel: 'Agenda', icon: 'A' },
   { path: '/administracao', navLabel: 'Administracao', icon: 'A' },
   { path: '/contabilidade', navLabel: 'Contabilidade', icon: 'EUR' },
   { path: '/relatorios', navLabel: 'Relatorios', icon: 'R' },
   { path: '/assembleias', navLabel: 'Assembleias', icon: 'M' },
-  { path: '/calendario', navLabel: 'Calendario', icon: 'C' },
-  { path: '/tickets', navLabel: 'Tickets', icon: 'T' },
   { path: '/documentos', navLabel: 'Documentos', icon: 'F' },
   { path: '/manutencao', navLabel: 'Manutencao', icon: 'W' },
   { path: '/vistorias', navLabel: 'Vistorias', icon: 'V' },
@@ -205,10 +208,10 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
   return [
     {
       path: '/dashboard',
-      navLabel: 'Dashboard',
-      icon: 'D',
-      title: 'Dashboard',
-      description: 'Visao operacional consolidada dos condominios ativos.',
+      navLabel: 'Hoje',
+      icon: 'H',
+      title: 'Hoje',
+      description: 'Fila diaria com prioridades, avisos e trabalho operacional.',
       action: 'Criar aviso',
       stats: [],
       records: []
@@ -291,6 +294,51 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
           canDelete: canDeleteCondominiums
         }))
       ]
+    },
+    {
+      path: '/equipa',
+      navLabel: 'Equipa',
+      icon: 'E',
+      title: 'Equipa',
+      description: 'Funcionarios, responsabilidades e carga operacional do dia.',
+      action: 'Gerir equipa',
+      stats: [
+        { label: 'Membros', value: String(resources.team.length), detail: 'Utilizadores ativos', tone: 'blue' },
+        {
+          label: 'Tarefas abertas',
+          value: String(resources.team.reduce((total, item) => total + item.openTasks, 0)),
+          detail: 'Somatorio por responsavel',
+          tone: 'gold'
+        },
+        {
+          label: 'Validacao HQ',
+          value: String(resources.team.reduce((total, item) => total + item.pendingValidation, 0)),
+          detail: 'Intervencoes a rever',
+          tone: 'green'
+        }
+      ],
+      records: resources.team.map((item) => ({
+        id: item.id,
+        title: item.name,
+        meta: `${item.role} - ${item.email}`,
+        status: item.inProgressTasks ? 'Em campo' : item.openTasks ? 'Com tarefas' : 'Disponivel',
+        detail: `${item.openTasks} abertas - ${item.pendingValidation} a validar`,
+        values: item
+      }))
+    },
+    {
+      path: '/tarefas',
+      navLabel: 'Tarefas',
+      icon: 'T',
+      title: 'Tarefas',
+      description: 'Vista unica do trabalho diario: pedidos, manutencao, vistorias e agenda.',
+      action: 'Nova tarefa',
+      stats: [
+        { label: 'Pedidos abertos', value: String(resources.ocorrencias.filter((item) => !isDoneStatus(item.status)).length), detail: 'Ocorrencias por resolver', tone: 'danger' },
+        { label: 'Manutencao', value: String(resources.maintenance.filter((item) => !isDoneStatus(item.status)).length), detail: 'Intervencoes ativas', tone: 'gold' },
+        { label: 'Agenda', value: String(resources.calendarEvents.length), detail: 'Eventos operacionais', tone: 'blue' }
+      ],
+      records: []
     },
     {
       path: '/administracao',
@@ -492,9 +540,9 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
     },
     {
       path: '/tickets',
-      navLabel: 'Tickets',
-      icon: 'T',
-      title: 'Tickets',
+      navLabel: 'Pedidos',
+      icon: 'P',
+      title: 'Pedidos',
       description: 'Ocorrencias, avarias e pedidos com prioridade, estado e responsavel.',
       action: 'Abrir ticket',
       resource: 'tickets',
@@ -1035,7 +1083,7 @@ function canDelete(resources: ResourceState, module: string): boolean {
 function isDoneStatus(status: string): boolean {
   const normalized = status.toLowerCase();
   return (
-    normalized.includes('resolvido') ||
+    normalized.includes('resolvid') ||
     normalized.includes('conclu') ||
     normalized.includes('exportado') ||
     normalized.includes('arquivado')

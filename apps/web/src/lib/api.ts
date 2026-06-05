@@ -81,6 +81,7 @@ export type {
   ResourceEndpoint,
   ResourceState,
   Supplier,
+  TeamMember,
   Ticket,
   Urgencia,
   ValidateResolutionPayload,

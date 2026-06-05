@@ -1,6 +1,11 @@
 const baseUrl = process.env.GESTISAC_API_URL ?? 'http://127.0.0.1:3000';
 const email = process.env.GESTISAC_SMOKE_EMAIL ?? 'admin@gestisac.pt';
-const password = process.env.GESTISAC_SMOKE_PASSWORD ?? 'Gestisac2026!';
+const password = process.env.GESTISAC_SMOKE_PASSWORD;
+
+if (!password) {
+  console.error('GESTISAC_SMOKE_PASSWORD is required. The token/password will not be printed.');
+  process.exit(1);
+}
 
 async function request(path, options = {}) {
   const headers = {

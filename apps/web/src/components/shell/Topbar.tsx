@@ -1,16 +1,18 @@
 import { component$, useSignal, type PropFunction } from '@builder.io/qwik';
 import { ArrowLeftIcon } from 'lucide-qwik';
-import type { AlertItem, GlobalSearchResult, PublicUser } from '../../lib/api';
+import type { AlertItem, AppContext, GlobalSearchResult, PublicUser } from '../../lib/api';
 
 export type ApiStatus = 'online' | 'offline' | 'checking';
 
 type TopbarProps = {
   apiStatus: ApiStatus;
+  appContext: AppContext;
   alertCount: number;
   alerts: AlertItem[];
   searchResults: GlobalSearchResult[];
   user: PublicUser;
   navigate$: PropFunction<(path: string) => void>;
+  onSwitchApp$: PropFunction<() => void>;
   onLogout$: PropFunction<() => void>;
 };
 
@@ -23,6 +25,12 @@ export const Topbar = component$((props: TopbarProps) => {
       : props.apiStatus === 'offline'
         ? 'Modo local'
         : 'A ligar';
+  const appLabel =
+    props.appContext === 'worker'
+      ? 'Funcionarios'
+      : props.appContext === 'client'
+        ? 'Clientes'
+        : 'HQ';
   const normalizedSearch = searchQuery.value.trim().toLowerCase();
   const visibleResults = normalizedSearch
     ? props.searchResults
@@ -81,6 +89,15 @@ export const Topbar = component$((props: TopbarProps) => {
 
       <div class="topbar-actions">
         <div class={`system-status ${props.apiStatus}`}>{statusLabel}</div>
+        <button
+          class="secondary-action topbar-apps-button"
+          type="button"
+          title="Voltar ao menu inicial das apps"
+          onClick$={props.onSwitchApp$}
+        >
+          Apps
+          <span>{appLabel}</span>
+        </button>
         <button
           class="urgent-pill"
           type="button"

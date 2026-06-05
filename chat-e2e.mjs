@@ -3,8 +3,12 @@ import { spawn } from 'child_process';
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const TARGET = 'http://127.0.0.1:55951';
 const EMAIL = 'admin@gestisac.pt';
-const PASS = 'Gestisac2026!';
+const PASS = process.env.GESTISAC_SMOKE_PASSWORD;
 const MESSAGE = `chat-e2e-${Date.now()}`;
+
+if (!PASS) {
+  throw new Error('GESTISAC_SMOKE_PASSWORD is required. The password will not be printed.');
+}
 
 let seq = 0;
 const pending = {};

@@ -2,7 +2,7 @@ import { canUseBrowserDemoApi, demoApiRequest } from './demo';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') ?? '';
 const OFFICIAL_PRODUCTION_API_BASE_URL = 'https://gestisac-api.vercel.app';
-const IS_PRODUCTION = import.meta.env.PROD === true;
+const IS_PRODUCTION = import.meta.env.PROD === true && import.meta.env.MODE === 'production';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 type ApiRequestOptions = {

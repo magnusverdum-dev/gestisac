@@ -1,4 +1,5 @@
 import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
+import { useLocation } from '@builder.io/qwik-city';
 import { AppEntryPage } from './components/auth/AppEntryPage';
 import { LoginPage } from './components/auth/LoginPage';
 import { DashboardPage } from './components/dashboard/DashboardPage';
@@ -11,6 +12,8 @@ import { EntityDetailPage } from './components/pages/EntityDetailPage';
 import { InspectionsPage } from './components/pages/InspectionsPage';
 import { MaintenancePage } from './components/pages/MaintenancePage';
 import { PageOverview } from './components/pages/PageOverview';
+import { TasksPage } from './components/pages/TasksPage';
+import { TeamPage } from './components/pages/TeamPage';
 import { TicketsPage } from './components/pages/TicketsPage';
 import { AppShell } from './components/shell/AppShell';
 import {
@@ -64,10 +67,10 @@ const normalizeAppContext = (value: string): AppContext => {
 };
 
 const parseRouteContext = (rawPath: string): { appContext: AppContext; path: string; showEntry: boolean } => {
-  if (rawPath === '/' || rawPath === '') {
+  const [pathname = '/'] = rawPath.split('?', 1);
+  if (pathname === '/' || pathname === '') {
     return { appContext: 'hq', path: '/dashboard', showEntry: true };
   }
-  const [pathname = '/'] = rawPath.split('?', 1);
   const parts = pathname.split('/').filter(Boolean);
   const first = parts[0] ?? '';
   if (first === 'hq' || first === 'worker' || first === 'client') {
@@ -90,7 +93,38 @@ const buildAppPath = (appContext: AppContext, innerPath: string) => {
   return `/${appContext}${normalized}`;
 };
 
+const readStoredValue = (key: string) => {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredValue = (key: string, value: string) => {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, value);
+    }
+  } catch {
+    // Some embedded browsers disable localStorage; keep the in-memory session usable.
+  }
+};
+
+const removeStoredValue = (key: string) => {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage cleanup is best-effort when the browser blocks localStorage.
+  }
+};
+
 const dashboardShortcutAreas: CondoAreaId[] = ['general', 'inspections', 'timeline', 'avarias'];
+const isLocalDevelopmentMode = import.meta.env.MODE === 'development';
+const devLoginEmail = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_EMAIL ?? '') : '';
+const devLoginPassword = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_PASSWORD ?? '') : '';
 
 const readCondominiumShortcutArea = (path: string): CondoAreaId | '' => {
   const queryStart = path.indexOf('?');
@@ -117,9 +151,13 @@ const triggerBrowserDownload = (blob: Blob, filename: string) => {
 };
 
 export const App = component$(() => {
-  const currentPath = useSignal('/dashboard');
-  const appContext = useSignal<AppContext>('hq');
-  const showEntry = useSignal(false);
+  const location = useLocation();
+  const initialRoute = parseRouteContext(
+    `${location.url.pathname}${location.url.search}${location.url.hash}`
+  );
+  const currentPath = useSignal(initialRoute.path);
+  const appContext = useSignal<AppContext>(initialRoute.appContext);
+  const showEntry = useSignal(initialRoute.showEntry);
   const condominiumShortcutArea = useSignal<CondoAreaId | ''>('');
   const apiStatus = useSignal<ApiStatus>('checking');
   const dashboard = useSignal(fallbackDashboard);
@@ -238,10 +276,10 @@ export const App = component$(() => {
       session.user = auth.user;
       session.appContext = auth.appContext || context;
       appContext.value = auth.appContext || context;
-      localStorage.setItem(SESSION_TOKEN_KEY, auth.token);
-      localStorage.setItem(SESSION_REFRESH_KEY, auth.refreshToken);
-      localStorage.setItem(SESSION_EXPIRES_KEY, auth.expiresAt);
-      localStorage.setItem(SESSION_APP_CONTEXT_KEY, auth.appContext || context);
+      writeStoredValue(SESSION_TOKEN_KEY, auth.token);
+      writeStoredValue(SESSION_REFRESH_KEY, auth.refreshToken);
+      writeStoredValue(SESSION_EXPIRES_KEY, auth.expiresAt);
+      writeStoredValue(SESSION_APP_CONTEXT_KEY, auth.appContext || context);
       await loadWorkspace$(auth.token);
       await navigate$('/dashboard');
     } catch (err) {
@@ -249,10 +287,10 @@ export const App = component$(() => {
       session.token = '';
       session.user = null;
       session.appContext = context;
-      localStorage.removeItem(SESSION_TOKEN_KEY);
-      localStorage.removeItem(SESSION_REFRESH_KEY);
-      localStorage.removeItem(SESSION_EXPIRES_KEY);
-      localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
+      removeStoredValue(SESSION_TOKEN_KEY);
+      removeStoredValue(SESSION_REFRESH_KEY);
+      removeStoredValue(SESSION_EXPIRES_KEY);
+      removeStoredValue(SESSION_APP_CONTEXT_KEY);
     } finally {
       isLoading.value = false;
       session.ready = true;
@@ -274,34 +312,77 @@ export const App = component$(() => {
     resources.value = emptyResources;
     pageCache.value = buildPages(emptyResources, fallbackDashboard);
     searchResultCache.value = buildGlobalSearchResults(emptyResources);
-    localStorage.removeItem(SESSION_TOKEN_KEY);
-    localStorage.removeItem(SESSION_REFRESH_KEY);
-    localStorage.removeItem(SESSION_EXPIRES_KEY);
-    localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
+    removeStoredValue(SESSION_TOKEN_KEY);
+    removeStoredValue(SESSION_REFRESH_KEY);
+    removeStoredValue(SESSION_EXPIRES_KEY);
+    removeStoredValue(SESSION_APP_CONTEXT_KEY);
     if (token) {
       await logout(token).catch(() => undefined);
     }
     window.history.replaceState({}, '', buildAppPath(context, '/login'));
   });
 
-  const switchApp$ = $(async () => {
+  const chooseApp$ = $(async (context: AppContext) => {
+    error.value = '';
+    notice.value = '';
+    appContext.value = context;
+    session.appContext = context;
+
+    if (!session.token) {
+      window.history.pushState({}, '', buildAppPath(context, '/login'));
+      showEntry.value = false;
+      currentPath.value = '/login';
+      return;
+    }
+
+      isLoading.value = true;
+    try {
+      const storedRefreshToken = readStoredValue(SESSION_REFRESH_KEY);
+      if (storedRefreshToken) {
+        const refreshed = await refreshSession(storedRefreshToken, context);
+        session.token = refreshed.token;
+        session.user = refreshed.user;
+        session.appContext = refreshed.appContext || context;
+        appContext.value = refreshed.appContext || context;
+        writeStoredValue(SESSION_TOKEN_KEY, refreshed.token);
+        writeStoredValue(SESSION_REFRESH_KEY, refreshed.refreshToken);
+        writeStoredValue(SESSION_EXPIRES_KEY, refreshed.expiresAt);
+        writeStoredValue(SESSION_APP_CONTEXT_KEY, refreshed.appContext || context);
+      } else {
+        writeStoredValue(SESSION_APP_CONTEXT_KEY, context);
+      }
+
+      await loadWorkspace$(session.token);
+      showEntry.value = false;
+      currentPath.value = '/dashboard';
+      window.history.pushState({}, '', buildAppPath(appContext.value, '/dashboard'));
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Sessao expirada. Entra novamente.';
+      session.token = '';
+      session.user = null;
+      session.appContext = context;
+      removeStoredValue(SESSION_TOKEN_KEY);
+      removeStoredValue(SESSION_REFRESH_KEY);
+      removeStoredValue(SESSION_EXPIRES_KEY);
+      writeStoredValue(SESSION_APP_CONTEXT_KEY, context);
+      showEntry.value = false;
+      currentPath.value = '/login';
+      window.history.replaceState({}, '', buildAppPath(context, '/login'));
+    } finally {
+      isLoading.value = false;
+      session.ready = true;
+    }
+  });
+
+  const switchApp$ = $(() => {
     const token = session.token;
-    session.token = '';
-    session.user = null;
-    session.appContext = 'hq';
-    appContext.value = 'hq';
     showEntry.value = true;
     currentPath.value = '/dashboard';
-    dashboard.value = fallbackDashboard;
-    resources.value = emptyResources;
-    pageCache.value = buildPages(emptyResources, fallbackDashboard);
-    searchResultCache.value = buildGlobalSearchResults(emptyResources);
-    localStorage.removeItem(SESSION_TOKEN_KEY);
-    localStorage.removeItem(SESSION_REFRESH_KEY);
-    localStorage.removeItem(SESSION_EXPIRES_KEY);
-    localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
-    if (token) {
-      await logout(token).catch(() => undefined);
+    if (!token) {
+      session.user = null;
+      session.appContext = 'hq';
+      appContext.value = 'hq';
     }
     window.history.replaceState({}, '', '/');
   });
@@ -354,6 +435,16 @@ export const App = component$(() => {
       return;
     }
 
+    if (title === 'Equipa') {
+      await navigate$('/equipa');
+      return;
+    }
+
+    if (title === 'Tarefas') {
+      await navigate$('/tarefas');
+      return;
+    }
+
     await navigate$('/dashboard');
   });
 
@@ -363,7 +454,9 @@ export const App = component$(() => {
       accounting: '/contabilidade',
       administration: '/administracao',
       reports: '/relatorios',
-      calendar: '/calendario'
+      calendar: '/calendario',
+      team: '/equipa',
+      tasks: '/tarefas'
     };
     const createByModule: Record<string, CreateResource> = {
       condominiums: 'condominiums',
@@ -616,23 +709,23 @@ export const App = component$(() => {
 
     const rawPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const route = parseRouteContext(rawPath);
-    let storedToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    let storedToken = readStoredValue(SESSION_TOKEN_KEY);
     const storedAppContext = hasExplicitAppContext(rawPath)
       ? route.appContext
-      : normalizeAppContext(localStorage.getItem(SESSION_APP_CONTEXT_KEY) ?? 'hq');
+      : normalizeAppContext(readStoredValue(SESSION_APP_CONTEXT_KEY) ?? 'hq');
     session.appContext = storedAppContext;
     appContext.value = storedAppContext;
     currentPath.value = route.path;
     showEntry.value = route.showEntry;
-    const storedExpiry = localStorage.getItem(SESSION_EXPIRES_KEY);
+    const storedExpiry = readStoredValue(SESSION_EXPIRES_KEY);
     if (storedToken && storedExpiry && Date.parse(storedExpiry) <= Date.now() + 15_000) {
-      localStorage.removeItem(SESSION_TOKEN_KEY);
-      localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
+      removeStoredValue(SESSION_TOKEN_KEY);
+      removeStoredValue(SESSION_APP_CONTEXT_KEY);
       storedToken = '';
     }
 
     if (!storedToken) {
-      const storedRefreshToken = localStorage.getItem(SESSION_REFRESH_KEY);
+      const storedRefreshToken = readStoredValue(SESSION_REFRESH_KEY);
       if (storedRefreshToken) {
         try {
           const refreshed = await refreshSession(storedRefreshToken, storedAppContext);
@@ -641,19 +734,19 @@ export const App = component$(() => {
           session.user = refreshed.user;
           session.appContext = refreshed.appContext || storedAppContext;
           appContext.value = refreshed.appContext || storedAppContext;
-          localStorage.setItem(SESSION_TOKEN_KEY, refreshed.token);
-          localStorage.setItem(SESSION_REFRESH_KEY, refreshed.refreshToken);
-          localStorage.setItem(SESSION_EXPIRES_KEY, refreshed.expiresAt);
-          localStorage.setItem(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
+          writeStoredValue(SESSION_TOKEN_KEY, refreshed.token);
+          writeStoredValue(SESSION_REFRESH_KEY, refreshed.refreshToken);
+          writeStoredValue(SESSION_EXPIRES_KEY, refreshed.expiresAt);
+          writeStoredValue(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
           await loadWorkspace$(refreshed.token);
           if (route.path === '/login') {
             currentPath.value = '/dashboard';
             window.history.replaceState({}, '', buildAppPath(refreshed.appContext || storedAppContext, '/dashboard'));
           }
         } catch {
-          localStorage.removeItem(SESSION_REFRESH_KEY);
-          localStorage.removeItem(SESSION_EXPIRES_KEY);
-          localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
+          removeStoredValue(SESSION_REFRESH_KEY);
+          removeStoredValue(SESSION_EXPIRES_KEY);
+          removeStoredValue(SESSION_APP_CONTEXT_KEY);
           session.token = '';
           session.user = null;
         } finally {
@@ -675,7 +768,7 @@ export const App = component$(() => {
         window.history.replaceState({}, '', buildAppPath(storedAppContext, '/dashboard'));
       }
     } catch {
-      const storedRefreshToken = localStorage.getItem(SESSION_REFRESH_KEY);
+      const storedRefreshToken = readStoredValue(SESSION_REFRESH_KEY);
       if (storedRefreshToken) {
         try {
           const refreshed = await refreshSession(storedRefreshToken, storedAppContext);
@@ -683,26 +776,26 @@ export const App = component$(() => {
           session.user = refreshed.user;
           session.appContext = refreshed.appContext || storedAppContext;
           appContext.value = refreshed.appContext || storedAppContext;
-          localStorage.setItem(SESSION_TOKEN_KEY, refreshed.token);
-          localStorage.setItem(SESSION_REFRESH_KEY, refreshed.refreshToken);
-          localStorage.setItem(SESSION_EXPIRES_KEY, refreshed.expiresAt);
-          localStorage.setItem(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
+          writeStoredValue(SESSION_TOKEN_KEY, refreshed.token);
+          writeStoredValue(SESSION_REFRESH_KEY, refreshed.refreshToken);
+          writeStoredValue(SESSION_EXPIRES_KEY, refreshed.expiresAt);
+          writeStoredValue(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
           await loadWorkspace$(refreshed.token);
           if (route.path === '/login') {
             currentPath.value = '/dashboard';
             window.history.replaceState({}, '', buildAppPath(refreshed.appContext || storedAppContext, '/dashboard'));
           }
         } catch {
-          localStorage.removeItem(SESSION_TOKEN_KEY);
-          localStorage.removeItem(SESSION_REFRESH_KEY);
-          localStorage.removeItem(SESSION_EXPIRES_KEY);
-          localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
+          removeStoredValue(SESSION_TOKEN_KEY);
+          removeStoredValue(SESSION_REFRESH_KEY);
+          removeStoredValue(SESSION_EXPIRES_KEY);
+          removeStoredValue(SESSION_APP_CONTEXT_KEY);
           session.token = '';
           session.user = null;
         }
       } else {
-        localStorage.removeItem(SESSION_TOKEN_KEY);
-        localStorage.removeItem(SESSION_APP_CONTEXT_KEY);
+        removeStoredValue(SESSION_TOKEN_KEY);
+        removeStoredValue(SESSION_APP_CONTEXT_KEY);
         session.token = '';
         session.user = null;
       }
@@ -711,27 +804,27 @@ export const App = component$(() => {
     }
   });
 
+  if (showEntry.value) {
+    return (
+      <AppEntryPage
+        activeContext={appContext.value}
+        isLoading={isLoading.value}
+        onChoose$={chooseApp$}
+      />
+    );
+  }
+
   if (!session.ready || !session.token) {
-    if (showEntry.value) {
-      return (
-        <AppEntryPage
-          onChoose$={(context) => {
-            appContext.value = context;
-            session.appContext = context;
-            window.history.pushState({}, '', buildAppPath(context, '/login'));
-            showEntry.value = false;
-            currentPath.value = '/login';
-          }}
-        />
-      );
-    }
     return (
       <LoginPage
         apiStatus={apiStatus.value}
         error={error.value}
         isLoading={isLoading.value || !session.ready}
         appContext={appContext.value}
+        defaultEmail={devLoginEmail}
+        defaultPassword={devLoginPassword}
         onLogin$={login$}
+        onBackToEntry$={switchApp$}
       />
     );
   }
@@ -762,6 +855,17 @@ export const App = component$(() => {
             currentUser={session.user}
             token={session.token}
             navigate$={navigate$}
+          />
+        ) : page.path === '/calendario' ? (
+          <CalendarPage
+            resources={resources.value}
+            isSaving={isSaving.value}
+            readOnly
+            initialType={route.kind === 'calendarType' ? route.eventType : ''}
+            navigate$={navigate$}
+            onCreate$={createRecord$}
+            onUpdate$={updateRecord$}
+            onDelete$={deleteRecord$}
           />
         ) : page.path === '/documentos' ? (
           <DocumentsPage
@@ -806,6 +910,13 @@ export const App = component$(() => {
             appContext={appContext.value}
             currentUser={session.user}
             token={session.token}
+            navigate$={navigate$}
+          />
+        ) : page.path === '/tarefas' ? (
+          <TasksPage
+            appContext={appContext.value}
+            resources={resources.value}
+            currentUser={session.user}
             navigate$={navigate$}
           />
         ) : page.path === '/manutencao' ? (
@@ -868,6 +979,18 @@ export const App = component$(() => {
           navigate$={navigate$}
           onQuickAction$={runDashboardAction$}
           onModuleCommand$={runModuleCommand$}
+        />
+      ) : page.path === '/equipa' ? (
+        <TeamPage
+          resources={resources.value}
+          navigate$={navigate$}
+        />
+      ) : page.path === '/tarefas' ? (
+        <TasksPage
+          appContext={appContext.value}
+          resources={resources.value}
+          currentUser={session.user}
+          navigate$={navigate$}
         />
       ) : page.path === '/condominios' ? (
         <CondominiumsPage

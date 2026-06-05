@@ -111,6 +111,7 @@ Importante: MCP Supabase e Supabase CLI sao autenticacoes diferentes. O MCP pode
 - `apps/web/.env.production.example`: template do frontend.
 - `scripts/check-production-env.mjs`: verifica se ambiente de producao tem valores perigosos.
 - `scripts/check-production-api.mjs`: testa endpoints reais da API com login autenticado, sem imprimir token.
+- `scripts/check-vercel-projects.mjs`: confirma Root Directory esperado dos projetos Vercel.
 - `docs/32-managed-cloud-deployment.md`: plano de cloud gerida.
 - `docs/29-go-live-checklist.md`: checklist de go-live.
 
@@ -131,6 +132,7 @@ Para validar variaveis de producao, correr com as variaveis reais carregadas:
 ```bash
 pnpm run check:prod-env -- --target api
 pnpm run check:prod-env -- --target web
+pnpm run check:vercel-projects
 ```
 
 ### 2. Deploy do frontend

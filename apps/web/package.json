@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "vite build && vite build -c adapters/static/vite.config.ts",
+    "build:dev-login": "vite build --mode development && vite build -c adapters/static/vite.config.ts --mode development && vite build --ssr src/entry.preview.tsx --outDir server --mode development",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview --host 127.0.0.1 --port 4173"
   },

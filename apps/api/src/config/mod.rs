@@ -36,9 +36,16 @@ pub struct ApiConfig {
     pub environment: String,
     pub data_path: PathBuf,
     pub document_storage_path: PathBuf,
+    pub document_storage_backend: DocumentStorageBackend,
     pub cors_allowed_origins: Vec<String>,
     pub database: Option<DatabaseConfig>,
     pub allow_demo_seed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocumentStorageBackend {
+    Filesystem,
+    Postgres,
 }
 
 #[derive(Debug, Clone)]
@@ -53,6 +60,10 @@ pub struct PersistenceStatus {
     pub database_configured: bool,
     pub database_url: Option<String>,
     pub json_store_path: String,
+    pub document_storage_backend: &'static str,
+    pub document_storage_path: String,
+    pub document_storage_persistent: bool,
+    pub document_storage_warning: Option<&'static str>,
     pub environment: String,
     pub demo_seed_allowed: bool,
 }
@@ -78,18 +89,25 @@ impl ApiConfig {
             .unwrap_or_else(|_| "development".to_string())
             .trim()
             .to_lowercase();
-        let document_storage_path = std::env::var("GESTISAC_DOCUMENT_STORAGE_PATH")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/documents"));
         let cors_allowed_origins = parse_cors_origins();
         let database = std::env::var("GESTISAC_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
             .ok()
             .map(DatabaseConfig::new)
             .transpose()?;
+        if let Some(database) = &database {
+            validate_database_target(database.url())?;
+        }
         if database.is_none() {
             bail!("PostgreSQL e obrigatorio: defina GESTISAC_DATABASE_URL");
         }
+        let document_storage_backend = parse_document_storage_backend(
+            database.is_some(),
+            environment == "production" || is_vercel_runtime(),
+        )?;
+        let document_storage_path = std::env::var("GESTISAC_DOCUMENT_STORAGE_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/documents"));
         let allow_demo_seed = parse_bool_env("GESTISAC_ALLOW_DEMO_SEED").unwrap_or(false)
             && environment != "production";
 
@@ -99,6 +117,7 @@ impl ApiConfig {
             environment,
             data_path,
             document_storage_path,
+            document_storage_backend,
             cors_allowed_origins,
             database,
             allow_demo_seed,
@@ -139,6 +158,14 @@ impl ApiConfig {
     }
 
     pub fn persistence_status(&self) -> PersistenceStatus {
+        let document_storage_persistent = match self.document_storage_backend {
+            DocumentStorageBackend::Postgres => true,
+            DocumentStorageBackend::Filesystem => !is_vercel_runtime(),
+        };
+        let document_storage_path = match self.document_storage_backend {
+            DocumentStorageBackend::Postgres => "postgres:file_objects".to_string(),
+            DocumentStorageBackend::Filesystem => self.document_storage_path.display().to_string(),
+        };
         PersistenceStatus {
             active_backend: "postgresql",
             database_configured: self.database.is_some(),
@@ -147,6 +174,10 @@ impl ApiConfig {
                 .join("data/store.json")
                 .display()
                 .to_string(),
+            document_storage_backend: self.document_storage_backend.as_str(),
+            document_storage_path,
+            document_storage_persistent,
+            document_storage_warning: self.document_storage_warning(),
             environment: self.environment.clone(),
             demo_seed_allowed: self.allow_demo_seed,
         }
@@ -154,6 +185,27 @@ impl ApiConfig {
 
     pub fn is_production(&self) -> bool {
         self.environment == "production"
+    }
+
+    fn document_storage_warning(&self) -> Option<&'static str> {
+        if self.document_storage_backend == DocumentStorageBackend::Filesystem
+            && is_vercel_runtime()
+        {
+            Some(
+                "Vercel serverless filesystem is ephemeral; use postgres file_objects, object storage or a persistent volume before real document uploads.",
+            )
+        } else {
+            None
+        }
+    }
+}
+
+impl DocumentStorageBackend {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Filesystem => "filesystem",
+            Self::Postgres => "postgres",
+        }
     }
 }
 
@@ -205,6 +257,67 @@ fn parse_bool_env(name: &str) -> Option<bool> {
         "0" | "false" | "no" | "off" => Some(false),
         _ => None,
     }
+}
+
+fn parse_document_storage_backend(
+    database_configured: bool,
+    managed_runtime: bool,
+) -> anyhow::Result<DocumentStorageBackend> {
+    let Some(value) = std::env::var("GESTISAC_DOCUMENT_STORAGE_BACKEND").ok() else {
+        return Ok(if database_configured && managed_runtime {
+            DocumentStorageBackend::Postgres
+        } else {
+            DocumentStorageBackend::Filesystem
+        });
+    };
+
+    match value.trim().to_ascii_lowercase().as_str() {
+        "postgres" | "postgresql" | "database" | "db" => Ok(DocumentStorageBackend::Postgres),
+        "filesystem" | "fs" | "local" => Ok(DocumentStorageBackend::Filesystem),
+        other => {
+            bail!("GESTISAC_DOCUMENT_STORAGE_BACKEND invalido: {other}. Use postgres ou filesystem")
+        }
+    }
+}
+
+fn validate_database_target(database_url: &str) -> anyhow::Result<()> {
+    if parse_bool_env("GESTISAC_ALLOW_LOCAL_DATABASE").unwrap_or(false) {
+        return Ok(());
+    }
+
+    if is_local_database_url(database_url) {
+        bail!(
+            "GESTISAC_DATABASE_URL points to a local database. Configure a remote Supabase/Postgres URL, or set GESTISAC_ALLOW_LOCAL_DATABASE=true only for an explicit local-only test."
+        );
+    }
+
+    Ok(())
+}
+
+fn is_local_database_url(database_url: &str) -> bool {
+    let Some((_, remainder)) = database_url.split_once("://") else {
+        return false;
+    };
+    let authority_and_path = remainder
+        .rsplit_once('@')
+        .map_or(remainder, |(_, host)| host);
+    let authority = authority_and_path
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or(authority_and_path);
+    let host = authority
+        .strip_prefix('[')
+        .and_then(|value| value.split_once(']').map(|(host, _)| host))
+        .or_else(|| authority.split(':').next())
+        .unwrap_or(authority)
+        .trim()
+        .to_ascii_lowercase();
+
+    matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1" | "0.0.0.0")
+}
+
+fn is_vercel_runtime() -> bool {
+    parse_bool_env("VERCEL").unwrap_or(false) || std::env::var("VERCEL_ENV").is_ok()
 }
 
 fn load_local_env_files() {
@@ -263,5 +376,25 @@ mod tests {
         assert!(is_local_dev_origin("http://127.0.0.1:3301"));
         assert!(is_local_dev_origin("https://[::1]:5173"));
         assert!(!is_local_dev_origin("https://example.com"));
+    }
+
+    #[test]
+    fn defaults_managed_document_storage_to_postgres_when_database_exists() {
+        let backend = parse_document_storage_backend(true, true).unwrap();
+
+        assert_eq!(backend, DocumentStorageBackend::Postgres);
+    }
+
+    #[test]
+    fn detects_local_database_targets() {
+        assert!(is_local_database_url(
+            "postgres://gestisac:secret@127.0.0.1:5432/gestisac"
+        ));
+        assert!(is_local_database_url(
+            "postgres://gestisac:secret@[::1]:5432/gestisac"
+        ));
+        assert!(!is_local_database_url(
+            "postgresql://postgres.example:secret@aws.pooler.supabase.com:5432/postgres"
+        ));
     }
 }

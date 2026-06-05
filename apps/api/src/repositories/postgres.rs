@@ -12,6 +12,7 @@ use anyhow::{bail, Context};
 use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use sqlx::{
     migrate::Migrator,
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -197,6 +198,82 @@ impl PostgresRepository {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    pub async fn upsert_file_object(
+        &self,
+        tenant_id: &str,
+        storage_key: &str,
+        content: &[u8],
+    ) -> anyhow::Result<()> {
+        let checksum = checksum_sha256(content);
+        query_np!(
+            r#"
+            INSERT INTO file_objects
+                (tenant_id, storage_key, content, size_bytes, checksum_sha256, created_at, updated_at, deleted_at)
+            VALUES ($1, $2, $3, $4, $5, now(), now(), NULL)
+            ON CONFLICT (tenant_id, storage_key) DO UPDATE SET
+                content = EXCLUDED.content,
+                size_bytes = EXCLUDED.size_bytes,
+                checksum_sha256 = EXCLUDED.checksum_sha256,
+                updated_at = now(),
+                deleted_at = NULL
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(storage_key)
+        .bind(content)
+        .bind(i64_from_usize(content.len()))
+        .bind(checksum)
+        .execute(&self.pool)
+        .await
+        .context("failed to upsert file object in postgres")?;
+
+        Ok(())
+    }
+
+    pub async fn read_file_object(
+        &self,
+        tenant_id: &str,
+        storage_key: &str,
+    ) -> anyhow::Result<Option<Vec<u8>>> {
+        query_scalar_np!(
+            r#"
+            SELECT content
+            FROM file_objects
+            WHERE tenant_id = $1
+              AND storage_key = $2
+              AND deleted_at IS NULL
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(storage_key)
+        .fetch_optional(&self.pool)
+        .await
+        .context("failed to read file object from postgres")
+    }
+
+    pub async fn delete_file_object(
+        &self,
+        tenant_id: &str,
+        storage_key: &str,
+    ) -> anyhow::Result<()> {
+        query_np!(
+            r#"
+            UPDATE file_objects
+            SET deleted_at = now(), updated_at = now()
+            WHERE tenant_id = $1
+              AND storage_key = $2
+              AND deleted_at IS NULL
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(storage_key)
+        .execute(&self.pool)
+        .await
+        .context("failed to soft-delete file object in postgres")?;
+
+        Ok(())
     }
 
     pub async fn load_chat_messages(
@@ -456,6 +533,38 @@ impl PostgresRepository {
             .collect();
 
         Ok(sql_page(items, page, page_size, total))
+    }
+
+    pub async fn update_user_password_hash(
+        &self,
+        tenant_id: &str,
+        email: &str,
+        password_hash: &str,
+    ) -> anyhow::Result<Option<String>> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            id: String,
+        }
+
+        let row: Option<Row> = query_as_np!(
+            r#"
+            UPDATE users
+            SET password_hash = $3,
+                updated_at = now()
+            WHERE tenant_id = $1
+              AND lower(email) = lower($2)
+              AND deleted_at IS NULL
+            RETURNING id
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(email)
+        .bind(password_hash)
+        .fetch_optional(&self.pool)
+        .await
+        .context("failed to update relational user password hash in postgres")?;
+
+        Ok(row.map(|row| row.id))
     }
 
     pub async fn list_relational_condominiums_page(
@@ -3687,8 +3796,8 @@ fn database_pool_max_connections() -> u32 {
     std::env::var("GESTISAC_DATABASE_POOL_MAX")
         .ok()
         .and_then(|value| value.parse::<u32>().ok())
-        .map(|value| value.clamp(1, 8))
-        .unwrap_or(2)
+        .map(|value| value.clamp(1, 4))
+        .unwrap_or(1)
 }
 
 fn decode_json_values<T>(
@@ -5968,6 +6077,12 @@ fn sql_offset_for(page: usize, page_size: usize) -> i64 {
 
 fn i64_from_usize(value: usize) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
+}
+
+fn checksum_sha256(content: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content);
+    format!("{:x}", hasher.finalize())
 }
 
 fn usize_from_i64(value: i64) -> usize {

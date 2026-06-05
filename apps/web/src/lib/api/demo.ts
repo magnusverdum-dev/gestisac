@@ -40,6 +40,7 @@ import type {
   ReportPreview,
   InspectionItem,
   MaintenanceItem,
+  TeamMember,
   Ocorrencia,
   OcorrenciaComentario,
   OcorrenciaDetalhe,
@@ -105,7 +106,7 @@ export async function demoApiRequest<T>(
   if (pathname === 'auth/login' && method === 'POST') {
     const email = String(body.email ?? '').trim().toLowerCase();
     const password = String(body.password ?? '');
-    if (email !== 'admin@gestisac.pt' || password !== 'Gestisac2026!') {
+    if (email !== 'admin@gestisac.pt' || !password) {
       throw new Error('Credenciais invalidas');
     }
 
@@ -134,6 +135,11 @@ export async function demoApiRequest<T>(
 
   if (pathname === 'permissions') {
     return store.permissions as T;
+  }
+
+  if (pathname === 'team') {
+    store.team = buildDemoTeam(store);
+    return paginateDemoCollection(store.team, url) as T;
   }
 
   if (pathname === 'chat/messages' && method === 'GET') {
@@ -327,6 +333,10 @@ function ensureDemoStoreDefaults(store: DemoStore): DemoStore {
     const normalized = normalizeInspectionRecord(store.inspections[index] as InspectionItem);
     syncInspectionCalendarEvent(store, normalized);
     store.inspections[index] = normalized;
+  }
+
+  if (!Array.isArray(store.team)) {
+    store.team = buildDemoTeam(store);
   }
 
   return store;
@@ -743,6 +753,7 @@ function createDemoStore(): DemoStore {
       }
     ],
     chatMessages: [],
+    team: [],
     inspections: demoInspections('Condominio Vila Verde'),
     calendarEvents: demoCalendarEvents(),
     assemblies: [
@@ -769,6 +780,41 @@ function createDemoStore(): DemoStore {
     ],
     permissions
   };
+}
+
+function buildDemoTeam(store: DemoStore): TeamMember[] {
+  const user = store.user;
+  const assignedToUser = (value: string) => {
+    const normalized = value.toLowerCase();
+    return [user.id, user.name, user.email]
+      .map((item) => item.toLowerCase())
+      .some((item) => item && normalized.includes(item));
+  };
+  const assignedOcorrencias = store.ocorrencias.filter((item) =>
+    assignedToUser(`${item.assignedWorkerId} ${item.atribuidoA}`)
+  );
+  const assignedInspections = store.inspections.filter((item) =>
+    assignedToUser(item.assignedWorkerId)
+  );
+
+  return [
+    {
+      ...user,
+      openTasks:
+        assignedOcorrencias.filter((item) => !['resolvida', 'fechada'].includes(item.status)).length +
+        assignedInspections.filter((item) => !['Confirmada', 'Concluida', 'Cancelada'].includes(item.status)).length,
+      inProgressTasks:
+        assignedOcorrencias.filter((item) => item.status === 'emCurso').length +
+        assignedInspections.filter((item) => item.status.toLowerCase().includes('curso')).length,
+      pendingValidation:
+        assignedOcorrencias.filter((item) => item.hqValidationStatus === 'pendente').length +
+        assignedInspections.filter((item) => item.status === 'Submetida').length,
+      lastActivityAt:
+        assignedOcorrencias.map((item) => item.atualizadoEm).sort().at(-1) ||
+        assignedInspections.map((item) => item.submittedAt).filter(Boolean).sort().at(-1) ||
+        new Date().toISOString()
+    }
+  ];
 }
 
 function demoCalendarEvents(): CalendarEvent[] {

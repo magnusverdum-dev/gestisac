@@ -8,6 +8,7 @@ type CalendarPageProps = {
   resources: ResourceState;
   isSaving: boolean;
   initialType?: string;
+  readOnly?: boolean;
   navigate$: PropFunction<(path: string) => void>;
   onCreate$: PropFunction<(resource: ResourceEndpoint, payload: Record<string, unknown>) => void>;
   onUpdate$: PropFunction<(resource: ResourceEndpoint, id: string, payload: Record<string, unknown>) => void>;
@@ -88,17 +89,19 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
           <h1>Calendario operacional</h1>
           <p>Agenda ligada a vistorias, reunioes, emails planeados, tickets e manutencao.</p>
         </div>
-        <button
-          type="button"
-          class="primary-action action-with-icon"
-          onClick$={() => {
-            isCreating.value = true;
-            editingId.value = '';
-          }}
-        >
-          <PlusIcon size={16} />
-          Adicionar evento
-        </button>
+        {!props.readOnly ? (
+          <button
+            type="button"
+            class="primary-action action-with-icon"
+            onClick$={() => {
+              isCreating.value = true;
+              editingId.value = '';
+            }}
+          >
+            <PlusIcon size={16} />
+            Adicionar evento
+          </button>
+        ) : null}
       </header>
 
       <div class="summary-grid simple-summary-grid">
@@ -156,7 +159,7 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
           ))}
         </div>
 
-        {quickInspectionOpen.value ? (
+        {quickInspectionOpen.value && !props.readOnly ? (
           <section class="quick-inspection-panel">
             <div>
               <span class="page-eyebrow">Agendar vistoria</span>
@@ -201,6 +204,9 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
                       class={`calendar-day ${isOutside ? 'muted' : ''}`}
                       key={dateKey}
                       onContextMenu$={(event) => {
+                        if (props.readOnly) {
+                          return;
+                        }
                         event.preventDefault();
                         quickInspectionDate.value = dateKey;
                         quickInspectionOpen.value = true;
@@ -299,40 +305,42 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
                     <h2>{selectedEvent.title}</h2>
                     <p>{selectedEvent.condominium || 'Geral'} - {selectedEvent.status}</p>
                   </div>
-                  <details class="simple-more-menu">
-                    <summary><MoreHorizontalIcon size={16} /></summary>
-                    <button
-                      type="button"
-                      onClick$={() => {
-                        editingId.value = selectedEvent.id;
-                        isCreating.value = false;
-                      }}
-                    >
-                      <EditIcon size={14} /> Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick$={async () => {
-                        const duplicate = eventToPayload(selectedEvent);
-                        duplicate.title = `Copia - ${selectedEvent.title}`;
-                        await props.onCreate$('calendar-events', duplicate);
-                      }}
-                    >
-                      Duplicar
-                    </button>
-                    <button
-                      type="button"
-                      class="danger-action"
-                      onClick$={async () => {
-                        if (confirm(`Apagar ${selectedEvent.title}?`)) {
-                          await props.onDelete$('calendar-events', selectedEvent.id);
-                          selectedId.value = '';
-                        }
-                      }}
-                    >
-                      <Trash2Icon size={14} /> Apagar
-                    </button>
-                  </details>
+                  {!props.readOnly ? (
+                    <details class="simple-more-menu">
+                      <summary><MoreHorizontalIcon size={16} /></summary>
+                      <button
+                        type="button"
+                        onClick$={() => {
+                          editingId.value = selectedEvent.id;
+                          isCreating.value = false;
+                        }}
+                      >
+                        <EditIcon size={14} /> Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick$={async () => {
+                          const duplicate = eventToPayload(selectedEvent);
+                          duplicate.title = `Copia - ${selectedEvent.title}`;
+                          await props.onCreate$('calendar-events', duplicate);
+                        }}
+                      >
+                        Duplicar
+                      </button>
+                      <button
+                        type="button"
+                        class="danger-action"
+                        onClick$={async () => {
+                          if (confirm(`Apagar ${selectedEvent.title}?`)) {
+                            await props.onDelete$('calendar-events', selectedEvent.id);
+                            selectedId.value = '';
+                          }
+                        }}
+                      >
+                        <Trash2Icon size={14} /> Apagar
+                      </button>
+                    </details>
+                  ) : null}
                 </div>
                 <dl class="calendar-detail-list">
                   <div><dt>Inicio</dt><dd>{formatDateTime(selectedEvent.startAt)}</dd></div>
@@ -366,7 +374,7 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
                     {selectedEvent.attendees.map((attendee) => <span key={attendee}>{attendee}</span>)}
                   </div>
                 ) : null}
-                {linkedInspection ? (
+                {linkedInspection && !props.readOnly ? (
                   <div class="simple-header-actions">
                     {linkedInspection.status === 'Planeada' ? (
                       <button
@@ -406,7 +414,7 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
         </div>
       </section>
 
-      {isCreating.value || editingEvent ? (
+      {(isCreating.value || editingEvent) && !props.readOnly ? (
         <section class="glass-panel simple-form-panel calendar-form-panel">
           <div class="simple-content-header">
             <div>

@@ -1,5 +1,6 @@
 import { apiRequest } from './http';
 import { getAccounting } from './accounting';
+import { loadInBatches } from './batch';
 import { getResourcePage } from './pagination';
 import { listarOcorrencias } from './ocorrencias';
 import type {
@@ -18,6 +19,7 @@ import type {
   Resident,
   ResourceState,
   Supplier,
+  TeamMember,
   Ticket
 } from './types';
 
@@ -69,83 +71,79 @@ async function loadOrFallback<T>(
 
 export async function getResources(token: string): Promise<ResourceState> {
   const loadWarnings: string[] = [];
-  const condominiums = await loadOrFallback(
-    'condominios',
-    () => getResourcePage<Condominium>(token, '/api/condominiums'),
-    [],
-    loadWarnings
-  );
-  const buildings = await loadOrFallback('edificios', () => getResourcePage<Building>(token, '/api/buildings'), [], loadWarnings);
-  const fractions = await loadOrFallback('fracoes', () => getResourcePage<Fraction>(token, '/api/fractions'), [], loadWarnings);
-  const residents = await loadOrFallback('residentes', () => getResourcePage<Resident>(token, '/api/residents'), [], loadWarnings);
-  const tickets = await loadOrFallback('tickets', () => getResourcePage<Ticket>(token, '/api/tickets'), [], loadWarnings);
-  const ocorrencias = await loadOrFallback(
-    'ocorrencias',
-    () => listarOcorrencias(token).then((paginated) => paginated.data),
-    [],
-    loadWarnings
-  );
-  const suppliers = await loadOrFallback('fornecedores', () => getResourcePage<Supplier>(token, '/api/suppliers'), [], loadWarnings);
-  const documents = await loadOrFallback('documentos', () => getResourcePage<DocumentItem>(token, '/api/documents'), [], loadWarnings);
-  const reports = await loadOrFallback('relatorios', () => getResourcePage<Report>(token, '/api/reports'), [], loadWarnings);
-  const maintenance = await loadOrFallback(
-    'manutencoes',
-    () => getResourcePage<MaintenanceItem>(token, '/api/maintenance'),
-    [],
-    loadWarnings
-  );
-  const inspections = await loadOrFallback(
-    'vistorias',
-    () => getResourcePage<InspectionItem>(token, '/api/inspections'),
-    [],
-    loadWarnings
-  );
-  const calendarEvents = await loadOrFallback(
-    'calendario',
-    () => getResourcePage<CalendarEvent>(token, '/api/calendar-events'),
-    [],
-    loadWarnings
-  );
-  const assemblies = await loadOrFallback(
-    'assembleias',
-    () => getResourcePage<Assembly>(token, '/api/assemblies'),
-    [],
-    loadWarnings
-  );
-  const accounting = await loadOrFallback('contabilidade', () => getAccounting(token), emptyAccounting, loadWarnings);
-  const auditLog = await loadOrFallback(
-    'auditoria',
-    () => getResourcePage<AuditLogEntry>(token, '/api/audit-log', 1, 25),
-    [],
-    loadWarnings
-  );
-  const permissions = await loadOrFallback<PermissionsResponse>(
-    'permissoes',
-    () => apiRequest('/api/permissions', { token }),
-    {
-      role: '',
-      modules: []
-    },
-    loadWarnings
-  );
+  const loaded = await loadInBatches({
+    condominiums: () =>
+      loadOrFallback(
+        'condominios',
+        () => getResourcePage<Condominium>(token, '/api/condominiums'),
+        [],
+        loadWarnings
+      ),
+    buildings: () => loadOrFallback('edificios', () => getResourcePage<Building>(token, '/api/buildings'), [], loadWarnings),
+    fractions: () => loadOrFallback('fracoes', () => getResourcePage<Fraction>(token, '/api/fractions'), [], loadWarnings),
+    residents: () => loadOrFallback('residentes', () => getResourcePage<Resident>(token, '/api/residents'), [], loadWarnings),
+    team: () => loadOrFallback('equipa', () => getResourcePage<TeamMember>(token, '/api/team'), [], loadWarnings),
+    tickets: () => loadOrFallback('tickets', () => getResourcePage<Ticket>(token, '/api/tickets'), [], loadWarnings),
+    ocorrencias: () =>
+      loadOrFallback<Ocorrencia[]>(
+        'ocorrencias',
+        () => listarOcorrencias(token).then((paginated) => paginated.data),
+        [],
+        loadWarnings
+      ),
+    suppliers: () => loadOrFallback('fornecedores', () => getResourcePage<Supplier>(token, '/api/suppliers'), [], loadWarnings),
+    documents: () => loadOrFallback('documentos', () => getResourcePage<DocumentItem>(token, '/api/documents'), [], loadWarnings),
+    reports: () => loadOrFallback('relatorios', () => getResourcePage<Report>(token, '/api/reports'), [], loadWarnings),
+    maintenance: () =>
+      loadOrFallback(
+        'manutencoes',
+        () => getResourcePage<MaintenanceItem>(token, '/api/maintenance'),
+        [],
+        loadWarnings
+      ),
+    inspections: () =>
+      loadOrFallback(
+        'vistorias',
+        () => getResourcePage<InspectionItem>(token, '/api/inspections'),
+        [],
+        loadWarnings
+      ),
+    calendarEvents: () =>
+      loadOrFallback(
+        'calendario',
+        () => getResourcePage<CalendarEvent>(token, '/api/calendar-events'),
+        [],
+        loadWarnings
+      ),
+    assemblies: () =>
+      loadOrFallback(
+        'assembleias',
+        () => getResourcePage<Assembly>(token, '/api/assemblies'),
+        [],
+        loadWarnings
+      ),
+    accounting: () => loadOrFallback('contabilidade', () => getAccounting(token), emptyAccounting, loadWarnings),
+    auditLog: () =>
+      loadOrFallback(
+        'auditoria',
+        () => getResourcePage<AuditLogEntry>(token, '/api/audit-log', 1, 25),
+        [],
+        loadWarnings
+      ),
+    permissions: () =>
+      loadOrFallback<PermissionsResponse>(
+        'permissoes',
+        () => apiRequest('/api/permissions', { token }),
+        {
+          role: '',
+          modules: []
+        },
+        loadWarnings
+      )
+  });
 
   return {
-    condominiums,
-    buildings,
-    fractions,
-    residents,
-    tickets,
-    ocorrencias,
-    suppliers,
-    documents,
-    reports,
-    maintenance,
-    inspections,
-    calendarEvents,
-    assemblies,
-    accounting,
-    auditLog,
-    permissions,
+    ...loaded,
     loadWarnings
   };
 }

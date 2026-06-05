@@ -13,11 +13,13 @@ type SidebarProps = {
 export const Sidebar = component$((props: SidebarProps) => {
   const mobileMenuOpen = useSignal(false);
   const navItems = navPages.filter((page) => {
-    if (props.appContext === 'hq') return true;
-    if (props.appContext === 'worker') {
-      return ['/dashboard', '/tickets', '/manutencao', '/calendario', '/vistorias', '/chat'].includes(page.path);
+    if (props.appContext === 'hq') {
+      return ['/dashboard', '/condominios', '/equipa', '/tarefas', '/tickets', '/calendario'].includes(page.path);
     }
-    return ['/dashboard', '/tickets', '/documentos', '/chat'].includes(page.path);
+    if (props.appContext === 'worker') {
+      return ['/dashboard', '/tarefas', '/tickets', '/calendario'].includes(page.path);
+    }
+    return ['/dashboard', '/tickets', '/calendario'].includes(page.path);
   });
 
   return (

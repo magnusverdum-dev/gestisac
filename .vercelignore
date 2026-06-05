@@ -17,3 +17,6 @@ apps/*/server
 **/.env.local
 **/.env.*.local
 mock
+chat-e2e.mjs
+nav-test.mjs
+login-payload.json

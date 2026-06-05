@@ -5,6 +5,7 @@ pub mod models;
 pub mod repositories;
 pub mod routes;
 pub mod state;
+pub mod storage;
 
 use axum::Router;
 use state::AppState;

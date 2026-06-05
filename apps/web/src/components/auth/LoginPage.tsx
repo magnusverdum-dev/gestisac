@@ -7,13 +7,13 @@ type LoginPageProps = {
   error: string;
   isLoading: boolean;
   appContext: AppContext;
+  defaultEmail?: string;
+  defaultPassword?: string;
   onLogin$: PropFunction<(email: string, password: string, appContext: AppContext) => void>;
+  onBackToEntry$: PropFunction<() => void>;
 };
 
 export const LoginPage = component$((props: LoginPageProps) => {
-  const demoEmail = 'admin@gestisac.pt';
-  const demoPassword = 'Gestisac2026!';
-
   const appLabel =
     props.appContext === 'worker'
       ? 'App Funcionarios'
@@ -43,7 +43,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
             {props.apiStatus === 'online' ? 'API Rust online' : 'A ligar ao backend'}
           </span>
           <h1>Entrar</h1>
-          <p>Autenticacao de teste para demonstracao do ecossistema.</p>
+          <p>Acede com a conta fornecida pela administracao.</p>
         </div>
 
         <form
@@ -66,8 +66,8 @@ export const LoginPage = component$((props: LoginPageProps) => {
               type="text"
               inputMode="email"
               autoComplete="username"
-              placeholder="admin@gestisac.pt"
-              value={demoEmail}
+              placeholder="email@empresa.pt"
+              value={props.defaultEmail}
               required
             />
           </label>
@@ -78,7 +78,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
               type="password"
               autoComplete="current-password"
               placeholder="Password da conta"
-              value={demoPassword}
+              value={props.defaultPassword}
               required
             />
           </label>
@@ -88,19 +88,19 @@ export const LoginPage = component$((props: LoginPageProps) => {
           <button class="primary-action" type="submit" disabled={props.isLoading}>
             {props.isLoading ? 'A entrar...' : 'Entrar'}
           </button>
+          <button
+            class="secondary-action"
+            type="button"
+            disabled={props.isLoading}
+            onClick$={props.onBackToEntry$}
+          >
+            Voltar ao menu das apps
+          </button>
           {props.isLoading ? (
             <p class="form-hint">
               A ligar a API online. No primeiro arranque pode demorar alguns segundos.
             </p>
           ) : null}
-          <button
-            class="secondary-action"
-            type="button"
-            disabled={props.isLoading}
-            onClick$={() => props.onLogin$(demoEmail, demoPassword, props.appContext)}
-          >
-            Entrar rapido (demo)
-          </button>
         </form>
 
         <PwaInstallPanel compact />

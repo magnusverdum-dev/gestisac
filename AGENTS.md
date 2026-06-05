@@ -49,3 +49,15 @@ Validation before delivering frontend changes:
 pnpm run typecheck:web
 pnpm run build:web
 ```
+
+## Smoke Tests for Improvements
+
+When implementing or validating any improvement, follow `docs/36-smoke-tests-por-melhoria.md`.
+
+Core rule:
+
+- Validate the published API first.
+- Then replicate the impacted user flow by app context: HQ/Admin, Worker and Client.
+- Do not treat localhost-only validation as production validation.
+- Add new or changed API endpoints to `scripts/check-production-api.mjs` when they are part of the production contract.
+- Report which smoke commands passed and which user contexts were replicated before delivering.

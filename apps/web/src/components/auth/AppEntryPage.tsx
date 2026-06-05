@@ -2,6 +2,8 @@ import { component$, type PropFunction } from '@builder.io/qwik';
 import type { AppContext } from '../../lib/api';
 
 type AppEntryPageProps = {
+  activeContext?: AppContext;
+  isLoading?: boolean;
   onChoose$: PropFunction<(context: AppContext) => void>;
 };
 
@@ -23,9 +25,18 @@ export const AppEntryPage = component$((props: AppEntryPageProps) => {
         </div>
         <div class="entry-grid">
           {cards.map((card) => (
-            <button key={card.id} class="entry-card" type="button" onClick$={() => props.onChoose$(card.id)}>
+            <button
+              key={card.id}
+              class="entry-card"
+              type="button"
+              aria-busy={props.isLoading && props.activeContext === card.id ? 'true' : 'false'}
+              disabled={props.isLoading}
+              onClick$={() => props.onChoose$(card.id)}
+            >
               <strong>{card.title}</strong>
-              <span>{card.detail}</span>
+              <span>
+                {props.isLoading && props.activeContext === card.id ? 'A abrir app...' : card.detail}
+              </span>
             </button>
           ))}
         </div>

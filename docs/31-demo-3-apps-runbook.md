@@ -20,9 +20,9 @@ Demonstrar o fluxo completo:
 
 Exemplo: `https://demo-gestisac.exemplo.com/hq/login`
 
-## Entrar rápido (modo demo)
-- Em cada app, usar `Entrar rapido (demo)`.
-- Não usar autenticação rígida para a reunião.
+## Login da demo
+- Em cada app, entrar com a conta de demo fornecida fora do repositorio.
+- Nao publicar passwords nem usar botoes de login automatico em producao.
 
 ## Script da demo (ordem exata)
 1. Cliente: abrir `Tickets` e criar `Avaria` com condomínio e equipamento.

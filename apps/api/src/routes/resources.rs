@@ -10,6 +10,7 @@ use crate::{
     repositories::postgres::RelationalCalendarEventFilter,
     routes::auth::{current_context, current_user, require_delete, require_write},
     state::{protect_session_secret, AppState},
+    storage::{read_file_object, remove_file_object, write_file_object},
 };
 use axum::{
     extract::{Multipart, Path, Query, State},
@@ -20,7 +21,6 @@ use axum::{
 use chrono::Utc;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use uuid::Uuid;
 
 const MAX_DOCUMENT_BYTES: usize = 10 * 1024 * 1024;
@@ -1326,7 +1326,7 @@ pub async fn generate_document(
         draft.lines.join("\n").into_bytes()
     };
 
-    write_document_bytes(&state, &storage_key, &bytes).await?;
+    write_document_bytes(&state, &user.tenant_id, &storage_key, &bytes).await?;
 
     let item = Document {
         id: document_id,
@@ -1428,7 +1428,7 @@ pub async fn upload_document(
     let id = new_id();
     let safe_name = safe_file_name(&uploaded_file.original_name);
     let storage_key = format!("{id}-{safe_name}");
-    write_document_bytes(&state, &storage_key, &uploaded_file.bytes).await?;
+    write_document_bytes(&state, &user.tenant_id, &storage_key, &uploaded_file.bytes).await?;
 
     let item = Document {
         id,
@@ -1499,7 +1499,7 @@ pub async fn document_preview(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<DocumentPreview>, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
     let store = state.store.read().await;
     let document = store
         .documents
@@ -1510,7 +1510,7 @@ pub async fn document_preview(
     drop(store);
 
     let content = if can_preview_text(&document) {
-        read_document_bytes(&state, &document)
+        read_document_bytes(&state, &context.tenant_id, &document)
             .await
             .ok()
             .and_then(|bytes| String::from_utf8(bytes).ok())
@@ -1545,7 +1545,7 @@ pub async fn download_document(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    require_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
     let store = state.store.read().await;
     let document = store
         .documents
@@ -1567,7 +1567,7 @@ pub async fn download_document(
         )
     } else {
         (
-            read_document_bytes(&state, &document).await?,
+            read_document_bytes(&state, &context.tenant_id, &document).await?,
             if document.file_name.is_empty() {
                 format!("gestisac-{}", document.storage_key)
             } else {
@@ -1629,7 +1629,7 @@ pub async fn delete_document(
     let response = store.documents.clone();
     drop(store);
     persist_document_delete(&state, &user.tenant_id, &id).await?;
-    remove_document_file(&state, &deleted_storage_key).await;
+    remove_document_file(&state, &user.tenant_id, &deleted_storage_key).await;
 
     Ok(Json(response))
 }
@@ -1766,7 +1766,7 @@ pub async fn export_report(
     let filename = format!("gestisac-{}.csv", slugify(&report.title));
     let document_id = new_id();
     let storage_key = format!("{document_id}-{filename}");
-    write_document_bytes(&state, &storage_key, body.as_bytes()).await?;
+    write_document_bytes(&state, &user.tenant_id, &storage_key, body.as_bytes()).await?;
 
     let mut store = state.store.write().await;
     if let Some(item) = store.reports.iter_mut().find(|item| item.id == id) {
@@ -3927,40 +3927,33 @@ struct UploadedDocumentFile {
 
 async fn write_document_bytes(
     state: &AppState,
+    tenant_id: &str,
     storage_key: &str,
     bytes: &[u8],
 ) -> Result<(), ApiError> {
-    tokio::fs::create_dir_all(&state.config.document_storage_path)
-        .await
-        .map_err(|_| ApiError::internal("Nao foi possivel preparar o arquivo documental"))?;
-    tokio::fs::write(document_path(state, storage_key), bytes)
-        .await
-        .map_err(|_| ApiError::internal("Nao foi possivel guardar o ficheiro"))
+    write_file_object(state, tenant_id, storage_key, bytes).await
 }
 
-async fn read_document_bytes(state: &AppState, document: &Document) -> Result<Vec<u8>, ApiError> {
+async fn read_document_bytes(
+    state: &AppState,
+    tenant_id: &str,
+    document: &Document,
+) -> Result<Vec<u8>, ApiError> {
     if document.storage_key.is_empty() {
         return Err(ApiError::not_found("Documento sem ficheiro associado"));
     }
 
-    tokio::fs::read(document_path(state, &document.storage_key))
-        .await
-        .map_err(|_| ApiError::not_found("Ficheiro do documento nao encontrado"))
+    read_file_object(state, tenant_id, &document.storage_key).await
 }
 
-async fn remove_document_file(state: &AppState, storage_key: &str) {
-    if storage_key.is_empty() {
-        return;
+async fn remove_document_file(state: &AppState, tenant_id: &str, storage_key: &str) {
+    if let Err(error) = remove_file_object(state, tenant_id, storage_key).await {
+        tracing::warn!(
+            ?error,
+            storage_key,
+            "failed to remove document file object after metadata delete"
+        );
     }
-
-    let _ = tokio::fs::remove_file(document_path(state, storage_key)).await;
-}
-
-fn document_path(state: &AppState, storage_key: &str) -> PathBuf {
-    state
-        .config
-        .document_storage_path
-        .join(safe_file_name(storage_key))
 }
 
 fn can_preview_text(document: &Document) -> bool {

@@ -13,6 +13,7 @@ use crate::{
     repositories::postgres::RelationalCondominiumFilter,
     routes::auth::{current_context, current_user, require_delete, require_write},
     state::AppState,
+    storage::{read_file_object, write_file_object},
 };
 use axum::{
     body::Body,
@@ -26,7 +27,7 @@ use chrono::{Duration, NaiveDate, Utc};
 use qrcode::render::svg;
 use qrcode::QrCode;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, io::Cursor, path::PathBuf};
+use std::{collections::HashMap, io::Cursor};
 use uuid::Uuid;
 
 const MAX_CONDOMINIUM_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
@@ -1272,7 +1273,7 @@ pub async fn upload_condominium_document(
     validate_required(&title, "Titulo do documento")?;
     let resource_id = new_id();
     let storage_key = condominium_storage_key(&id, &resource_id, &uploaded_file.original_name);
-    write_condominium_file(&state, &storage_key, &uploaded_file.bytes).await?;
+    write_condominium_file(&state, &tenant_id, &storage_key, &uploaded_file.bytes).await?;
 
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
@@ -1330,7 +1331,7 @@ pub async fn upload_condominium_media(
     validate_required(&title, "Titulo da imagem/planta")?;
     let resource_id = new_id();
     let storage_key = condominium_storage_key(&id, &resource_id, &uploaded_file.original_name);
-    write_condominium_file(&state, &storage_key, &uploaded_file.bytes).await?;
+    write_condominium_file(&state, &tenant_id, &storage_key, &uploaded_file.bytes).await?;
 
     let mut store = state.store.write().await;
     let item = find_condominium_mut(&mut store, &id)?;
@@ -1387,7 +1388,7 @@ pub async fn download_condominium_document(
     headers: HeaderMap,
     Path((id, resource_id)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
-    current_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
     let store = state.store.read().await;
     let document = store
         .condominiums
@@ -1405,6 +1406,7 @@ pub async fn download_condominium_document(
     binary_response(
         read_condominium_file_or_metadata(
             &state,
+            &context.tenant_id,
             &document.storage_key,
             format!(
                 "GESTISAC Documento\nTitulo: {}\nTipo: {}\nEstado: {}\n",
@@ -1423,7 +1425,7 @@ pub async fn download_condominium_media(
     headers: HeaderMap,
     Path((id, resource_id)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
-    current_user(&headers, &state).await?;
+    let context = current_context(&headers, &state).await?;
     let store = state.store.read().await;
     let media = store
         .condominiums
@@ -1437,6 +1439,7 @@ pub async fn download_condominium_media(
     binary_response(
         read_condominium_file_or_metadata(
             &state,
+            &context.tenant_id,
             &media.storage_key,
             format!(
                 "GESTISAC Media\nTitulo: {}\nTipo: {}\n",
@@ -2893,22 +2896,16 @@ fn condominium_storage_key(condominium_id: &str, resource_id: &str, file_name: &
 
 async fn write_condominium_file(
     state: &AppState,
+    tenant_id: &str,
     storage_key: &str,
     bytes: &[u8],
 ) -> Result<(), ApiError> {
-    let path = condominium_storage_path(state, storage_key);
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|_| ApiError::internal("Nao foi possivel preparar o arquivo do condominio"))?;
-    }
-    tokio::fs::write(path, bytes)
-        .await
-        .map_err(|_| ApiError::internal("Nao foi possivel guardar o ficheiro do condominio"))
+    write_file_object(state, tenant_id, storage_key, bytes).await
 }
 
 async fn read_condominium_file_or_metadata(
     state: &AppState,
+    tenant_id: &str,
     storage_key: &str,
     fallback: Vec<u8>,
 ) -> Result<Vec<u8>, ApiError> {
@@ -2916,17 +2913,7 @@ async fn read_condominium_file_or_metadata(
         return Ok(fallback);
     }
 
-    tokio::fs::read(condominium_storage_path(state, storage_key))
-        .await
-        .map_err(|_| ApiError::not_found("Ficheiro do condominio nao encontrado"))
-}
-
-fn condominium_storage_path(state: &AppState, storage_key: &str) -> PathBuf {
-    let mut path = state.config.document_storage_path.clone();
-    for segment in storage_key.split('/') {
-        path.push(safe_file_name(segment));
-    }
-    path
+    read_file_object(state, tenant_id, storage_key).await
 }
 
 fn binary_response(bytes: Vec<u8>, file_name: &str, mime_type: &str) -> Result<Response, ApiError> {
@@ -3467,6 +3454,7 @@ mod tests {
                 environment: "test".to_string(),
                 data_path: tmp,
                 document_storage_path: std::env::temp_dir().join("gestisac-test-docs"),
+                document_storage_backend: crate::config::DocumentStorageBackend::Filesystem,
                 cors_allowed_origins: vec![],
                 database: None,
                 allow_demo_seed: true,

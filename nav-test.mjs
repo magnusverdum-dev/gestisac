@@ -5,7 +5,11 @@ import { resolve } from 'path';
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const TARGET = 'http://127.0.0.1:5173';
 const EMAIL = 'admin@gestisac.pt';
-const PASS = 'Gestisac2026!';
+const PASS = process.env.GESTISAC_SMOKE_PASSWORD;
+
+if (!PASS) {
+  throw new Error('GESTISAC_SMOKE_PASSWORD is required. The password will not be printed.');
+}
 
 let seq = 0;
 const msgId = () => ++seq;

@@ -2,14 +2,18 @@ import { existsSync, readFileSync } from 'node:fs';
 
 const args = parseArgs(process.argv.slice(2));
 const target = args.target || 'all';
-const envFile = args['env-file'];
+const envFile = args['production-env-file'] || args['env-file'];
+const failures = [];
+const warnings = [];
+
+if (args.help || args.h) {
+  printHelp();
+  process.exit(0);
+}
 
 if (envFile) {
   loadEnvFile(envFile);
 }
-
-const failures = [];
-const warnings = [];
 
 if (!['all', 'api', 'web'].includes(target)) {
   failures.push(`Invalid --target "${target}". Use api, web or all.`);
@@ -51,6 +55,9 @@ function checkApiEnv() {
     if (!databaseUrl.startsWith('postgres://') && !databaseUrl.startsWith('postgresql://')) {
       failures.push('GESTISAC_DATABASE_URL/DATABASE_URL must be a Postgres connection string.');
     }
+    if (databaseUrl.includes(':6543/')) {
+      warnings.push('GESTISAC_DATABASE_URL uses Supabase transaction pooler port 6543; prefer session pooler 5432 for SQLx.');
+    }
   }
 
   required('JWT_SECRET');
@@ -91,9 +98,21 @@ function checkApiEnv() {
     failures.push('GESTISAC_SYNC_ON_STARTUP must be false or unset in production.');
   }
 
+  if (value('GESTISAC_BOOTSTRAP_ADMIN_PASSWORD')) {
+    warnings.push('GESTISAC_BOOTSTRAP_ADMIN_PASSWORD is set; keep it temporary and rotate/remove it after development login validation.');
+  }
+
+  const documentBackend = (value('GESTISAC_DOCUMENT_STORAGE_BACKEND') || 'postgres').toLowerCase();
+  if (!['postgres', 'postgresql', 'database', 'db', 'filesystem', 'fs', 'local'].includes(documentBackend)) {
+    failures.push('GESTISAC_DOCUMENT_STORAGE_BACKEND must be postgres or filesystem.');
+  }
+  if (isVercelRuntime() && ['filesystem', 'fs', 'local'].includes(documentBackend)) {
+    failures.push('GESTISAC_DOCUMENT_STORAGE_BACKEND must not be filesystem on Vercel production.');
+  }
+
   const documentPath = value('GESTISAC_DOCUMENT_STORAGE_PATH');
-  if (!documentPath) {
-    warnings.push('GESTISAC_DOCUMENT_STORAGE_PATH is unset; document features may need object storage or a persistent volume.');
+  if (['filesystem', 'fs', 'local'].includes(documentBackend) && !documentPath) {
+    warnings.push('GESTISAC_DOCUMENT_STORAGE_PATH is unset while filesystem document storage is selected.');
   }
 }
 
@@ -134,6 +153,10 @@ function isTruthy(rawValue) {
   return ['1', 'true', 'yes', 'on'].includes(String(rawValue || '').trim().toLowerCase());
 }
 
+function isVercelRuntime() {
+  return isTruthy(value('VERCEL')) || Boolean(value('VERCEL_ENV'));
+}
+
 function parseArgs(items) {
   const parsed = {};
   for (let index = 0; index < items.length; index += 1) {
@@ -151,10 +174,25 @@ function parseArgs(items) {
   return parsed;
 }
 
+function printHelp() {
+  console.log(`Usage:
+  pnpm run check:prod-env
+  pnpm run check:prod-env -- --target api
+  pnpm run check:prod-env -- --target web
+  pnpm run check:prod-env -- --production-env-file <path>
+
+Targets:
+  all  Validate API and Web production variables.
+  api  Validate only API production variables.
+  web  Validate only Web production variables.
+
+The script validates names and shapes only. It never prints secret values.`);
+}
+
 function loadEnvFile(path) {
   if (!existsSync(path)) {
-    failures.push(`Env file not found: ${path}`);
-    return;
+    console.error('Env file not found. Secret values will not be printed.');
+    process.exit(1);
   }
 
   const lines = readFileSync(path, 'utf8').split(/\r?\n/);

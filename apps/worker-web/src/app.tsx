@@ -5,31 +5,31 @@ import { PortalFrame } from '@gestisac/ui';
 const config = createRuntimeConfig('worker', import.meta.env);
 
 const kpis = [
-  { label: 'Modo', value: 'Campo', detail: 'PWA focada em tickets atribuidos.' },
-  { label: 'API', value: '/api/worker', detail: 'Payloads pequenos e offline-friendly.' },
-  { label: 'Fluxo', value: 'Hoje', detail: 'Urgentes, em curso, pecas e resolvidos.' }
+  { label: 'Hoje', value: 'Campo', detail: 'Proximo passo, urgentes e trabalho atribuido.' },
+  { label: 'Menu', value: '4 areas', detail: 'Hoje, Tarefas, Pedidos e Agenda.' },
+  { label: 'Fluxo', value: 'Execucao', detail: 'Chegar, iniciar, aguardar pecas e resolver.' }
 ];
 
 const sections = [
   {
-    title: 'Fila do funcionario',
+    title: 'Hoje',
     description: 'Tickets atribuidos ordenados por urgencia, SLA e proximidade operacional.',
     endpoint: '/api/worker/tickets'
   },
   {
-    title: 'Modo execucao',
-    description: 'Chegar, iniciar, pausar, aguardar pecas e resolver com prova.',
+    title: 'Tarefas',
+    description: 'Fila diaria composta por pedidos, vistorias, manutencao e agenda.',
     endpoint: '/api/ocorrencias/{id}/worker-action'
   },
   {
-    title: 'Checklist e fotos',
-    description: 'Antes, depois, prova e documento, com visibilidade publica ou interna.',
+    title: 'Pedidos',
+    description: 'Avarias e pedidos atribuidos com checklist, fotos e estado publico.',
     endpoint: '/api/ocorrencias/{id}/anexos'
   },
   {
-    title: 'QR no terreno',
-    description: 'Criacao de ticket contextualizada por condominio, zona ou equipamento.',
-    endpoint: '/api/ocorrencias/from-qr'
+    title: 'Agenda',
+    description: 'Eventos e vistorias que organizam o dia no terreno.',
+    endpoint: '/api/calendar-events'
   }
 ];
 
@@ -37,8 +37,8 @@ export const App = component$(() => (
   <PortalFrame
     appContext={config.appContext}
     eyebrow="PWA operacional"
-    title="Funcionario com foco no proximo passo"
-    subtitle="Esta app prepara a separacao nativa futura: contratos worker dedicados, dados minimos e workflow de campo claro."
+    title="Funcionario com foco no dia"
+    subtitle="A experiencia passa a privilegiar tarefa, pedido e agenda, sem navegacao administrativa."
     kpis={kpis}
     sections={sections}
   >

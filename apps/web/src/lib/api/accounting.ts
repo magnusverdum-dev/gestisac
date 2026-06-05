@@ -1,4 +1,5 @@
 import { apiRequest } from './http';
+import { loadInBatches } from './batch';
 import { getResourcePage } from './pagination';
 import type {
   AccountingPayment,
@@ -46,55 +47,50 @@ async function loadOrFallback<T>(load: () => Promise<T>, fallback: T): Promise<T
 }
 
 export async function getAccounting(token: string): Promise<AccountingState> {
-  const summary = await loadOrFallback(
-    () => apiRequest<AccountingSummary>('/api/accounting/summary', { token }),
-    emptySummary
-  );
-  const overview = await loadOrFallback(
-    () => apiRequest<AccountingOverview>('/api/accounting/overview', { token }),
-    emptyOverview
-  );
-  const quotas = await loadOrFallback(() => getResourcePage<Quota>(token, '/api/accounting/quotas'), []);
-  const payments = await loadOrFallback(
-    () => getResourcePage<AccountingPayment>(token, '/api/accounting/payments'),
-    []
-  );
-  const debts = await loadOrFallback(() => getResourcePage<Debt>(token, '/api/accounting/debts'), []);
-  const receipts = await loadOrFallback(() => getResourcePage<Receipt>(token, '/api/accounting/receipts'), []);
-  const expenses = await loadOrFallback(() => getResourcePage<Expense>(token, '/api/accounting/expenses'), []);
-  const reserveFunds = await loadOrFallback(
-    () => getResourcePage<ReserveFund>(token, '/api/accounting/reserve-funds'),
-    []
-  );
-  const paymentAgreements = await loadOrFallback(
-    () => getResourcePage<PaymentAgreement>(token, '/api/accounting/payment-agreements'),
-    []
-  );
-  const cashMovements = await loadOrFallback(
-    () => getResourcePage<CashMovement>(token, '/api/accounting/cash-movements'),
-    []
-  );
-  const bankTransactions = await loadOrFallback(
-    () => getResourcePage<BankTransaction>(token, '/api/accounting/bank-transactions'),
-    []
-  );
-  const bankReconciliations = await loadOrFallback(
-    () => apiRequest<BankReconciliation[]>('/api/accounting/reconciliations', { token }),
-    []
-  );
-
-  return {
-    summary,
-    overview,
-    quotas,
-    payments,
-    debts,
-    receipts,
-    expenses,
-    reserveFunds,
-    paymentAgreements,
-    cashMovements,
-    bankTransactions,
-    bankReconciliations
-  };
+  return loadInBatches({
+    summary: () =>
+      loadOrFallback(
+        () => apiRequest<AccountingSummary>('/api/accounting/summary', { token }),
+        emptySummary
+      ),
+    overview: () =>
+      loadOrFallback(
+        () => apiRequest<AccountingOverview>('/api/accounting/overview', { token }),
+        emptyOverview
+      ),
+    quotas: () => loadOrFallback(() => getResourcePage<Quota>(token, '/api/accounting/quotas'), []),
+    payments: () =>
+      loadOrFallback(
+        () => getResourcePage<AccountingPayment>(token, '/api/accounting/payments'),
+        []
+      ),
+    debts: () => loadOrFallback(() => getResourcePage<Debt>(token, '/api/accounting/debts'), []),
+    receipts: () => loadOrFallback(() => getResourcePage<Receipt>(token, '/api/accounting/receipts'), []),
+    expenses: () => loadOrFallback(() => getResourcePage<Expense>(token, '/api/accounting/expenses'), []),
+    reserveFunds: () =>
+      loadOrFallback(
+        () => getResourcePage<ReserveFund>(token, '/api/accounting/reserve-funds'),
+        []
+      ),
+    paymentAgreements: () =>
+      loadOrFallback(
+        () => getResourcePage<PaymentAgreement>(token, '/api/accounting/payment-agreements'),
+        []
+      ),
+    cashMovements: () =>
+      loadOrFallback(
+        () => getResourcePage<CashMovement>(token, '/api/accounting/cash-movements'),
+        []
+      ),
+    bankTransactions: () =>
+      loadOrFallback(
+        () => getResourcePage<BankTransaction>(token, '/api/accounting/bank-transactions'),
+        []
+      ),
+    bankReconciliations: () =>
+      loadOrFallback(
+        () => apiRequest<BankReconciliation[]>('/api/accounting/reconciliations', { token }),
+        []
+      )
+  });
 }

@@ -11,6 +11,7 @@ use crate::{
         PermissionAction, ResourceScope,
     },
     state::AppState,
+    storage::{remove_file_object, write_file_object},
 };
 use axum::{
     extract::{Multipart, Path, Query, State},
@@ -697,10 +698,7 @@ pub async fn apagar(
         .collect();
     store.ocorrencia_anexos.retain(|a| a.ocorrencia_id != id);
     for anexo in anexos {
-        let path = std::path::PathBuf::from("data/ocorrencias").join(&anexo.storage_key);
-        if path.exists() {
-            let _ = tokio::fs::remove_file(&path).await;
-        }
+        let _ = remove_file_object(&state, &user.tenant_id, &anexo.storage_key).await;
     }
     store.add_audit(
         &user,
@@ -830,16 +828,7 @@ pub async fn anexos_upload(
             criado_em: Utc::now().to_rfc3339(),
         };
 
-        // Persistir ficheiro em data/ocorrencias/
-        let path = std::path::PathBuf::from("data/ocorrencias").join(&anexo.storage_key);
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| ApiError::internal(format!("Erro ao criar diretorio: {e}")))?;
-        }
-        tokio::fs::write(&path, &data)
-            .await
-            .map_err(|e| ApiError::internal(format!("Erro ao escrever ficheiro: {e}")))?;
+        write_file_object(&state, &user.tenant_id, &anexo.storage_key, &data).await?;
 
         store.ocorrencia_anexos.push(anexo.clone());
         anexos.push(anexo);
@@ -871,10 +860,7 @@ pub async fn anexos_apagar(
         .find(|a| a.id == anexo_id)
         .cloned();
     if let Some(ref a) = anexo {
-        let path = std::path::PathBuf::from("data/ocorrencias").join(&a.storage_key);
-        if path.exists() {
-            let _ = tokio::fs::remove_file(&path).await;
-        }
+        let _ = remove_file_object(&state, &user.tenant_id, &a.storage_key).await;
     }
     let original_len = store.ocorrencia_anexos.len();
     store.ocorrencia_anexos.retain(|a| a.id != anexo_id);
@@ -1720,6 +1706,7 @@ mod tests {
                 environment: "test".to_string(),
                 data_path: tmp,
                 document_storage_path: std::env::temp_dir().join("gestisac-test-docs"),
+                document_storage_backend: crate::config::DocumentStorageBackend::Filesystem,
                 cors_allowed_origins: vec![],
                 database: None,
                 allow_demo_seed: true,
@@ -2362,6 +2349,7 @@ mod tests {
                 environment: "test".to_string(),
                 data_path: tmp,
                 document_storage_path: std::env::temp_dir().join("gestisac-test-docs"),
+                document_storage_backend: crate::config::DocumentStorageBackend::Filesystem,
                 cors_allowed_origins: vec![],
                 database: None,
                 allow_demo_seed: true,

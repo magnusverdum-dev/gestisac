@@ -29,11 +29,13 @@ export const AppShell = component$((props: AppShellProps) => {
       <section class="main-stage">
         <Topbar
           apiStatus={props.apiStatus}
+          appContext={props.appContext}
           alertCount={props.dashboard.alerts.length}
           alerts={props.dashboard.alerts}
           searchResults={props.searchResults}
           user={props.dashboard.user}
           navigate$={props.navigate$}
+          onSwitchApp$={props.onSwitchApp$}
           onLogout$={props.onLogout$}
         />
         <Slot />

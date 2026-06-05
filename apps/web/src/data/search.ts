@@ -17,6 +17,13 @@ export function buildGlobalSearchResults(resources: ResourceState): GlobalSearch
       path: entityPath('resident', item.id),
       tone: 'green'
     })),
+    ...resources.team.map((item) => ({
+      id: `team-${item.id}`,
+      title: item.name,
+      detail: `${item.role} - ${item.openTasks} tarefas abertas`,
+      path: '/equipa',
+      tone: 'blue'
+    })),
     ...resources.tickets.map((item) => ({
       id: `ticket-${item.id}`,
       title: item.title,

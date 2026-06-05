@@ -13,7 +13,7 @@ Data: 2026-05-28
 
 ```text
 Email: admin@gestisac.pt
-Password: Gestisac2026!
+Password: usar a credencial partilhada fora do repositorio
 ```
 
 ## Estrutura para apresentar

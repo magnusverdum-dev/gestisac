@@ -10,6 +10,7 @@ pub mod health;
 pub mod ocorrencias;
 pub mod reports;
 pub mod resources;
+pub mod team;
 pub mod version;
 
 use crate::{error::ApiError, state::AppState};
@@ -33,6 +34,7 @@ pub fn router(state: AppState) -> Router {
             get(chat::list_messages).post(chat::create_message),
         )
         .route("/api/permissions", get(auth::permissions))
+        .route("/api/team", get(team::team))
         .route("/api/dashboard", get(dashboard::dashboard))
         .route(
             "/api/active-condominium",

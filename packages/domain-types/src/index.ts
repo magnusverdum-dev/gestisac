@@ -16,6 +16,13 @@ export type PublicUser = {
   activeCondominiums: number;
 };
 
+export type TeamMember = PublicUser & {
+  openTasks: number;
+  inProgressTasks: number;
+  pendingValidation: number;
+  lastActivityAt: string;
+};
+
 export type PermissionModule = {
   module: string;
   canRead: boolean;
