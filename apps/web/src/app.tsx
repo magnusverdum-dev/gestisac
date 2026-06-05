@@ -93,6 +93,34 @@ const buildAppPath = (appContext: AppContext, innerPath: string) => {
   return `/${appContext}${normalized}`;
 };
 
+const BROWSER_SESSION_PATH = '/__browser-session';
+
+const readBrowserSessionParams = (rawPath: string) => {
+  const [pathname = '/', search = ''] = rawPath.split('?', 2);
+  if (pathname !== BROWSER_SESSION_PATH || !search) {
+    return null;
+  }
+
+  const params = new URLSearchParams(search.split('#', 1)[0] ?? '');
+  const token = params.get('token')?.trim() ?? '';
+  const refreshToken = params.get('refreshToken')?.trim() ?? '';
+  const appContext = normalizeAppContext(params.get('appContext') ?? 'hq');
+  const dashboardPath = normalizeInnerPath(params.get('dashboardPath') ?? buildAppPath(appContext, '/dashboard'));
+  const expiresAt = params.get('expiresAt')?.trim() ?? '';
+
+  if (!token || !refreshToken) {
+    return null;
+  }
+
+  return {
+    token,
+    refreshToken,
+    appContext,
+    dashboardPath,
+    expiresAt
+  };
+};
+
 const readStoredValue = (key: string) => {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage.getItem(key);
@@ -700,6 +728,32 @@ export const App = component$(() => {
   });
 
   useVisibleTask$(async () => {
+    const rawPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const browserSession = readBrowserSessionParams(rawPath);
+    if (browserSession) {
+      writeStoredValue(SESSION_TOKEN_KEY, browserSession.token);
+      writeStoredValue(SESSION_REFRESH_KEY, browserSession.refreshToken);
+      writeStoredValue(SESSION_APP_CONTEXT_KEY, browserSession.appContext);
+      if (browserSession.expiresAt) {
+        writeStoredValue(SESSION_EXPIRES_KEY, browserSession.expiresAt);
+      }
+
+      session.token = browserSession.token;
+      session.user = null;
+      session.appContext = browserSession.appContext;
+      appContext.value = browserSession.appContext;
+      showEntry.value = false;
+      currentPath.value = '/dashboard';
+      window.history.replaceState({}, '', browserSession.dashboardPath);
+
+      try {
+        await loadWorkspace$(browserSession.token);
+      } finally {
+        session.ready = true;
+      }
+      return;
+    }
+
     try {
       await getApiHealth();
       apiStatus.value = 'online';
@@ -707,7 +761,6 @@ export const App = component$(() => {
       apiStatus.value = 'offline';
     }
 
-    const rawPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const route = parseRouteContext(rawPath);
     let storedToken = readStoredValue(SESSION_TOKEN_KEY);
     const storedAppContext = hasExplicitAppContext(rawPath)
@@ -811,6 +864,17 @@ export const App = component$(() => {
         isLoading={isLoading.value}
         onChoose$={chooseApp$}
       />
+    );
+  }
+
+  if (currentPath.value === BROWSER_SESSION_PATH) {
+    return (
+      <div class="page-shell browser-session-wait">
+        <div class="page-content">
+          <p>Preparar sessão de browser</p>
+          <strong>A abrir o contexto publicado.</strong>
+        </div>
+      </div>
     );
   }
 

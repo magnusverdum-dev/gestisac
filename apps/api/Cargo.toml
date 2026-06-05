@@ -10,6 +10,7 @@ axum = { version = "0.8", features = ["multipart"] }
 calamine = "0.26"
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rust_decimal = { version = "1", features = ["serde-with-float"] }
@@ -24,6 +25,7 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+urlencoding = "2"
 vercel_runtime = { version = "2", features = ["axum"] }
 
 [[bin]]
