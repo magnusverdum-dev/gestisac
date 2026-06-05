@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 const args = parseArgs(process.argv.slice(2));
+const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'true').trim().toLowerCase() !== 'false';
 
 if (args.help) {
   printHelp();
@@ -15,10 +16,12 @@ if (args.envFile) {
 
 const apiUrl = (process.env.GESTISAC_API_URL || 'https://gestisac-api.vercel.app').replace(/\/$/, '');
 const email = process.env.GESTISAC_SMOKE_EMAIL || 'admin@gestisac.pt';
-const password = process.env.GESTISAC_SMOKE_PASSWORD;
+const password = loginNeeded
+  ? process.env.GESTISAC_SMOKE_PASSWORD
+  : process.env.GESTISAC_SMOKE_PASSWORD || process.env.GESTISAC_BOOTSTRAP_ADMIN_PASSWORD || '';
 const requestTimeoutMs = Number(process.env.GESTISAC_SMOKE_TIMEOUT_MS || 20_000);
 
-if (!password) {
+if (loginNeeded && !password) {
   console.error('GESTISAC_SMOKE_PASSWORD is required. The email, password and tokens will not be printed.');
   process.exit(1);
 }
@@ -96,9 +99,9 @@ async function runAppSmoke({ appContext, endpoints }) {
   let token = '';
 
   try {
-    auth = await login(appContext);
+    auth = loginNeeded ? await login(appContext) : await browserSessionAuth(appContext);
     token = auth.token;
-    validateAuthResponse(appContext, auth, 'login');
+    validateAuthResponse(appContext, auth, loginNeeded ? 'login' : 'browser-session');
     await checkMe(appContext, token);
 
     const refreshed = await refreshSession(appContext, refreshTokenFrom(auth));
@@ -129,6 +132,54 @@ async function login(appContext) {
   }
 
   return response.body;
+}
+
+async function browserSessionAuth(appContext) {
+  const started = Date.now();
+  const response = await fetch(`${apiUrl}/api/auth/browser-session?appContext=${encodeURIComponent(appContext)}`, {
+    method: 'GET',
+    redirect: 'manual',
+    signal: AbortSignal.timeout(requestTimeoutMs)
+  });
+  const ms = Date.now() - started;
+  const location = response.headers.get('location') || '';
+  if (![302, 303].includes(response.status)) {
+    throw new Error(`browser session returned HTTP ${response.status}`);
+  }
+  if (!location) {
+    throw new Error('browser session did not return a redirect location');
+  }
+
+  const redirectUrl = new URL(location, apiUrl);
+  const token = redirectUrl.searchParams.get('token')?.trim() || '';
+  const refreshToken = redirectUrl.searchParams.get('refreshToken')?.trim() || '';
+  const expiresAt = redirectUrl.searchParams.get('expiresAt')?.trim() || '';
+  const redirectContext = redirectUrl.searchParams.get('appContext')?.trim() || appContext;
+  if (!token || !refreshToken) {
+    throw new Error('browser session redirect did not include tokens');
+  }
+
+  const meResponse = await request('/api/me', { token });
+  if (!meResponse.ok) {
+    throw new Error(`/api/me returned HTTP ${meResponse.status} after browser session`);
+  }
+
+  results.push({
+    appContext,
+    endpoint: '/api/auth/browser-session',
+    status: response.status,
+    ok: true,
+    count: null,
+    ms
+  });
+
+  return {
+    token,
+    refreshToken,
+    expiresAt,
+    appContext: redirectContext,
+    user: meResponse.body?.user || null
+  };
 }
 
 async function refreshSession(appContext, refreshToken) {
@@ -302,8 +353,12 @@ function printHelp() {
 Required secret:
   GESTISAC_SMOKE_PASSWORD
 
+Optional login bypass:
+  GESTISAC_LOGIN_NEEDED=false
+
 Optional:
   GESTISAC_SMOKE_EMAIL
+  GESTISAC_BOOTSTRAP_ADMIN_PASSWORD
   GESTISAC_API_URL
   GESTISAC_SMOKE_TIMEOUT_MS
 
@@ -311,7 +366,7 @@ Default local env files, if present:
   .env.smoke.local
   apps/api/.env.smoke.local
 
-The script validates login, refresh, /api/me, representative endpoints and logout for hq, worker and client.
+The script validates login or browser-session auth, refresh, /api/me, representative endpoints and logout for hq, worker and client.
 It never prints passwords, tokens or full secret values.`);
 }
 

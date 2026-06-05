@@ -3,10 +3,11 @@ import { spawn } from 'child_process';
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const TARGET = 'http://127.0.0.1:55951';
 const EMAIL = 'admin@gestisac.pt';
-const PASS = process.env.GESTISAC_SMOKE_PASSWORD;
+const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'true').trim().toLowerCase() !== 'false';
+const PASS = loginNeeded ? process.env.GESTISAC_SMOKE_PASSWORD : '';
 const MESSAGE = `chat-e2e-${Date.now()}`;
 
-if (!PASS) {
+if (loginNeeded && !PASS) {
   throw new Error('GESTISAC_SMOKE_PASSWORD is required. The password will not be printed.');
 }
 
@@ -80,21 +81,25 @@ async function main() {
   await cdp(ws, 'Page.enable');
   await cdp(ws, 'Runtime.enable');
 
-  await evaluate(ws, `window.location.href='${TARGET}/client/login'; true;`);
-  await waitFor(ws, `document.querySelector('input[type="email"]') && document.querySelector('input[type="password"]')`);
-  await evaluate(ws, `
-    (() => {
-      const email = document.querySelector('input[type="email"]');
-      const pass = document.querySelector('input[type="password"]');
-      email.value = '${EMAIL}';
-      pass.value = '${PASS}';
-      email.dispatchEvent(new Event('input', { bubbles: true }));
-      pass.dispatchEvent(new Event('input', { bubbles: true }));
-      const btn = Array.from(document.querySelectorAll('button')).find((b) => /entrar|iniciar/i.test(b.textContent || ''));
-      btn?.click();
-      return true;
-    })();
-  `);
+  if (loginNeeded) {
+    await evaluate(ws, `window.location.href='${TARGET}/client/login'; true;`);
+    await waitFor(ws, `document.querySelector('input[type="email"]') && document.querySelector('input[type="password"]')`);
+    await evaluate(ws, `
+      (() => {
+        const email = document.querySelector('input[type="email"]');
+        const pass = document.querySelector('input[type="password"]');
+        email.value = '${EMAIL}';
+        pass.value = '${PASS}';
+        email.dispatchEvent(new Event('input', { bubbles: true }));
+        pass.dispatchEvent(new Event('input', { bubbles: true }));
+        const btn = Array.from(document.querySelectorAll('button')).find((b) => /entrar|iniciar/i.test(b.textContent || ''));
+        btn?.click();
+        return true;
+      })();
+    `);
+  } else {
+    await evaluate(ws, `window.location.href='${TARGET}/api/auth/browser-session?appContext=client'; true;`);
+  }
 
   await waitFor(ws, `location.pathname.includes('/client/dashboard') || location.pathname.includes('/client/tickets')`, 30000);
   await evaluate(ws, `window.location.href='${TARGET}/client/chat'; true;`);

@@ -5,9 +5,10 @@ import { resolve } from 'path';
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const TARGET = 'http://127.0.0.1:5173';
 const EMAIL = 'admin@gestisac.pt';
-const PASS = process.env.GESTISAC_SMOKE_PASSWORD;
+const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'true').trim().toLowerCase() !== 'false';
+const PASS = loginNeeded ? process.env.GESTISAC_SMOKE_PASSWORD : '';
 
-if (!PASS) {
+if (loginNeeded && !PASS) {
   throw new Error('GESTISAC_SMOKE_PASSWORD is required. The password will not be printed.');
 }
 
@@ -115,36 +116,41 @@ async function main() {
 
   await new Promise(r => setTimeout(r, 2000));
 
-  // Clear storage to force fresh login
-  await evaluate(ws, 'localStorage.clear()');
-  console.log('Storage cleared');
+  if (loginNeeded) {
+    // Clear storage to force fresh login
+    await evaluate(ws, 'localStorage.clear()');
+    console.log('Storage cleared');
 
-  // Reload
-  await cdp(ws, 'Page.reload');
-  await new Promise(r => setTimeout(r, 3000));
-  await waitForInteractive(ws);
-  await new Promise(r => setTimeout(r, 3000));
+    // Reload
+    await cdp(ws, 'Page.reload');
+    await new Promise(r => setTimeout(r, 3000));
+    await waitForInteractive(ws);
+    await new Promise(r => setTimeout(r, 3000));
 
-  // ---- LOGIN ----
-  console.log('\n--- LOGIN ---');
+    // ---- LOGIN ----
+    console.log('\n--- LOGIN ---');
 
-  const rInputs = await evaluate(ws, `Array.from(document.querySelectorAll('input')).map(i=>({name:i.name,type:i.type,placeholder:i.placeholder}))`);
-  console.log('  Inputs:', JSON.stringify(rInputs?.value));
+    const rInputs = await evaluate(ws, `Array.from(document.querySelectorAll('input')).map(i=>({name:i.name,type:i.type,placeholder:i.placeholder}))`);
+    console.log('  Inputs:', JSON.stringify(rInputs?.value));
 
-  const rBtns = await evaluate(ws, `Array.from(document.querySelectorAll('button')).map(b=>({text:b.textContent.trim().substring(0,40),type:b.type}))`);
-  console.log('  Buttons:', JSON.stringify(rBtns?.value));
+    const rBtns = await evaluate(ws, `Array.from(document.querySelectorAll('button')).map(b=>({text:b.textContent.trim().substring(0,40),type:b.type}))`);
+    console.log('  Buttons:', JSON.stringify(rBtns?.value));
 
-  // Set email
-  await evaluate(ws, `(function(){const e=document.querySelector('input[name="email"]');if(e){e.value=${JSON.stringify(EMAIL)};e.dispatchEvent(new Event('input',{bubbles:true}));}return !!e;})()`);
-  await new Promise(r => setTimeout(r, 300));
+    // Set email
+    await evaluate(ws, `(function(){const e=document.querySelector('input[name="email"]');if(e){e.value=${JSON.stringify(EMAIL)};e.dispatchEvent(new Event('input',{bubbles:true}));}return !!e;})()`);
+    await new Promise(r => setTimeout(r, 300));
 
-  // Set password
-  await evaluate(ws, `(function(){const e=document.querySelector('input[name="password"]');if(e){e.value=${JSON.stringify(PASS)};e.dispatchEvent(new Event('input',{bubbles:true}));}return !!e;})()`);
-  await new Promise(r => setTimeout(r, 300));
+    // Set password
+    await evaluate(ws, `(function(){const e=document.querySelector('input[name="password"]');if(e){e.value=${JSON.stringify(PASS)};e.dispatchEvent(new Event('input',{bubbles:true}));}return !!e;})()`);
+    await new Promise(r => setTimeout(r, 300));
 
-  // Click login
-  await evaluate(ws, `(function(){const b=document.querySelector('button[type="submit"], .primary-action');if(b){b.click();return true;}return false;})()`);
-  console.log('  Login clicked');
+    // Click login
+    await evaluate(ws, `(function(){const b=document.querySelector('button[type="submit"], .primary-action');if(b){b.click();return true;}return false;})()`);
+    console.log('  Login clicked');
+  } else {
+    await evaluate(ws, `window.location.href='${TARGET}/api/auth/browser-session?appContext=hq'; true;`);
+    console.log('Browser session requested');
+  }
 
   // Wait for dashboard
   for (let i = 0; i < 40; i++) {

@@ -1,8 +1,11 @@
 const baseUrl = process.env.GESTISAC_API_URL ?? 'http://127.0.0.1:3000';
 const email = process.env.GESTISAC_SMOKE_EMAIL ?? 'admin@gestisac.pt';
-const password = process.env.GESTISAC_SMOKE_PASSWORD;
+const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'true').trim().toLowerCase() !== 'false';
+const password = loginNeeded
+  ? process.env.GESTISAC_SMOKE_PASSWORD
+  : process.env.GESTISAC_SMOKE_PASSWORD || process.env.GESTISAC_BOOTSTRAP_ADMIN_PASSWORD || '';
 
-if (!password) {
+if (loginNeeded && !password) {
   console.error('GESTISAC_SMOKE_PASSWORD is required. The token/password will not be printed.');
   process.exit(1);
 }
@@ -45,10 +48,12 @@ async function main() {
     const health = await request('/health');
     assert(health.status === 'online', 'health endpoint must return online');
 
-    const login = await request('/api/auth/login', {
-      method: 'POST',
-      body: { email, password }
-    });
+    const login = loginNeeded
+      ? await request('/api/auth/login', {
+          method: 'POST',
+          body: { email, password }
+        })
+      : await browserSessionAuth();
     assert(login.token, 'login must return an access token');
     assert(login.refreshToken, 'login must return a refresh token');
 
@@ -180,6 +185,25 @@ async function main() {
       }
     }
   }
+}
+
+async function browserSessionAuth() {
+  const response = await fetch(`${baseUrl}/api/auth/browser-session?appContext=hq`, {
+    method: 'GET',
+    redirect: 'manual'
+  });
+  const location = response.headers.get('location') ?? '';
+  assert([302, 303].includes(response.status), `browser session must redirect, got ${response.status}`);
+  assert(location, 'browser session must include a redirect location');
+
+  const redirectUrl = new URL(location, baseUrl);
+  const token = redirectUrl.searchParams.get('token') ?? '';
+  const refreshToken = redirectUrl.searchParams.get('refreshToken') ?? '';
+  const expiresAt = redirectUrl.searchParams.get('expiresAt') ?? '';
+  assert(token, 'browser session must return an access token');
+  assert(refreshToken, 'browser session must return a refresh token');
+
+  return { token, refreshToken, expiresAt, appContext: 'hq' };
 }
 
 main().catch((error) => {
