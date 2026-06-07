@@ -16,9 +16,7 @@ if (args.envFile) {
 
 const apiUrl = (process.env.GESTISAC_API_URL || 'https://gestisac-api.vercel.app').replace(/\/$/, '');
 const email = process.env.GESTISAC_SMOKE_EMAIL || 'admin@gestisac.pt';
-const password = loginNeeded
-  ? process.env.GESTISAC_SMOKE_PASSWORD
-  : process.env.GESTISAC_SMOKE_PASSWORD || process.env.GESTISAC_BOOTSTRAP_ADMIN_PASSWORD || '';
+const password = process.env.GESTISAC_SMOKE_PASSWORD;
 const requestTimeoutMs = Number(process.env.GESTISAC_SMOKE_TIMEOUT_MS || 20_000);
 
 if (loginNeeded && !password) {
@@ -358,7 +356,6 @@ Optional login bypass:
 
 Optional:
   GESTISAC_SMOKE_EMAIL
-  GESTISAC_BOOTSTRAP_ADMIN_PASSWORD
   GESTISAC_API_URL
   GESTISAC_SMOKE_TIMEOUT_MS
 

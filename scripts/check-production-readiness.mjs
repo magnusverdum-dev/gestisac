@@ -24,7 +24,8 @@ async function main() {
     'GESTISAC_RUN_MIGRATIONS',
     'GESTISAC_SYNC_ON_STARTUP',
     'GESTISAC_ALLOW_DEMO_SEED',
-    'GESTISAC_DOCUMENT_STORAGE_BACKEND'
+    'GESTISAC_DOCUMENT_STORAGE_BACKEND',
+    'GESTISAC_SMOKE_PASSWORD'
   ]);
   checkVercelEnvNames('web', ['VITE_API_BASE_URL']);
   await checkApiHealth();
@@ -85,9 +86,6 @@ function checkVercelEnvNames(target, requiredNames) {
     }
   }
 
-  if (target === 'api' && output.includes('GESTISAC_BOOTSTRAP_ADMIN_PASSWORD')) {
-    warnings.push('GESTISAC_BOOTSTRAP_ADMIN_PASSWORD is present in API Production; remove it after bootstrap validation.');
-  }
 }
 
 function checkForeignKeyIndexes() {

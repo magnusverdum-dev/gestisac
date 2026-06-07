@@ -95,12 +95,7 @@ pub async fn browser_session(
     let smoke_email =
         std::env::var("GESTISAC_SMOKE_EMAIL").unwrap_or_else(|_| DEFAULT_SMOKE_EMAIL.to_string());
     let smoke_password = std::env::var("GESTISAC_SMOKE_PASSWORD")
-        .or_else(|_| std::env::var("GESTISAC_BOOTSTRAP_ADMIN_PASSWORD"))
-        .map_err(|_| {
-            ApiError::internal(
-                "GESTISAC_SMOKE_PASSWORD ou GESTISAC_BOOTSTRAP_ADMIN_PASSWORD em falta para browser session",
-            )
-        })?;
+        .map_err(|_| ApiError::internal("GESTISAC_SMOKE_PASSWORD em falta para browser session"))?;
     let auth =
         issue_auth_response(&state, smoke_email, smoke_password, app_context.clone()).await?;
     let target_url = build_browser_session_url(&auth);

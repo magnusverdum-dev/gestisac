@@ -1,9 +1,7 @@
 const baseUrl = process.env.GESTISAC_API_URL ?? 'http://127.0.0.1:3000';
 const email = process.env.GESTISAC_SMOKE_EMAIL ?? 'admin@gestisac.pt';
 const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'true').trim().toLowerCase() !== 'false';
-const password = loginNeeded
-  ? process.env.GESTISAC_SMOKE_PASSWORD
-  : process.env.GESTISAC_SMOKE_PASSWORD || process.env.GESTISAC_BOOTSTRAP_ADMIN_PASSWORD || '';
+const password = process.env.GESTISAC_SMOKE_PASSWORD;
 
 if (loginNeeded && !password) {
   console.error('GESTISAC_SMOKE_PASSWORD is required. The token/password will not be printed.');

@@ -88,6 +88,8 @@ function checkApiEnv() {
     failures.push('GESTISAC_ALLOW_DEMO_SEED must be false or unset in production.');
   }
 
+  required('GESTISAC_SMOKE_PASSWORD');
+
   const runMigrations = value('GESTISAC_RUN_MIGRATIONS');
   if (isTruthy(runMigrations)) {
     failures.push('GESTISAC_RUN_MIGRATIONS must be false or unset in production.');
@@ -96,10 +98,6 @@ function checkApiEnv() {
   const syncOnStartup = value('GESTISAC_SYNC_ON_STARTUP');
   if (isTruthy(syncOnStartup)) {
     failures.push('GESTISAC_SYNC_ON_STARTUP must be false or unset in production.');
-  }
-
-  if (value('GESTISAC_BOOTSTRAP_ADMIN_PASSWORD')) {
-    warnings.push('GESTISAC_BOOTSTRAP_ADMIN_PASSWORD is set; keep it temporary and rotate/remove it after development login validation.');
   }
 
   const documentBackend = (value('GESTISAC_DOCUMENT_STORAGE_BACKEND') || 'postgres').toLowerCase();
