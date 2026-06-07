@@ -20,6 +20,7 @@ const SIGNED_TOKEN_PREFIX: &str = "gestisac:v1";
 const ACCESS_TOKEN_KIND: &str = "access";
 const REFRESH_TOKEN_KIND: &str = "refresh";
 const DEFAULT_WEB_URL: &str = "https://gestisac-web.vercel.app";
+const DEFAULT_BROWSER_SESSION_LANDING_PATH: &str = "/dashboard";
 const DEFAULT_SMOKE_EMAIL: &str = "admin@gestisac.pt";
 
 #[derive(Debug, Deserialize)]
@@ -485,8 +486,9 @@ fn build_browser_session_url(auth: &AuthResponse) -> String {
     let web_url = std::env::var("GESTISAC_WEB_URL").unwrap_or_else(|_| DEFAULT_WEB_URL.to_string());
     let dashboard_path = format!("/{}/dashboard", auth.app_context);
     format!(
-        "{}/__browser-session?token={}&refreshToken={}&appContext={}&dashboardPath={}&expiresAt={}",
+        "{}{}?browserSession=1&token={}&refreshToken={}&appContext={}&dashboardPath={}&expiresAt={}",
         web_url.trim_end_matches('/'),
+        DEFAULT_BROWSER_SESSION_LANDING_PATH,
         urlencoding::encode(&auth.token),
         urlencoding::encode(&auth.refresh_token),
         urlencoding::encode(&auth.app_context),

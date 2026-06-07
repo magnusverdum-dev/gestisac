@@ -7,6 +7,7 @@ use std::{env, fs, path::Path};
 const DEFAULT_API_URL: &str = "https://gestisac-api.vercel.app";
 const DEFAULT_WEB_URL: &str = "https://gestisac-web.vercel.app";
 const DEFAULT_EMAIL: &str = "admin@gestisac.pt";
+const DEFAULT_BROWSER_SESSION_LANDING_PATH: &str = "/dashboard";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,8 +70,9 @@ async fn main() -> anyhow::Result<()> {
     write_session_file(&output_path, &session_file)?;
 
     let browser_url = format!(
-        "{}/__browser-session?token={}&refreshToken={}&appContext={}&dashboardPath={}&expiresAt={}",
+        "{}{}?browserSession=1&token={}&refreshToken={}&appContext={}&dashboardPath={}&expiresAt={}",
         web_url.trim_end_matches('/'),
+        DEFAULT_BROWSER_SESSION_LANDING_PATH,
         urlencoding::encode(&session_file.token),
         urlencoding::encode(&session_file.refresh_token),
         urlencoding::encode(&session_file.app_context),

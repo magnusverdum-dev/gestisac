@@ -53,6 +53,7 @@ import {
   type ResourceEndpoint,
   type PublicUser
 } from './lib/api';
+import { resolveApiUrl } from './lib/api/http';
 import { matchEntityRoute } from './lib/entity-navigation';
 
 const normalizeInnerPath = (path: string) => {
@@ -93,15 +94,16 @@ const buildAppPath = (appContext: AppContext, innerPath: string) => {
   return `/${appContext}${normalized}`;
 };
 
-const BROWSER_SESSION_PATH = '/__browser-session';
-
 const readBrowserSessionParams = (rawPath: string) => {
   const [pathname = '/', search = ''] = rawPath.split('?', 2);
-  if (pathname !== BROWSER_SESSION_PATH || !search) {
+  if (!pathname || !search) {
     return null;
   }
 
   const params = new URLSearchParams(search.split('#', 1)[0] ?? '');
+  if (params.get('browserSession') !== '1') {
+    return null;
+  }
   const token = params.get('token')?.trim() ?? '';
   const refreshToken = params.get('refreshToken')?.trim() ?? '';
   const appContext = normalizeAppContext(params.get('appContext') ?? 'hq');
@@ -406,7 +408,9 @@ export const App = component$(() => {
   const openBrowserSession$ = $(() => {
     error.value = '';
     notice.value = '';
-    const target = `/api/auth/browser-session?appContext=${encodeURIComponent(appContext.value)}`;
+    const target = resolveApiUrl(
+      `/api/auth/browser-session?appContext=${encodeURIComponent(appContext.value)}`
+    );
     window.location.assign(target);
   });
 
@@ -871,17 +875,6 @@ export const App = component$(() => {
         isLoading={isLoading.value}
         onChoose$={chooseApp$}
       />
-    );
-  }
-
-  if (currentPath.value === BROWSER_SESSION_PATH) {
-    return (
-      <div class="page-shell browser-session-wait">
-        <div class="page-content">
-          <p>Preparar sessão de browser</p>
-          <strong>A abrir o contexto publicado.</strong>
-        </div>
-      </div>
     );
   }
 
