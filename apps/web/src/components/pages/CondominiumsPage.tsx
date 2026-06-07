@@ -1062,85 +1062,51 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                 </div>
               </section>
 
-              <div class="simple-record-list">
-                {filtered.length ? filtered.map((item) => (
-                  <article class={item.id === selected?.id && detailOpen.value ? 'simple-record-card active' : 'simple-record-card'} key={item.id}>
-                    <div>
-                      <strong>{item.name}</strong>
-                      <span>{item.internalCode || 'sem codigo'} - {item.address?.locality || item.location || 'localidade por completar'}</span>
-                    </div>
-                    <p>{item.structure?.totalFractions || item.fractions} fracoes - {item.structure?.blocksCount || item.buildings} blocos - {item.structure?.elevatorsCount || 0} elevadores</p>
-                    <small>{localCompleteness(item).percentage}% completo</small>
-                    <div class="simple-card-actions">
-                      <button
-                        class="primary-action condo-cta-main"
-                        type="button"
-                        onClick$={() => props.navigate$(entityPath('condominium', item.id))}
-                      >
-                        Abrir
-                      </button>
-                      <button
-                        class="primary-action condo-cta-secondary"
-                        type="button"
-                        onClick$={() => {
-                          selectedId.value = item.id;
-                          contextId.value = item.id;
-                          detailOpen.value = true;
-                          activeTab.value = 'equipment';
-                        }}
-                      >
-                        Gerir equipamentos
-                      </button>
-                      <details class="simple-more-menu">
-                        <summary>Mais</summary>
-                        <button
-                          type="button"
-                          onClick$={() => {
-                            selectedId.value = item.id;
-                            contextId.value = item.id;
-                            activeTab.value = 'identification';
-                            detailOpen.value = true;
-                          }}
-                        >
-                          Editar ficha
-                        </button>
-                        <button
-                          type="button"
-                          onClick$={() => {
-                            selectedId.value = item.id;
-                            contextId.value = item.id;
-                            activeArea.value = 'documentation';
-                            detailOpen.value = true;
-                          }}
-                        >
-                          Documentacao
-                        </button>
-                        <button
-                          type="button"
-                          onClick$={() => {
-                            selectedId.value = item.id;
-                            contextId.value = item.id;
-                            activeArea.value = 'avarias';
-                            detailOpen.value = true;
-                          }}
-                        >
-                          Avarias
-                        </button>
-                      </details>
-                    </div>
-                  </article>
-                )) : (
-                  <article class="simple-empty-state">
-                    <strong>Sem condominios para estes filtros.</strong>
-                    <span>Limpa a pesquisa ou adiciona um novo condominio.</span>
-                  </article>
-                )}
-              </div>
+              <div class="condo-command-center">
+                <div class="condo-record-grid">
+                  <div class="condo-record-head">
+                    <span>Condominio</span>
+                    <span>Localidade</span>
+                    <span>Estrutura</span>
+                    <span>Estado</span>
+                  </div>
+                  {filtered.length ? filtered.map((item) => (
+                    <button
+                      type="button"
+                      class={item.id === selected?.id && detailOpen.value ? 'condo-record-row active' : 'condo-record-row'}
+                      key={item.id}
+                      onClick$={() => {
+                        selectedId.value = item.id;
+                        contextId.value = item.id;
+                        detailOpen.value = true;
+                        activeTab.value = 'overview';
+                      }}
+                    >
+                      <span class="condo-record-primary">
+                        <strong>{item.name}</strong>
+                        <small>{item.internalCode || 'sem codigo'}</small>
+                      </span>
+                      <span>{item.address?.locality || item.location || 'localidade por completar'}</span>
+                      <span>
+                        {(item.structure?.totalFractions || item.fractions)} fracoes - {(item.structure?.blocksCount || item.buildings)} blocos
+                      </span>
+                      <span class="condo-record-status">
+                        <strong>{localCompleteness(item).percentage}%</strong>
+                        <small>{item.operationalStatus?.generalStatus || item.status}</small>
+                      </span>
+                    </button>
+                  )) : (
+                    <article class="simple-empty-state">
+                      <strong>Sem condominios para estes filtros.</strong>
+                      <span>Limpa a pesquisa ou adiciona um novo condominio.</span>
+                    </article>
+                  )}
+                </div>
 
-              {selected && detailOpen.value && showDetailSkeleton ? <CondominiumDetailSkeleton /> : null}
+                {selected && detailOpen.value && showDetailSkeleton ? <CondominiumDetailSkeleton /> : null}
 
-              {selected && detailOpen.value && !showDetailSkeleton ? (
-                <section class="simple-detail-panel">
+                {selected && detailOpen.value && !showDetailSkeleton ? (
+                  <section class="simple-detail-panel condo-command-panel">
                   <header class="simple-detail-header">
                     <div class="condo-building-image">
                       {selected.primaryImageUrl ? <img src={selected.primaryImageUrl} alt={selected.name} /> : <span>Sem imagem</span>}
@@ -1161,6 +1127,78 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                       <button type="button" onClick$={archiveSelected$} disabled={localSaving.value}>Arquivar</button>
                     </details>
                   </header>
+
+                  <div class="simple-header-actions">
+                    <button
+                      class="primary-action"
+                      type="button"
+                      onClick$={() => props.navigate$(entityPath('condominium', selected.id))}
+                    >
+                      Abrir
+                    </button>
+                    <button
+                      class="secondary-action"
+                      type="button"
+                      onClick$={() => (activeTab.value = 'equipment')}
+                    >
+                      Equipamentos
+                    </button>
+                    <button
+                      class="secondary-action"
+                      type="button"
+                      onClick$={() => (activeTab.value = 'documents')}
+                    >
+                      Documentacao
+                    </button>
+                    <button
+                      class="secondary-action"
+                      type="button"
+                      onClick$={() => {
+                        activeArea.value = 'avarias';
+                        detailOpen.value = true;
+                      }}
+                    >
+                      Avarias
+                    </button>
+                  </div>
+
+                  <section class="condo-context-grid">
+                    <article class="condo-context-card">
+                      <span>Pedidos</span>
+                      <strong>{relatedTickets.length}</strong>
+                      <small>Ocorrencias ligadas</small>
+                    </article>
+                    <article class="condo-context-card">
+                      <span>Manutencao</span>
+                      <strong>{relatedMaintenance.length}</strong>
+                      <small>Intervencoes em aberto</small>
+                    </article>
+                    <article class="condo-context-card">
+                      <span>Agenda</span>
+                      <strong>{relatedCalendarEvents.length}</strong>
+                      <small>Eventos associados</small>
+                    </article>
+                    <article class="condo-context-card">
+                      <span>Utilizadores</span>
+                      <strong>{relatedResidents.length}</strong>
+                      <small>Residentes ligados</small>
+                    </article>
+                  </section>
+
+                  <div class="condo-context-links">
+                    <button class="secondary-action" type="button" onClick$={() => (activeArea.value = 'documentation')}>
+                      Documentacao
+                    </button>
+                    <button class="secondary-action" type="button" onClick$={() => (activeArea.value = 'avarias')}>
+                      Pedidos
+                    </button>
+                    <button class="secondary-action" type="button" onClick$={() => (activeArea.value = 'timeline')}>
+                      Timeline
+                    </button>
+                    <button class="secondary-action" type="button" onClick$={() => (activeArea.value = 'support')}>
+                      Suporte
+                    </button>
+                  </div>
 
                   <section class="condo-summary-grid simple-summary-grid">
                     <Kpi label="Fracoes" value={selected.structure?.totalFractions || selected.fractions} detail="Total" />
@@ -1274,8 +1312,14 @@ export const CondominiumsPage = component$((props: CondominiumsPageProps) => {
                       onSubmit$={async (form, resource, fields) => submitSubresource$(form, resource, fields)}
                     />
                   ) : null}
-                </section>
-              ) : null}
+                  </section>
+                ) : (
+                  <section class="simple-detail-panel condo-command-panel empty">
+                    <strong>Seleciona um condominio</strong>
+                    <span>O painel contextual mostra completude, relacoes e acoes do item escolhido.</span>
+                  </section>
+                )}
+              </div>
             </section>
           ) : null}
 

@@ -17,8 +17,6 @@ type AppShellProps = {
 export const AppShell = component$((props: AppShellProps) => {
   return (
     <main class="app-shell">
-      <div class="ambient ambient-one" />
-      <div class="ambient ambient-two" />
       <Sidebar
         currentPath={props.currentPath}
         user={props.dashboard.user}

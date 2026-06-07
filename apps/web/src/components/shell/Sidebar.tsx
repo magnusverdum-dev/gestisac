@@ -1,4 +1,12 @@
 import { component$, useSignal, type PropFunction } from '@builder.io/qwik';
+import {
+  Building2Icon,
+  CalendarDaysIcon,
+  ClipboardListIcon,
+  HomeIcon,
+  LayoutDashboardIcon,
+  UsersIcon
+} from 'lucide-qwik';
 import { navPages } from '../../data/pages';
 import type { AppContext, PublicUser } from '../../lib/api';
 
@@ -25,7 +33,7 @@ export const Sidebar = component$((props: SidebarProps) => {
   return (
     <aside class="sidebar" aria-label="Navegacao principal">
       <button
-        class="brand"
+        class="brand brand-button"
         type="button"
         aria-label="Trocar app"
         title="Voltar ao menu inicial das apps"
@@ -65,9 +73,9 @@ export const Sidebar = component$((props: SidebarProps) => {
               mobileMenuOpen.value = false;
               props.navigate$(page.path);
             }}
-          >
-            <span>{page.icon}</span>
-            {page.navLabel}
+            >
+            <span class="nav-item-icon">{iconForPath(page.path)}</span>
+            <span class="nav-item-label">{page.navLabel}</span>
           </button>
         ))}
       </nav>
@@ -86,6 +94,15 @@ export const Sidebar = component$((props: SidebarProps) => {
     </aside>
   );
 });
+
+function iconForPath(path: string) {
+  if (path === '/dashboard') return <LayoutDashboardIcon size={16} />;
+  if (path === '/condominios') return <Building2Icon size={16} />;
+  if (path === '/equipa') return <UsersIcon size={16} />;
+  if (path === '/tarefas') return <ClipboardListIcon size={16} />;
+  if (path === '/tickets') return <HomeIcon size={16} />;
+  return <CalendarDaysIcon size={16} />;
+}
 
 function initials(name: string) {
   return name

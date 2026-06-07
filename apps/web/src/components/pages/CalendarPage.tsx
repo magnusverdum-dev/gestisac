@@ -1,7 +1,7 @@
 import { component$, useSignal, useTask$, type PropFunction } from '@builder.io/qwik';
 import { EditIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, Trash2Icon } from 'lucide-qwik';
 import type { CalendarEvent, InspectionItem, ResourceEndpoint, ResourceState } from '../../lib/api';
-import { calendarTypePath, condominiumPath, entityPath, slugify } from '../../lib/entity-navigation';
+import { condominiumPath, entityPath, slugify } from '../../lib/entity-navigation';
 import { EntityAction } from '../common/EntityAction';
 
 type CalendarPageProps = {
@@ -85,9 +85,9 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
     <section class="page-view operational-page calendar-page">
       <header class="page-header compact-page-header calendar-header">
         <div>
-          <span class="page-eyebrow">GESTISAC - Calendario</span>
-          <h1>Calendario operacional</h1>
-          <p>Agenda ligada a vistorias, reunioes, emails planeados, tickets e manutencao.</p>
+          <span class="page-eyebrow">GESTISAC - Agenda</span>
+          <h1>Agenda</h1>
+          <p>Timeline operacional ligada a vistorias, emails planeados, manutencao, tickets e condominio.</p>
         </div>
         {!props.readOnly ? (
           <button
@@ -104,26 +104,45 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
         ) : null}
       </header>
 
-      <div class="summary-grid simple-summary-grid">
-        <button class="summary-card blue" type="button" onClick$={() => props.navigate$('/calendario')}>
+      <div class="summary-grid simple-summary-grid calendar-summary-strip">
+        <button
+          class={`summary-card blue ${typeFilter.value === 'Todos' ? 'active' : ''}`}
+          type="button"
+          onClick$={() => {
+            typeFilter.value = 'Todos';
+            statusFilter.value = 'Todos';
+          }}
+        >
           <span>Eventos filtrados</span><strong>{counts.total}</strong><small>Grelha atual</small>
         </button>
-        <button class="summary-card gold" type="button" onClick$={() => props.navigate$(calendarTypePath('Vistoria'))}>
+        <button
+          class={`summary-card gold ${typeFilter.value === 'Vistoria' ? 'active' : ''}`}
+          type="button"
+          onClick$={() => (typeFilter.value = 'Vistoria')}
+        >
           <span>Vistorias</span><strong>{counts.inspections}</strong><small>Verificacoes e estados</small>
         </button>
-        <button class="summary-card green" type="button" onClick$={() => props.navigate$(calendarTypePath('Email'))}>
+        <button
+          class={`summary-card green ${typeFilter.value === 'Email' ? 'active' : ''}`}
+          type="button"
+          onClick$={() => (typeFilter.value = 'Email')}
+        >
           <span>Emails</span><strong>{counts.emails}</strong><small>Planeamento sem envio real</small>
         </button>
-        <button class="summary-card purple" type="button" onClick$={() => props.navigate$(calendarTypePath('Ligacoes'))}>
+        <button
+          class={`summary-card purple ${slugify(typeFilter.value) === 'ligacoes' ? 'active' : ''}`}
+          type="button"
+          onClick$={() => (typeFilter.value = 'Ligacoes')}
+        >
           <span>Ligacoes</span><strong>{counts.linked}</strong><small>Tickets/manutencao/documentos</small>
         </button>
       </div>
 
-      <section class="glass-panel ops-panel calendar-shell">
+      <section class="glass-panel ops-panel calendar-shell calendar-command-surface">
         <div class="ops-panel-header calendar-toolbar">
           <div>
             <span class="page-eyebrow">{monthLabel(now)}</span>
-            <h2>Agenda</h2>
+            <h2>Fila de agenda</h2>
           </div>
           <div class="ops-toolbar calendar-filters">
             <label class="ops-search">
@@ -190,7 +209,7 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
           </section>
         ) : null}
 
-        <div class="calendar-layout">
+        <div class="calendar-layout calendar-command-layout">
           <div class="calendar-main-panel">
             {viewMode.value === 'month' ? (
               <div class="calendar-grid month-grid">
@@ -250,7 +269,7 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
                             key={event.id}
                             type="button"
                             class={`calendar-list-item ${selectedEvent?.id === event.id ? 'active' : ''}`}
-                            onClick$={() => props.navigate$(entityPath('calendarEvent', event.id))}
+                            onClick$={() => (selectedId.value = event.id)}
                           >
                             <span class={`event-dot ${toneForType(event.eventType)}`} />
                             <strong>{event.title}</strong>
@@ -271,7 +290,7 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
                     key={event.id}
                     type="button"
                     class={`calendar-list-item ${selectedEvent?.id === event.id ? 'active' : ''}`}
-                    onClick$={() => props.navigate$(entityPath('calendarEvent', event.id))}
+                    onClick$={() => (selectedId.value = event.id)}
                   >
                     <span class={`event-dot ${toneForType(event.eventType)}`} />
                     <strong>{event.title}</strong>
@@ -284,11 +303,11 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
           </div>
 
           <aside class="calendar-side-panel">
-            <section class="simple-detail-panel compact">
+            <section class="simple-detail-panel compact calendar-upcoming-panel">
               <strong>Proximos eventos</strong>
               <div class="calendar-mini-list">
                 {upcomingEvents.length ? upcomingEvents.map((event) => (
-                  <button key={event.id} type="button" onClick$={() => props.navigate$(entityPath('calendarEvent', event.id))}>
+                  <button key={event.id} type="button" onClick$={() => (selectedId.value = event.id)}>
                     <span class={`event-dot ${toneForType(event.eventType)}`} />
                     <strong>{event.title}</strong>
                     <small>{formatDateTime(event.startAt)}</small>
@@ -298,7 +317,7 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
             </section>
 
             {selectedEvent ? (
-              <section class="simple-detail-panel calendar-detail-card">
+              <section class="simple-detail-panel calendar-detail-card calendar-context-card">
                 <div class="simple-detail-header">
                   <div>
                     <span class="page-eyebrow">{selectedEvent.eventType}</span>
@@ -341,6 +360,27 @@ export const CalendarPage = component$((props: CalendarPageProps) => {
                       </button>
                     </details>
                   ) : null}
+                </div>
+                <div class="simple-header-actions calendar-action-bar">
+                  <button
+                    type="button"
+                    class="primary-action"
+                    onClick$={() => props.navigate$(entityPath('calendarEvent', selectedEvent.id))}
+                  >
+                    Abrir evento
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-action"
+                    onClick$={() => {
+                      if (selectedEvent.condominium && selectedEvent.condominium !== 'Geral') {
+                        props.navigate$(condominiumPath(props.resources, selectedEvent.condominium));
+                      }
+                    }}
+                    disabled={!selectedEvent.condominium || selectedEvent.condominium === 'Geral'}
+                  >
+                    Abrir condominio
+                  </button>
                 </div>
                 <dl class="calendar-detail-list">
                   <div><dt>Inicio</dt><dd>{formatDateTime(selectedEvent.startAt)}</dd></div>

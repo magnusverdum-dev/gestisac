@@ -1,5 +1,5 @@
 import { component$, useSignal, type PropFunction } from '@builder.io/qwik';
-import { ArrowLeftIcon } from 'lucide-qwik';
+import { ArrowLeftIcon, BellIcon, GridIcon, LogOutIcon, SearchIcon } from 'lucide-qwik';
 import type { AlertItem, AppContext, GlobalSearchResult, PublicUser } from '../../lib/api';
 
 export type ApiStatus = 'online' | 'offline' | 'checking';
@@ -51,10 +51,10 @@ export const Topbar = component$((props: TopbarProps) => {
         <ArrowLeftIcon size={18} />
       </button>
       <div class="search-box">
-        <span>?</span>
+        <span class="search-box-icon"><SearchIcon size={15} /></span>
         <input
           aria-label="Pesquisar"
-          placeholder="Pesquisar..."
+          placeholder="Pesquisar pedidos, tarefas, condominios ou agenda"
           value={searchQuery.value}
           onInput$={(event) => {
             searchQuery.value = (event.target as HTMLInputElement).value;
@@ -95,6 +95,7 @@ export const Topbar = component$((props: TopbarProps) => {
           title="Voltar ao menu inicial das apps"
           onClick$={props.onSwitchApp$}
         >
+          <GridIcon size={14} />
           Apps
           <span>{appLabel}</span>
         </button>
@@ -117,6 +118,7 @@ export const Topbar = component$((props: TopbarProps) => {
               alertsOpen.value = !alertsOpen.value;
             }}
           >
+            <BellIcon size={16} />
             <span>{props.alertCount}</span>
           </button>
           {alertsOpen.value ? (
@@ -150,7 +152,8 @@ export const Topbar = component$((props: TopbarProps) => {
           ) : null}
         </div>
         <button class="user-pill" type="button" aria-label="Terminar sessao" onClick$={props.onLogout$}>
-          {initials(props.user.name)}
+          <span>{initials(props.user.name)}</span>
+          <LogOutIcon size={14} />
         </button>
       </div>
     </header>

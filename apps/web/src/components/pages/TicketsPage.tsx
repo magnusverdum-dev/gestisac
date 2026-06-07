@@ -160,7 +160,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
 
       {pageError.value ? <div class="app-error glass-panel">{pageError.value}</div> : null}
 
-      <div class="summary-grid simple-summary-grid">
+      <div class="summary-grid simple-summary-grid ticket-summary-strip">
         {isWorkerContext ? (
           <>
             <button class="summary-card blue" type="button" onClick$={() => { statusFiltro.value = ''; prioridadeFiltro.value = ''; }}>
@@ -194,14 +194,14 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
         )}
       </div>
 
-      <section class="glass-panel ops-workspace">
+      <section class="glass-panel ops-workspace tickets-command-surface">
         <div class="ops-panel-header calendar-toolbar">
           <div>
             <span class="page-eyebrow">Dados reais da API online</span>
             <h2>Registos CMT</h2>
           </div>
-          <div class="ops-toolbar calendar-filters">
-            <nav class="detail-tabs" style="margin-bottom:0">
+          <div class="ops-toolbar calendar-filters tickets-toolbar">
+            <nav class="detail-tabs cmt-type-tabs" style="margin-bottom:0">
               {TIPO_TABS.map((t) => (
                 <button key={t} type="button" class={`tab-btn ${tipoTab.value === t ? 'active' : ''}`} onClick$={() => { tipoTab.value = t; statusFiltro.value = ''; }}>
                   {t === 'todas' ? 'Todas' : t === 'avaria' ? 'Avarias' : 'Pedidos'}
@@ -283,9 +283,9 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
             )}
           </div>
 
-          <aside class="ops-detail-panel">
+          <aside class="ops-detail-panel tickets-context-panel">
             {selected ? (
-              <div class="simple-detail-panel">
+              <div class="simple-detail-panel ticket-context-card">
                 <div class="simple-detail-header">
                   <div>
                     <span class="page-eyebrow">{rotuloTipo(selected.tipo)}</span>
@@ -303,7 +303,25 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                   ) : null}
                 </div>
 
-                <div class="detail-kv-grid">
+                <div class="simple-header-actions ticket-context-actions">
+                  <button
+                    type="button"
+                    class="primary-action"
+                    onClick$={() => props.navigate$(entityPath('ticket', selected.id))}
+                  >
+                    Abrir origem
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-action"
+                    onClick$={() => props.navigate$(condominiumPath(props.resources, selected.condominiumId))}
+                    disabled={!condominiumPath(props.resources, selected.condominiumId)}
+                  >
+                    Abrir condominio
+                  </button>
+                </div>
+
+                <div class="detail-kv-grid ticket-context-grid">
                   {isClientContext ? (
                     <>
                       <article>
@@ -346,7 +364,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                   )}
                 </div>
 
-                <EntityAction class="entity-inline-link" path={condominiumPath(props.resources, selected.condominiumId)} navigate$={props.navigate$}>
+                <EntityAction class="entity-inline-link ticket-context-link" path={condominiumPath(props.resources, selected.condominiumId)} navigate$={props.navigate$}>
                   Abrir condomínio: {selected.condominiumId || 'Geral'}
                 </EntityAction>
 
@@ -367,7 +385,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                   </div>
                 ) : null}
 
-                <nav class="detail-tabs" style="margin-top:1rem">
+                <nav class="detail-tabs ticket-detail-tabs" style="margin-top:1rem">
                   {(isWorkerContext ? ['resumo', 'checklist', 'fotos', 'historico', 'resolver'] : isClientContext ? ['resumo', 'historico'] : ['resumo', 'historico', 'fotos', 'custos'] as const).map((t) => (
                     <button key={t} type="button" class={`tab-btn ${detailTab.value === t ? 'active' : ''}`} onClick$={() => (detailTab.value = t as typeof detailTab.value)}>
                       {tabLabel(t)}

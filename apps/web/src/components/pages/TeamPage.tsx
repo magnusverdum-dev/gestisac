@@ -1,7 +1,18 @@
 import { component$, useSignal, type PropFunction } from '@builder.io/qwik';
-import { SearchIcon, UserIcon } from 'lucide-qwik';
+import { UserIcon } from 'lucide-qwik';
 import type { ResourceState, TeamMember } from '../../lib/api';
 import { entityPath, normalize } from '../../lib/entity-navigation';
+import {
+  ContextPanel,
+  EmptyOperationalState,
+  MetricStrip,
+  OperationalList,
+  OperationalPageLayout,
+  OperationalToolbar,
+  PrimaryActionBar,
+  RelationChipRow,
+  SelectionHeader
+} from '../operations/CommandCenter';
 
 type TeamPageProps = {
   resources: ResourceState;
@@ -11,6 +22,7 @@ type TeamPageProps = {
 export const TeamPage = component$((props: TeamPageProps) => {
   const search = useSignal('');
   const statusFilter = useSignal<'todos' | 'campo' | 'validacao' | 'livres'>('todos');
+  const selectedId = useSignal(props.resources.team[0]?.id ?? '');
   const normalizedSearch = normalize(search.value);
   const members = props.resources.team
     .filter((member) => {
@@ -25,115 +37,146 @@ export const TeamPage = component$((props: TeamPageProps) => {
         : true
     )
     .sort((left, right) => right.openTasks - left.openTasks || left.name.localeCompare(right.name));
-
-  const totals = {
-    members: props.resources.team.length,
-    open: props.resources.team.reduce((total, member) => total + member.openTasks, 0),
-    field: props.resources.team.reduce((total, member) => total + member.inProgressTasks, 0),
-    validation: props.resources.team.reduce((total, member) => total + member.pendingValidation, 0)
-  };
+  const selected = members.find((member) => member.id === selectedId.value) ?? members[0];
 
   return (
-    <section class="page-view operational-page team-page">
-      <header class="page-header compact-page-header calendar-header">
-        <div>
-          <span class="page-eyebrow">GESTISAC - Equipa</span>
-          <h1>Equipa</h1>
-          <p>Funcionarios, responsabilidades e carga operacional ligada ao trabalho diario.</p>
-        </div>
-      </header>
+    <OperationalPageLayout
+      eyebrow="GESTISAC - Equipa"
+      title="Equipa"
+      description="Carga operacional, validacoes e atividade recente dos funcionarios."
+    >
+      <MetricStrip
+        q:slot="metrics"
+        activeId={statusFilter.value}
+        onSelect$={(id) => (statusFilter.value = id as typeof statusFilter.value)}
+        items={[
+          {
+            id: 'todos',
+            label: 'Membros',
+            value: props.resources.team.length,
+            detail: 'Utilizadores ativos',
+            tone: 'info'
+          },
+          {
+            id: 'campo',
+            label: 'Em campo',
+            value: props.resources.team.reduce((total, member) => total + member.inProgressTasks, 0),
+            detail: 'Execucao ativa',
+            tone: 'warning'
+          },
+          {
+            id: 'validacao',
+            label: 'Validacao',
+            value: props.resources.team.reduce((total, member) => total + member.pendingValidation, 0),
+            detail: 'A rever pelo HQ',
+            tone: 'danger'
+          },
+          {
+            id: 'livres',
+            label: 'Livres',
+            value: props.resources.team.filter((member) => member.openTasks === 0).length,
+            detail: 'Sem fila aberta',
+            tone: 'success'
+          }
+        ]}
+      />
 
-      <div class="summary-grid simple-summary-grid">
-        <button class="summary-card blue" type="button" onClick$={() => (statusFilter.value = 'todos')}>
-          <span>Membros</span><strong>{totals.members}</strong><small>Utilizadores ativos</small>
-        </button>
-        <button class="summary-card gold" type="button" onClick$={() => (statusFilter.value = 'todos')}>
-          <span>Abertas</span><strong>{totals.open}</strong><small>Tarefas por fechar</small>
-        </button>
-        <button class="summary-card purple" type="button" onClick$={() => (statusFilter.value = 'campo')}>
-          <span>Em campo</span><strong>{totals.field}</strong><small>Execucao ativa</small>
-        </button>
-        <button class="summary-card green" type="button" onClick$={() => (statusFilter.value = 'validacao')}>
-          <span>Validacao</span><strong>{totals.validation}</strong><small>A rever pelo HQ</small>
-        </button>
-      </div>
+      <OperationalToolbar
+        title="Carga operacional"
+        eyebrow="Distribuicao diaria"
+        searchValue={search.value}
+        searchPlaceholder="Pesquisar por nome, email ou funcao"
+        onSearch$={(value) => (search.value = value)}
+      >
+        <select
+          value={statusFilter.value}
+          onChange$={(event) => (statusFilter.value = (event.target as HTMLSelectElement).value as typeof statusFilter.value)}
+        >
+          <option value="todos">Todos</option>
+          <option value="campo">Em campo</option>
+          <option value="validacao">Com validacao</option>
+          <option value="livres">Sem fila</option>
+        </select>
+      </OperationalToolbar>
 
-      <section class="glass-panel ops-workspace team-workspace">
-        <div class="ops-panel-header calendar-toolbar">
-          <div>
-            <span class="page-eyebrow">Operacao interna</span>
-            <h2>Funcionarios</h2>
-          </div>
-          <div class="ops-toolbar calendar-filters">
-            <label class="ops-search">
-              <SearchIcon size={16} />
-              <input
-                value={search.value}
-                placeholder="Pesquisar por nome, email ou funcao"
-                onInput$={(event) => (search.value = (event.target as HTMLInputElement).value)}
-              />
-            </label>
-            <select value={statusFilter.value} onChange$={(event) => (statusFilter.value = (event.target as HTMLSelectElement).value as typeof statusFilter.value)}>
-              <option value="todos">Todos</option>
-              <option value="campo">Em campo</option>
-              <option value="validacao">Com validacao</option>
-              <option value="livres">Sem tarefas</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="team-grid">
-          {members.length ? members.map((member) => (
-            <article class="team-member-card" key={member.id}>
-              <div class="team-member-main">
-                <div class="team-avatar"><UserIcon size={18} /></div>
-                <div>
-                  <strong>{member.name}</strong>
-                  <span>{member.role || 'Sem funcao'} - {member.email}</span>
-                </div>
+      <OperationalList>
+        {members.length ? members.map((member) => (
+          <button
+            key={member.id}
+            type="button"
+            class={`cc-row-button ${selected?.id === member.id ? 'selected' : ''}`}
+            onClick$={() => (selectedId.value = member.id)}
+          >
+            <div class="cc-row-leading">
+              <span class="cc-avatar"><UserIcon size={16} /></span>
+              <div class="cc-row-main">
+                <strong>{member.name}</strong>
+                <span>{member.role || 'Sem funcao'} - {member.email}</span>
               </div>
-              <div class="team-load-grid">
-                <Metric label="Abertas" value={member.openTasks} />
-                <Metric label="Em curso" value={member.inProgressTasks} />
-                <Metric label="Validacao" value={member.pendingValidation} />
-              </div>
+            </div>
+            <div class="cc-row-stats">
+              <span><strong>{member.openTasks}</strong><small>Abertas</small></span>
+              <span><strong>{member.inProgressTasks}</strong><small>Em curso</small></span>
+              <span><strong>{member.pendingValidation}</strong><small>Validacao</small></span>
+            </div>
+          </button>
+        )) : (
+          <EmptyOperationalState>
+            <strong>Sem equipa para mostrar</strong>
+            <span>Quando existirem utilizadores carregados, aparecem aqui.</span>
+          </EmptyOperationalState>
+        )}
+      </OperationalList>
+
+      <ContextPanel
+        q:slot="panel"
+        eyebrow="Trabalho atribuido"
+        title={selected?.name || 'Sem membro selecionado'}
+        subtitle={selected ? `${selected.role || 'Sem funcao'} - ${selected.email}` : 'Escolhe um membro da equipa'}
+        status={selected ? formatDate(selected.lastActivityAt) : ''}
+      >
+        {selected ? (
+          <>
+            <SelectionHeader
+              title={selected.name}
+              subtitle={`${selected.openTasks} abertas - ${selected.inProgressTasks} em curso`}
+              status={selected.pendingValidation > 0 ? 'Com validacao' : 'Operacao normal'}
+            />
+            <RelationChipRow
+              items={[
+                { label: `${selected.openTasks} tarefas abertas`, tone: 'info' },
+                { label: `${selected.inProgressTasks} em curso`, tone: 'warning' },
+                { label: `${selected.pendingValidation} validacoes`, tone: selected.pendingValidation ? 'danger' : 'success' }
+              ]}
+            />
+            <PrimaryActionBar>
               <button
+                class="primary-action"
                 type="button"
-                class="secondary-action"
-                onClick$={() => props.navigate$(entityPath('profile', member.name || member.id))}
+                onClick$={() => props.navigate$(entityPath('profile', selected.name || selected.id))}
               >
                 Ver atividade
               </button>
-              <small>{member.lastActivityAt ? `Ultima atividade: ${formatDate(member.lastActivityAt)}` : 'Sem atividade recente'}</small>
-            </article>
-          )) : (
-            <div class="simple-empty-state">
-              <strong>Sem equipa para mostrar</strong>
-              <span>Quando existirem utilizadores carregados, aparecem aqui.</span>
-            </div>
-          )}
-        </div>
-      </section>
-    </section>
+              <button class="secondary-action" type="button" onClick$={() => props.navigate$('/tarefas')}>
+                Abrir tarefas
+              </button>
+            </PrimaryActionBar>
+          </>
+        ) : (
+          <EmptyOperationalState>
+            <strong>Sem detalhe disponivel</strong>
+            <span>Seleciona um membro na lista principal.</span>
+          </EmptyOperationalState>
+        )}
+      </ContextPanel>
+    </OperationalPageLayout>
   );
 });
-
-type MetricProps = {
-  label: string;
-  value: number;
-};
-
-const Metric = component$((props: MetricProps) => (
-  <span>
-    <strong>{props.value}</strong>
-    <small>{props.label}</small>
-  </span>
-));
 
 function formatDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return 'Sem atividade recente';
   }
 
   return date.toLocaleString('pt-PT', {
