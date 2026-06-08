@@ -1,6 +1,6 @@
 const baseUrl = process.env.GESTISAC_API_URL ?? 'http://127.0.0.1:3000';
 const email = process.env.GESTISAC_SMOKE_EMAIL ?? 'admin@gestisac.pt';
-const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'true').trim().toLowerCase() !== 'false';
+const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'false').trim().toLowerCase() !== 'false';
 const password = process.env.GESTISAC_SMOKE_PASSWORD;
 
 if (loginNeeded && !password) {

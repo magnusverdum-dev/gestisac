@@ -4,6 +4,13 @@ Este documento e a checklist operacional para validar melhorias no GESTISAC.
 
 Regra base: depois de qualquer melhoria, validar primeiro a API publicada. So depois validar a experiencia por utilizador/app. Nao usar localhost para dar uma melhoria como validada em producao.
 
+## Regra Fixa: Sem Credenciais Manuais em Desenvolvimento
+
+- Em desenvolvimento, a Web deve abrir `browser-session` automaticamente.
+- Ninguem deve precisar de escrever email/password para validar fluxos de dev, smoke ou readiness por defeito.
+- `GESTISAC_LOGIN_NEEDED` deve assumir `false` por defeito nos scripts de smoke.
+- O guard `pnpm run guard:loginless-dev` e os git hooks bloqueiam regressões deste contrato.
+
 ## Nivel 1: API Primeiro
 
 Usar quando a melhoria altera backend, dados, auth, permissoes, rotas, contratos API, ou frontend que consome dados reais.

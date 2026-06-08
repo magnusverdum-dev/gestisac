@@ -24,6 +24,7 @@
     }
   },
   "scripts": {
+    "prepare": "simple-git-hooks",
     "dev": "concurrently -n web,api -c cyan,green \"pnpm run dev:web\" \"pnpm run dev:api\"",
     "dev:web": "pnpm --dir apps/web dev",
     "dev:hq": "pnpm --dir apps/hq-web dev",
@@ -63,9 +64,16 @@
     "audit:migrations": "node scripts/audit-database-migrations.mjs",
     "audit:fk-indexes": "node scripts/audit-foreign-key-indexes.mjs",
     "audit:prod-db": "node scripts/audit-production-database.mjs",
-    "migrate:json-to-postgres": "node scripts/migrate-json-to-postgres.mjs"
+    "migrate:json-to-postgres": "node scripts/migrate-json-to-postgres.mjs",
+    "guard:loginless-dev": "node scripts/check-loginless-dev-contract.mjs",
+    "guard:git-push": "pnpm run guard:loginless-dev && pnpm run check:prod-api && pnpm run check:prod-readiness"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm run guard:loginless-dev",
+    "pre-push": "pnpm run guard:git-push"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "simple-git-hooks": "^2.13.1"
   }
 }

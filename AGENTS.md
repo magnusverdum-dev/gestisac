@@ -61,3 +61,14 @@ Core rule:
 - Do not treat localhost-only validation as production validation.
 - Add new or changed API endpoints to `scripts/check-production-api.mjs` when they are part of the production contract.
 - Report which smoke commands passed and which user contexts were replicated before delivering.
+
+## Development Loginless Contract
+
+In development and smoke flows, manual credential entry is forbidden by default.
+
+Core rule:
+
+- The web app must auto-open `browser-session` in development instead of waiting for typed credentials.
+- Smoke and readiness scripts must default to `GESTISAC_LOGIN_NEEDED=false`.
+- Any change that reintroduces manual credential entry in development must fail the repo guard `pnpm run guard:loginless-dev`.
+- Git hooks must block commit/push when that contract is broken.

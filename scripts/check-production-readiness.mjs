@@ -5,7 +5,7 @@ const apiUrl = (process.env.GESTISAC_API_URL || 'https://gestisac-api.vercel.app
 const webUrl = (process.env.GESTISAC_WEB_URL || 'https://gestisac-web.vercel.app').replace(/\/$/, '');
 const oldDemoEmail = process.env.GESTISAC_OLD_DEMO_EMAIL || 'admin@gestisac.pt';
 const oldDemoPassword = process.env.GESTISAC_OLD_DEMO_PASSWORD || 'Gestisac2026!';
-const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'true').trim().toLowerCase() !== 'false';
+const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'false').trim().toLowerCase() !== 'false';
 const failures = [];
 const warnings = [];
 const evidence = [];

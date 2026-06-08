@@ -153,8 +153,40 @@ const removeStoredValue = (key: string) => {
 
 const dashboardShortcutAreas: CondoAreaId[] = ['general', 'inspections', 'timeline', 'avarias'];
 const isLocalDevelopmentMode = import.meta.env.MODE === 'development';
+const devAutoLoginEnabled =
+  isLocalDevelopmentMode &&
+  String(import.meta.env.VITE_GESTISAC_DEV_AUTO_LOGIN ?? 'true').trim().toLowerCase() !== 'false';
 const devLoginEmail = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_EMAIL ?? '') : '';
 const devLoginPassword = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_PASSWORD ?? '') : '';
+const DEV_AUTO_LOGIN_SUPPRESS_KEY = 'gestisac:dev-auto-login-suppress';
+
+const readSessionValue = (key: string) => {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const writeSessionValue = (key: string, value: string) => {
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(key, value);
+    }
+  } catch {
+    // Session storage is best-effort in embedded browsers.
+  }
+};
+
+const removeSessionValue = (key: string) => {
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Session storage cleanup is best-effort in embedded browsers.
+  }
+};
 
 const readCondominiumShortcutArea = (path: string): CondoAreaId | '' => {
   const queryStart = path.indexOf('?');
@@ -189,6 +221,7 @@ export const App = component$(() => {
   const appContext = useSignal<AppContext>(initialRoute.appContext);
   const showEntry = useSignal(initialRoute.showEntry);
   const condominiumShortcutArea = useSignal<CondoAreaId | ''>('');
+  const autoBrowserSessionPending = useSignal(false);
   const apiStatus = useSignal<ApiStatus>('checking');
   const dashboard = useSignal(fallbackDashboard);
   const resources = useSignal(emptyResources);
@@ -338,6 +371,7 @@ export const App = component$(() => {
     appContext.value = context;
     currentPath.value = '/login';
     showEntry.value = false;
+    autoBrowserSessionPending.value = false;
     dashboard.value = fallbackDashboard;
     resources.value = emptyResources;
     pageCache.value = buildPages(emptyResources, fallbackDashboard);
@@ -346,6 +380,9 @@ export const App = component$(() => {
     removeStoredValue(SESSION_REFRESH_KEY);
     removeStoredValue(SESSION_EXPIRES_KEY);
     removeStoredValue(SESSION_APP_CONTEXT_KEY);
+    if (devAutoLoginEnabled) {
+      writeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY, '1');
+    }
     if (token) {
       await logout(token).catch(() => undefined);
     }
@@ -357,6 +394,9 @@ export const App = component$(() => {
     notice.value = '';
     appContext.value = context;
     session.appContext = context;
+    if (devAutoLoginEnabled) {
+      removeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY);
+    }
 
     if (!session.token) {
       window.history.pushState({}, '', buildAppPath(context, '/login'));
@@ -408,6 +448,8 @@ export const App = component$(() => {
   const openBrowserSession$ = $(() => {
     error.value = '';
     notice.value = '';
+    autoBrowserSessionPending.value = true;
+    removeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY);
     const target = resolveApiUrl(
       `/api/auth/browser-session?appContext=${encodeURIComponent(appContext.value)}`
     );
@@ -754,6 +796,8 @@ export const App = component$(() => {
       session.appContext = browserSession.appContext;
       appContext.value = browserSession.appContext;
       showEntry.value = false;
+      autoBrowserSessionPending.value = false;
+      removeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY);
       currentPath.value = '/dashboard';
       window.history.replaceState({}, '', browserSession.dashboardPath);
 
@@ -822,6 +866,17 @@ export const App = component$(() => {
       return;
     }
 
+    const shouldAutoOpenBrowserSession =
+      devAutoLoginEnabled &&
+      route.path === '/login' &&
+      readSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY) !== '1';
+
+    if (shouldAutoOpenBrowserSession) {
+      autoBrowserSessionPending.value = true;
+      openBrowserSession$();
+      return;
+    }
+
     try {
       const current = await me(storedToken);
       session.token = storedToken;
@@ -885,6 +940,7 @@ export const App = component$(() => {
         error={error.value}
         isLoading={isLoading.value || !session.ready}
         appContext={appContext.value}
+        hideCredentialEntry={devAutoLoginEnabled && autoBrowserSessionPending.value}
         defaultEmail={devLoginEmail}
         defaultPassword={devLoginPassword}
         onLogin$={login$}

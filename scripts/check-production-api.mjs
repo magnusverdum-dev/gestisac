@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 const args = parseArgs(process.argv.slice(2));
-const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'true').trim().toLowerCase() !== 'false';
+const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'false').trim().toLowerCase() !== 'false';
 
 if (args.help) {
   printHelp();

@@ -5,7 +5,7 @@ import { resolve } from 'path';
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const TARGET = 'http://127.0.0.1:5173';
 const EMAIL = 'admin@gestisac.pt';
-const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'true').trim().toLowerCase() !== 'false';
+const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'false').trim().toLowerCase() !== 'false';
 const PASS = loginNeeded ? process.env.GESTISAC_SMOKE_PASSWORD : '';
 
 if (loginNeeded && !PASS) {

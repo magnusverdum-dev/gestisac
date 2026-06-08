@@ -7,6 +7,7 @@ type LoginPageProps = {
   error: string;
   isLoading: boolean;
   appContext: AppContext;
+  hideCredentialEntry?: boolean;
   defaultEmail?: string;
   defaultPassword?: string;
   onLogin$: PropFunction<(email: string, password: string, appContext: AppContext) => void>;
@@ -44,7 +45,11 @@ export const LoginPage = component$((props: LoginPageProps) => {
             {props.apiStatus === 'online' ? 'API Rust online' : 'A ligar ao backend'}
           </span>
           <h1>Entrar</h1>
-          <p>Acede com a conta fornecida pela administracao.</p>
+          <p>
+            {props.hideCredentialEntry
+              ? 'Sessao de desenvolvimento a abrir automaticamente.'
+              : 'Acede com a conta fornecida pela administracao.'}
+          </p>
         </div>
 
         <form
@@ -60,35 +65,41 @@ export const LoginPage = component$((props: LoginPageProps) => {
             );
           }}
         >
-          <label>
-            <span>Email</span>
-            <input
-              name="email"
-              type="text"
-              inputMode="email"
-              autoComplete="username"
-              placeholder="email@empresa.pt"
-              value={props.defaultEmail}
-              required
-            />
-          </label>
-          <label>
-            <span>Password</span>
-            <input
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="Password da conta"
-              value={props.defaultPassword}
-              required
-            />
-          </label>
+          {!props.hideCredentialEntry ? (
+            <>
+              <label>
+                <span>Email</span>
+                <input
+                  name="email"
+                  type="text"
+                  inputMode="email"
+                  autoComplete="username"
+                  placeholder="email@empresa.pt"
+                  value={props.defaultEmail}
+                  required
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <input
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Password da conta"
+                  value={props.defaultPassword}
+                  required
+                />
+              </label>
+            </>
+          ) : null}
 
           {props.error ? <p class="form-error">{props.error}</p> : null}
 
-          <button class="primary-action" type="submit" disabled={props.isLoading}>
-            {props.isLoading ? 'A entrar...' : 'Entrar'}
-          </button>
+          {!props.hideCredentialEntry ? (
+            <button class="primary-action" type="submit" disabled={props.isLoading}>
+              {props.isLoading ? 'A entrar...' : 'Entrar'}
+            </button>
+          ) : null}
           <button
             class="secondary-action"
             type="button"
