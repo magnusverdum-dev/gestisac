@@ -6,6 +6,7 @@ type LoginPageProps = {
   apiStatus: ApiStatus;
   error: string;
   isLoading: boolean;
+  loadingProgress?: number;
   appContext: AppContext;
   hideCredentialEntry?: boolean;
   defaultEmail?: string;
@@ -47,7 +48,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
           <h1>Entrar</h1>
           <p>
             {props.hideCredentialEntry
-              ? 'Sessao de desenvolvimento a abrir automaticamente.'
+              ? 'Sessao de desenvolvimento a abrir automaticamente, sem credenciais manuais.'
               : 'Acede com a conta fornecida pela administracao.'}
           </p>
         </div>
@@ -95,6 +96,19 @@ export const LoginPage = component$((props: LoginPageProps) => {
 
           {props.error ? <p class="form-error">{props.error}</p> : null}
 
+          {props.hideCredentialEntry ? (
+            <div class="login-progress" role="status" aria-live="polite">
+              <div class="login-progress-header">
+                <strong>Servidor a ligar</strong>
+                <span>{Math.max(1, Math.min(99, props.loadingProgress ?? 12))}%</span>
+              </div>
+              <div class="login-progress-track" aria-hidden="true">
+                <span style={{ width: `${Math.max(1, Math.min(99, props.loadingProgress ?? 12))}%` }} />
+              </div>
+              <p>Estamos a abrir a API publicada e a preparar a sessao. Nao tens de escrever nada.</p>
+            </div>
+          ) : null}
+
           {!props.hideCredentialEntry ? (
             <button class="primary-action" type="submit" disabled={props.isLoading}>
               {props.isLoading ? 'A entrar...' : 'Entrar'}
@@ -106,7 +120,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
             disabled={props.isLoading || !props.onBrowserSession$}
             onClick$={props.onBrowserSession$}
           >
-            Sessão de browser
+            {props.hideCredentialEntry ? 'Repetir sessao automatica' : 'Sessao de browser'}
           </button>
           <button
             class="secondary-action"
@@ -116,7 +130,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
           >
             Voltar ao menu das apps
           </button>
-          {props.isLoading ? (
+          {props.isLoading && !props.hideCredentialEntry ? (
             <p class="form-hint">
               A ligar a API online. No primeiro arranque pode demorar alguns segundos.
             </p>

@@ -100,6 +100,7 @@ export {
   logout,
   me,
   refreshSession,
+  startBrowserSession,
   updateActiveCondominium
 } from './api/auth';
 

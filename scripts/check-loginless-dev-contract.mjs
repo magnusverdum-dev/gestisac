@@ -13,8 +13,23 @@ const checks = [
   },
   {
     file: 'apps/web/src/app.tsx',
-    pattern: /hideCredentialEntry=\{devAutoLoginEnabled && autoBrowserSessionPending\.value\}/,
+    pattern: /hideCredentialEntry=\{hideDevelopmentLogin \|\| autoBrowserSessionPending\.value\}/,
     message: 'apps/web/src/app.tsx must hide manual credential entry while dev auto-login is opening.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /const hideDevelopmentLogin =\s*devAutoLoginEnabled/s,
+    message: 'apps/web/src/app.tsx must hide manual credential entry immediately on development login routes.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /await openBrowserSession\$\(\);\s*return;\s*}\s*session\.ready = true;\s*return;/s,
+    message: 'apps/web/src/app.tsx must auto-open browser-session before showing manual login when no token exists.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /startBrowserSession\(appContext\.value\)/,
+    message: 'apps/web/src/app.tsx must use browser-session API for loginless development instead of manual credential entry.'
   },
   {
     file: 'apps/web/src/components/auth/LoginPage.tsx',
@@ -23,8 +38,13 @@ const checks = [
   },
   {
     file: 'apps/web/src/components/auth/LoginPage.tsx',
-    pattern: /Sessao de desenvolvimento a abrir automaticamente\./,
+    pattern: /sem credenciais manuais/,
     message: 'LoginPage must show the development auto-login state instead of asking for credentials.'
+  },
+  {
+    file: 'apps/web/src/components/auth/LoginPage.tsx',
+    pattern: /login-progress/,
+    message: 'LoginPage must show progress while the server opens the automatic session.'
   },
   {
     file: 'scripts/check-production-api.mjs',

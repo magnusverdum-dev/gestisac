@@ -42,6 +42,7 @@ import {
   logout,
   me,
   refreshSession,
+  startBrowserSession,
   uploadDocument,
   updateResource,
   type ApiStatus,
@@ -53,7 +54,6 @@ import {
   type ResourceEndpoint,
   type PublicUser
 } from './lib/api';
-import { resolveApiUrl } from './lib/api/http';
 import { matchEntityRoute } from './lib/entity-navigation';
 
 const normalizeInnerPath = (path: string) => {
@@ -234,6 +234,7 @@ export const App = component$(() => {
   const isLoading = useSignal(false);
   const isSaving = useSignal(false);
   const isPreviewLoading = useSignal(false);
+  const browserSessionProgress = useSignal(8);
   const session = useStore<{
     ready: boolean;
     token: string;
@@ -445,15 +446,41 @@ export const App = component$(() => {
     }
   });
 
-  const openBrowserSession$ = $(() => {
+  const openBrowserSession$ = $(async () => {
     error.value = '';
     notice.value = '';
     autoBrowserSessionPending.value = true;
+    isLoading.value = true;
+    browserSessionProgress.value = Math.max(browserSessionProgress.value, 18);
     removeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY);
-    const target = resolveApiUrl(
-      `/api/auth/browser-session?appContext=${encodeURIComponent(appContext.value)}`
-    );
-    window.location.assign(target);
+    try {
+      const auth = await startBrowserSession(appContext.value);
+      browserSessionProgress.value = 92;
+      session.token = auth.token;
+      session.user = auth.user;
+      session.appContext = auth.appContext || appContext.value;
+      appContext.value = auth.appContext || appContext.value;
+      writeStoredValue(SESSION_TOKEN_KEY, auth.token);
+      writeStoredValue(SESSION_REFRESH_KEY, auth.refreshToken);
+      writeStoredValue(SESSION_EXPIRES_KEY, auth.expiresAt);
+      writeStoredValue(SESSION_APP_CONTEXT_KEY, auth.appContext || appContext.value);
+      await loadWorkspace$(auth.token);
+      browserSessionProgress.value = 100;
+      showEntry.value = false;
+      autoBrowserSessionPending.value = false;
+      session.ready = true;
+      await navigate$('/dashboard');
+    } catch (err) {
+      error.value =
+        err instanceof Error
+          ? `Nao foi possivel abrir a sessao automatica: ${err.message}`
+          : 'Nao foi possivel abrir a sessao automatica';
+      session.token = '';
+      session.user = null;
+      session.ready = true;
+    } finally {
+      isLoading.value = false;
+    }
   });
 
   const switchApp$ = $(() => {
@@ -780,6 +807,22 @@ export const App = component$(() => {
     cleanup(() => window.removeEventListener('popstate', syncPath));
   });
 
+  useVisibleTask$(({ cleanup }) => {
+    const intervalId = window.setInterval(() => {
+      if (!autoBrowserSessionPending.value && !isLoading.value) {
+        browserSessionProgress.value = 8;
+        return;
+      }
+
+      browserSessionProgress.value = Math.min(
+        96,
+        browserSessionProgress.value + (browserSessionProgress.value < 55 ? 7 : 3)
+      );
+    }, 650);
+
+    cleanup(() => window.clearInterval(intervalId));
+  });
+
   useVisibleTask$(async () => {
     const rawPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const browserSession = readBrowserSessionParams(rawPath);
@@ -809,14 +852,11 @@ export const App = component$(() => {
       return;
     }
 
-    try {
-      await getApiHealth();
-      apiStatus.value = 'online';
-    } catch {
-      apiStatus.value = 'offline';
-    }
-
     const route = parseRouteContext(rawPath);
+    const shouldStartLoginlessSession =
+      devAutoLoginEnabled &&
+      route.path === '/login' &&
+      readSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY) !== '1';
     let storedToken = readStoredValue(SESSION_TOKEN_KEY);
     const storedAppContext = hasExplicitAppContext(rawPath)
       ? route.appContext
@@ -830,6 +870,20 @@ export const App = component$(() => {
       removeStoredValue(SESSION_TOKEN_KEY);
       removeStoredValue(SESSION_APP_CONTEXT_KEY);
       storedToken = '';
+    }
+
+    if (shouldStartLoginlessSession && !storedToken && !readStoredValue(SESSION_REFRESH_KEY)) {
+      autoBrowserSessionPending.value = true;
+      browserSessionProgress.value = 12;
+      await openBrowserSession$();
+      return;
+    }
+
+    try {
+      await getApiHealth();
+      apiStatus.value = 'online';
+    } catch {
+      apiStatus.value = 'offline';
     }
 
     if (!storedToken) {
@@ -862,16 +916,19 @@ export const App = component$(() => {
         }
         return;
       }
+
+      if (shouldStartLoginlessSession) {
+        autoBrowserSessionPending.value = true;
+        browserSessionProgress.value = 12;
+        await openBrowserSession$();
+        return;
+      }
+
       session.ready = true;
       return;
     }
 
-    const shouldAutoOpenBrowserSession =
-      devAutoLoginEnabled &&
-      route.path === '/login' &&
-      readSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY) !== '1';
-
-    if (shouldAutoOpenBrowserSession) {
+    if (shouldStartLoginlessSession) {
       autoBrowserSessionPending.value = true;
       openBrowserSession$();
       return;
@@ -933,14 +990,20 @@ export const App = component$(() => {
     );
   }
 
+  const hideDevelopmentLogin =
+    devAutoLoginEnabled &&
+    currentPath.value === '/login' &&
+    readSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY) !== '1';
+
   if (!session.ready || !session.token) {
     return (
       <LoginPage
         apiStatus={apiStatus.value}
         error={error.value}
         isLoading={isLoading.value || !session.ready}
+        loadingProgress={browserSessionProgress.value}
         appContext={appContext.value}
-        hideCredentialEntry={devAutoLoginEnabled && autoBrowserSessionPending.value}
+        hideCredentialEntry={hideDevelopmentLogin || autoBrowserSessionPending.value}
         defaultEmail={devLoginEmail}
         defaultPassword={devLoginPassword}
         onLogin$={login$}

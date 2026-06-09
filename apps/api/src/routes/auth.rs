@@ -9,7 +9,7 @@ use crate::{
 use axum::{
     extract::{Query, State},
     http::{header::AUTHORIZATION, HeaderMap},
-    response::Redirect,
+    response::{IntoResponse, Redirect, Response},
     Json,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -55,6 +55,8 @@ pub struct RefreshRequest {
 pub struct BrowserSessionRequest {
     #[serde(default)]
     pub app_context: String,
+    #[serde(default)]
+    pub mode: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -91,7 +93,7 @@ pub async fn login(
 pub async fn browser_session(
     State(state): State<AppState>,
     Query(input): Query<BrowserSessionRequest>,
-) -> Result<Redirect, ApiError> {
+) -> Result<Response, ApiError> {
     let app_context = normalize_app_context(&input.app_context);
     let smoke_email =
         std::env::var("GESTISAC_SMOKE_EMAIL").unwrap_or_else(|_| DEFAULT_SMOKE_EMAIL.to_string());
@@ -99,8 +101,11 @@ pub async fn browser_session(
         .map_err(|_| ApiError::internal("GESTISAC_SMOKE_PASSWORD em falta para browser session"))?;
     let auth =
         issue_auth_response(&state, smoke_email, smoke_password, app_context.clone()).await?;
+    if input.mode.eq_ignore_ascii_case("json") {
+        return Ok(Json(auth).into_response());
+    }
     let target_url = build_browser_session_url(&auth);
-    Ok(Redirect::to(&target_url))
+    Ok(Redirect::to(&target_url).into_response())
 }
 
 pub async fn refresh(

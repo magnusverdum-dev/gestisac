@@ -1,6 +1,7 @@
 import { component$, type PropFunction } from '@builder.io/qwik';
 import { ArrowRightIcon } from 'lucide-qwik';
 import type { DashboardResponse } from '../../lib/api';
+import { ModuleCard } from './ModuleCard';
 import {
   ContextPanel,
   EmptyOperationalState,
@@ -44,9 +45,9 @@ export const DashboardPage = component$((props: DashboardPageProps) => {
 
   return (
     <OperationalPageLayout
-      eyebrow="GESTISAC - Hoje"
-      title="Hoje"
-      description={`Operacao diaria, prioridades e proxima acao para ${data.user.name}.`}
+      eyebrow="GESTISAC - Dashboard"
+      title="Dashboard"
+      description={`Visao geral da operacao, modulos principais e proxima acao para ${data.user.name}.`}
     >
       <MetricStrip
         q:slot="metrics"
@@ -82,7 +83,24 @@ export const DashboardPage = component$((props: DashboardPageProps) => {
         ]}
       />
 
-      <OperationalToolbar title="Fila operacional" eyebrow="Comando diario">
+      <OperationalToolbar title="Modulos principais" eyebrow="Dashboard">
+        <button class="secondary-action" type="button" onClick$={() => props.navigate$('/tarefas')}>
+          Ver tarefas
+        </button>
+      </OperationalToolbar>
+
+      <section class="module-grid dashboard-module-grid" aria-label="Modulos principais do dashboard">
+        {data.dashboardModules.slice(0, 4).map((module) => (
+          <ModuleCard
+            key={module.id}
+            module={module}
+            navigate$={props.navigate$}
+            onModuleCommand$={props.onModuleCommand$}
+          />
+        ))}
+      </section>
+
+      <OperationalToolbar title="Fila operacional" eyebrow="Hoje">
         <button class="primary-action" type="button" onClick$={() => props.navigate$('/tickets')}>
           Ver pedidos
         </button>

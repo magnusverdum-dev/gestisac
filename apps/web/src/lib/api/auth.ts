@@ -28,6 +28,12 @@ export async function refreshSession(refreshToken: string, appContext?: AppConte
   });
 }
 
+export async function startBrowserSession(appContext: AppContext): Promise<LoginResponse> {
+  return apiRequest(`/api/auth/browser-session?appContext=${encodeURIComponent(appContext)}&mode=json`, {
+    timeoutMs: AUTH_STARTUP_TIMEOUT_MS
+  });
+}
+
 export async function me(token: string): Promise<{ user: PublicUser }> {
   return apiRequest('/api/me', { token });
 }

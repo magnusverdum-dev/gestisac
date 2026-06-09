@@ -168,7 +168,7 @@ export const fallbackDashboard: DashboardResponse = {
 };
 
 export const navPages: Array<Pick<DemoPage, 'path' | 'navLabel' | 'icon'>> = [
-  { path: '/dashboard', navLabel: 'Hoje', icon: 'H' },
+  { path: '/dashboard', navLabel: 'Dashboard', icon: 'D' },
   { path: '/condominios', navLabel: 'Condominios', icon: 'C' },
   { path: '/equipa', navLabel: 'Equipa', icon: 'E' },
   { path: '/tarefas', navLabel: 'Tarefas', icon: 'T' },
@@ -208,10 +208,10 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
   return [
     {
       path: '/dashboard',
-      navLabel: 'Hoje',
-      icon: 'H',
-      title: 'Hoje',
-      description: 'Fila diaria com prioridades, avisos e trabalho operacional.',
+      navLabel: 'Dashboard',
+      icon: 'D',
+      title: 'Dashboard',
+      description: 'Visao geral com modulos principais, prioridades e avisos operacionais.',
       action: 'Criar aviso',
       stats: [],
       records: []

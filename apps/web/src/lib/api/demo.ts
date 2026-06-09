@@ -66,6 +66,7 @@ import type {
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') ?? '';
+const IS_DEVELOPMENT_MODE = import.meta.env.MODE === 'development';
 const DEMO_STORE_KEY = 'gestisac.publicDemoStore.v1';
 const DEMO_TOKEN = 'gestisac-demo-access-token';
 const DEMO_REFRESH_TOKEN = 'gestisac-demo-refresh-token';
@@ -78,11 +79,15 @@ type DemoStore = Omit<ResourceState, 'permissions'> & {
 };
 
 export function canUseBrowserDemoApi(status = 0): boolean {
-  if (API_BASE_URL || typeof window === 'undefined') {
+  if (typeof window === 'undefined') {
     return false;
   }
 
-  return status === 0 || status === 404 || status === 405 || status >= 500;
+  if (API_BASE_URL && !IS_DEVELOPMENT_MODE) {
+    return false;
+  }
+
+  return status === 0 || (IS_DEVELOPMENT_MODE && status === 401) || status === 404 || status === 405 || status >= 500;
 }
 
 export async function demoApiRequest<T>(
@@ -111,6 +116,10 @@ export async function demoApiRequest<T>(
     }
 
     return buildDemoLogin(store, body.appContext) as T;
+  }
+
+  if (pathname === 'auth/browser-session' && method === 'GET') {
+    return buildDemoLogin(store, url.searchParams.get('appContext')) as T;
   }
 
   if (pathname === 'auth/refresh' && method === 'POST') {
