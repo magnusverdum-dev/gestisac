@@ -24,6 +24,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health::health))
         .merge(app_namespaces::router())
         .route("/api/health", get(health::health))
+        .route("/api/warmup", get(health::warmup))
         .route("/api/version", get(version::version))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/browser-session", get(auth::browser_session))

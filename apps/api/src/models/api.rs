@@ -10,6 +10,16 @@ pub struct HealthResponse {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WarmupResponse {
+    pub service: &'static str,
+    pub status: &'static str,
+    pub environment: String,
+    pub active_backend: String,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Serialize)]
 pub struct VersionResponse {
     pub name: String,
     pub version: String,

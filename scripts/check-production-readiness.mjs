@@ -1,11 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const apiUrl = (process.env.GESTISAC_API_URL || 'https://gestisac-api.vercel.app').replace(/\/$/, '');
 const webUrl = (process.env.GESTISAC_WEB_URL || 'https://gestisac-web.vercel.app').replace(/\/$/, '');
 const oldDemoEmail = process.env.GESTISAC_OLD_DEMO_EMAIL || 'admin@gestisac.pt';
 const oldDemoPassword = process.env.GESTISAC_OLD_DEMO_PASSWORD || 'Gestisac2026!';
 const loginNeeded = String(process.env.GESTISAC_LOGIN_NEEDED ?? 'false').trim().toLowerCase() !== 'false';
+const maxWarmupMs = Number(process.env.GESTISAC_READY_WARMUP_MAX_MS || 5_000);
+const maxLoginlessMs = Number(process.env.GESTISAC_READY_LOGINLESS_MAX_MS || 5_000);
 const failures = [];
 const warnings = [];
 const evidence = [];
@@ -14,6 +16,7 @@ await main();
 
 async function main() {
   runStep('vercel project roots', 'node', ['scripts/check-vercel-projects.mjs']);
+  checkApiVercelCompute();
   runStep('migration audit', 'node', ['scripts/audit-database-migrations.mjs']);
   checkForeignKeyIndexes();
   checkVercelEnvNames('api', [
@@ -29,8 +32,10 @@ async function main() {
   ]);
   checkVercelEnvNames('web', ['VITE_API_BASE_URL']);
   await checkApiHealth();
+  await checkApiWarmup();
   await checkApiVersion();
   await checkLoginCorsPreflight();
+  await checkLoginlessEntryLatency();
   await checkPublishedWeb();
   await checkOldDemoCredentialRejected();
   await checkAuthenticatedSmokeAvailability();
@@ -51,6 +56,37 @@ async function main() {
   }
 
   console.log('Production readiness check passed.');
+}
+
+function checkApiVercelCompute() {
+  let config = {};
+  try {
+    config = JSON.parse(readFileSync('apps/api/vercel.json', 'utf8'));
+  } catch (error) {
+    failures.push(`Unable to read apps/api/vercel.json: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+
+  if (config.fluid !== true) {
+    failures.push('apps/api/vercel.json must enable fluid compute for the production API.');
+  }
+
+  let workflow = '';
+  try {
+    workflow = readFileSync('.github/workflows/keep-api-warm.yml', 'utf8');
+  } catch (error) {
+    failures.push(`Unable to read keep-api-warm workflow: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+
+  if (!workflow.includes('*/5 * * * *')) {
+    failures.push('keep-api-warm workflow must run every 5 minutes.');
+  }
+  if (!workflow.includes('/api/warmup')) {
+    failures.push('keep-api-warm workflow must ping /api/warmup.');
+  }
+
+  evidence.push('api vercel fluid compute and GitHub keep-warm workflow configured');
 }
 
 function runStep(label, command, args) {
@@ -127,6 +163,20 @@ async function checkApiHealth() {
   evidence.push(`/api/health ${status} in ${ms}ms with persistent postgres storage`);
 }
 
+async function checkApiWarmup() {
+  const { status, ms, body } = await fetchJson(`${apiUrl}/api/warmup?readiness=${Date.now()}`, 'api warmup', 20_000);
+  if (status !== 200) {
+    failures.push(`/api/warmup returned HTTP ${status}.`);
+    return;
+  }
+
+  expectEqual('warmup.status', body.status, 'warm');
+  expectEqual('warmup.environment', body.environment, 'production');
+  expectEqual('warmup.activeBackend', body.activeBackend, 'postgresql');
+  assertMaxLatency('/api/warmup', ms, maxWarmupMs);
+  evidence.push(`/api/warmup ${status} in ${ms}ms under ${maxWarmupMs}ms budget`);
+}
+
 async function checkApiVersion() {
   const { status, ms, body } = await fetchJson(`${apiUrl}/api/version`, 'api version', 20_000);
   if (status !== 200) {
@@ -180,6 +230,51 @@ async function checkLoginCorsPreflight() {
     evidence.push(`login CORS preflight ${response.status} in ${ms}ms for ${origin}`);
   } catch (error) {
     failures.push(`login CORS preflight failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function checkLoginlessEntryLatency() {
+  if (loginNeeded) {
+    evidence.push('loginless entry latency skipped because GESTISAC_LOGIN_NEEDED=true');
+    return;
+  }
+
+  for (const appContext of ['hq', 'worker', 'client']) {
+    const started = Date.now();
+    let token = '';
+    try {
+      const response = await fetch(
+        `${apiUrl}/api/auth/browser-session?appContext=${encodeURIComponent(appContext)}&mode=json&readiness=${Date.now()}`,
+        {
+          headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
+          signal: AbortSignal.timeout(20_000)
+        }
+      );
+      const ms = Date.now() - started;
+      if (response.status !== 200) {
+        failures.push(`${appContext} loginless browser-session returned HTTP ${response.status}.`);
+        continue;
+      }
+
+      const body = await response.json();
+      token = body.token || '';
+      if (!token || !body.refreshToken || body.appContext !== appContext) {
+        failures.push(`${appContext} loginless browser-session returned an incomplete auth response.`);
+      }
+
+      assertMaxLatency(`${appContext} loginless browser-session`, ms, maxLoginlessMs);
+      evidence.push(`${appContext} loginless browser-session ${response.status} in ${ms}ms under ${maxLoginlessMs}ms budget`);
+    } catch (error) {
+      failures.push(`${appContext} loginless browser-session failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      if (token) {
+        await fetch(`${apiUrl}/api/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(10_000)
+        }).catch(() => undefined);
+      }
+    }
   }
 }
 
@@ -343,6 +438,16 @@ function headerListIncludes(rawValue, expected) {
 function expectEqual(label, actual, expected) {
   if (actual !== expected) {
     failures.push(`${label} expected ${String(expected)} but got ${String(actual)}.`);
+  }
+}
+
+function assertMaxLatency(label, actualMs, budgetMs) {
+  if (!Number.isFinite(budgetMs) || budgetMs <= 0) {
+    warnings.push(`${label} latency budget is invalid; got ${String(budgetMs)}.`);
+    return;
+  }
+  if (actualMs > budgetMs) {
+    failures.push(`${label} took ${actualMs}ms, above ${budgetMs}ms production budget.`);
   }
 }
 

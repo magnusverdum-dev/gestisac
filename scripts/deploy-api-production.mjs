@@ -20,8 +20,7 @@ const preflightSteps = [
     'node',
     ['scripts/run-cargo.mjs', 'clippy', '--manifest-path', 'apps/api/Cargo.toml', '--', '-D', 'warnings']
   ],
-  ['Rust API tests', 'node', ['scripts/run-cargo.mjs', 'test', '--manifest-path', 'apps/api/Cargo.toml']],
-  ['Production readiness', 'node', ['scripts/check-production-readiness.mjs']]
+  ['Rust API tests', 'node', ['scripts/run-cargo.mjs', 'test', '--manifest-path', 'apps/api/Cargo.toml']]
 ];
 
 for (const [label, command, args] of preflightSteps) {
@@ -50,7 +49,13 @@ const result = run('npx', ['vercel', 'deploy', '--prod', '--yes'], {
   }
 });
 
-process.exit(result.status ?? 1);
+if (result.status !== 0 || result.error) {
+  process.exit(result.status ?? 1);
+}
+
+console.log('\n[deploy-api-production] Production readiness after deploy');
+const readiness = run('node', ['scripts/check-production-readiness.mjs']);
+process.exit(readiness.status ?? 1);
 
 function run(command, args, options = {}) {
   return spawnSync(command, args, {
