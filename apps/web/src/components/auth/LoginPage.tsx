@@ -48,7 +48,7 @@ export const LoginPage = component$((props: LoginPageProps) => {
           <h1>Entrar</h1>
           <p>
             {props.hideCredentialEntry
-              ? 'Sessao de desenvolvimento a abrir automaticamente, sem credenciais manuais.'
+              ? 'Sessao automatica a abrir, sem credenciais manuais.'
               : 'Acede com a conta fornecida pela administracao.'}
           </p>
         </div>

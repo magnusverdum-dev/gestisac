@@ -13,13 +13,18 @@ const checks = [
   },
   {
     file: 'apps/web/src/app.tsx',
-    pattern: /hideCredentialEntry=\{hideDevelopmentLogin \|\| autoBrowserSessionPending\.value\}/,
-    message: 'apps/web/src/app.tsx must hide manual credential entry while dev auto-login is opening.'
+    pattern: /VITE_GESTISAC_LOGIN_NEEDED \?\? 'false'/,
+    message: 'apps/web/src/app.tsx must default published loginless mode to browser-session unless explicitly disabled.'
   },
   {
     file: 'apps/web/src/app.tsx',
-    pattern: /const hideDevelopmentLogin =\s*devAutoLoginEnabled/s,
-    message: 'apps/web/src/app.tsx must hide manual credential entry immediately on development login routes.'
+    pattern: /hideCredentialEntry=\{hideLoginlessCredentialEntry \|\| autoBrowserSessionPending\.value\}/,
+    message: 'apps/web/src/app.tsx must hide manual credential entry while loginless browser-session is opening.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /const hideLoginlessCredentialEntry =\s*browserSessionLoginlessEnabled/s,
+    message: 'apps/web/src/app.tsx must hide manual credential entry immediately on loginless login routes.'
   },
   {
     file: 'apps/web/src/app.tsx',

@@ -156,6 +156,9 @@ const isLocalDevelopmentMode = import.meta.env.MODE === 'development';
 const devAutoLoginEnabled =
   isLocalDevelopmentMode &&
   String(import.meta.env.VITE_GESTISAC_DEV_AUTO_LOGIN ?? 'true').trim().toLowerCase() !== 'false';
+const browserSessionLoginlessEnabled =
+  devAutoLoginEnabled ||
+  String(import.meta.env.VITE_GESTISAC_LOGIN_NEEDED ?? 'false').trim().toLowerCase() === 'false';
 const devLoginEmail = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_EMAIL ?? '') : '';
 const devLoginPassword = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_PASSWORD ?? '') : '';
 const DEV_AUTO_LOGIN_SUPPRESS_KEY = 'gestisac:dev-auto-login-suppress';
@@ -854,7 +857,7 @@ export const App = component$(() => {
 
     const route = parseRouteContext(rawPath);
     const shouldStartLoginlessSession =
-      devAutoLoginEnabled &&
+      browserSessionLoginlessEnabled &&
       route.path === '/login' &&
       readSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY) !== '1';
     let storedToken = readStoredValue(SESSION_TOKEN_KEY);
@@ -990,8 +993,8 @@ export const App = component$(() => {
     );
   }
 
-  const hideDevelopmentLogin =
-    devAutoLoginEnabled &&
+  const hideLoginlessCredentialEntry =
+    browserSessionLoginlessEnabled &&
     currentPath.value === '/login' &&
     readSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY) !== '1';
 
@@ -1003,7 +1006,7 @@ export const App = component$(() => {
         isLoading={isLoading.value || !session.ready}
         loadingProgress={browserSessionProgress.value}
         appContext={appContext.value}
-        hideCredentialEntry={hideDevelopmentLogin || autoBrowserSessionPending.value}
+        hideCredentialEntry={hideLoginlessCredentialEntry || autoBrowserSessionPending.value}
         defaultEmail={devLoginEmail}
         defaultPassword={devLoginPassword}
         onLogin$={login$}
