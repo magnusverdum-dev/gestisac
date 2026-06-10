@@ -45,6 +45,7 @@ import {
   startBrowserSession,
   uploadDocument,
   updateResource,
+  warmupApi,
   type ApiStatus,
   type AppContext,
   type CreateResource,
@@ -456,7 +457,19 @@ export const App = component$(() => {
     isLoading.value = true;
     browserSessionProgress.value = Math.max(browserSessionProgress.value, 18);
     removeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY);
+    const progressTimer =
+      typeof window === 'undefined'
+        ? undefined
+        : window.setInterval(() => {
+            browserSessionProgress.value = Math.min(
+              90,
+              browserSessionProgress.value + (browserSessionProgress.value < 55 ? 4 : 2)
+            );
+          }, 900);
     try {
+      browserSessionProgress.value = Math.max(browserSessionProgress.value, 24);
+      await warmupApi().catch(() => undefined);
+      browserSessionProgress.value = Math.max(browserSessionProgress.value, 48);
       const auth = await startBrowserSession(appContext.value);
       browserSessionProgress.value = 92;
       session.token = auth.token;
@@ -482,6 +495,9 @@ export const App = component$(() => {
       session.user = null;
       session.ready = true;
     } finally {
+      if (progressTimer) {
+        window.clearInterval(progressTimer);
+      }
       isLoading.value = false;
     }
   });

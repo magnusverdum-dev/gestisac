@@ -101,7 +101,8 @@ export {
   me,
   refreshSession,
   startBrowserSession,
-  updateActiveCondominium
+  updateActiveCondominium,
+  warmupApi
 } from './api/auth';
 
 export { getAccounting } from './api/accounting';

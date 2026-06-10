@@ -7,9 +7,20 @@ export const SESSION_EXPIRES_KEY = 'gestisac.expiresAt';
 export const SESSION_APP_CONTEXT_KEY = 'gestisac.appContext';
 
 const AUTH_STARTUP_TIMEOUT_MS = 40_000;
+const WARMUP_TIMEOUT_MS = 60_000;
 
 export async function getApiHealth(): Promise<{ service: string; status: 'online' }> {
   return apiRequest('/api/health');
+}
+
+export async function warmupApi(): Promise<{
+  service: string;
+  status: 'warm';
+  checkedAt: string;
+}> {
+  return apiRequest('/api/warmup', {
+    timeoutMs: WARMUP_TIMEOUT_MS
+  });
 }
 
 export async function login(email: string, password: string, appContext: AppContext): Promise<LoginResponse> {
