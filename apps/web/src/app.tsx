@@ -483,15 +483,6 @@ export const App = component$(() => {
     isLoading.value = true;
     browserSessionProgress.value = Math.max(browserSessionProgress.value, 18);
     removeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY);
-    const progressTimer =
-      typeof window === 'undefined'
-        ? undefined
-        : window.setInterval(() => {
-            browserSessionProgress.value = Math.min(
-              90,
-              browserSessionProgress.value + (browserSessionProgress.value < 55 ? 4 : 2)
-            );
-          }, 900);
     try {
       let auth: Awaited<ReturnType<typeof startBrowserSession>> | null = null;
       let lastError: unknown = null;
@@ -500,13 +491,14 @@ export const App = component$(() => {
         try {
           browserSessionProgress.value = Math.max(
             browserSessionProgress.value,
-            Math.min(82, 18 + attempt * 12)
+            Math.min(32, 18 + attempt * 4)
           );
           await warmupApi();
           browserSessionProgress.value = Math.max(
             browserSessionProgress.value,
-            Math.min(88, 30 + attempt * 12)
+            Math.min(54, 34 + attempt * 4)
           );
+          browserSessionProgress.value = Math.max(browserSessionProgress.value, 58);
           auth = await startBrowserSession(appContext.value);
           break;
         } catch (err) {
@@ -522,7 +514,7 @@ export const App = component$(() => {
         throw lastError instanceof Error ? lastError : new Error('Sessao automatica indisponivel');
       }
 
-      browserSessionProgress.value = 92;
+      browserSessionProgress.value = Math.max(browserSessionProgress.value, 76);
       session.token = auth.token;
       session.user = auth.user;
       session.appContext = auth.appContext || appContext.value;
@@ -531,6 +523,7 @@ export const App = component$(() => {
       writeStoredValue(SESSION_REFRESH_KEY, auth.refreshToken);
       writeStoredValue(SESSION_EXPIRES_KEY, auth.expiresAt);
       writeStoredValue(SESSION_APP_CONTEXT_KEY, auth.appContext || appContext.value);
+      browserSessionProgress.value = Math.max(browserSessionProgress.value, 88);
       await loadWorkspace$(auth.token);
       browserSessionProgress.value = 100;
       showEntry.value = false;
@@ -547,9 +540,6 @@ export const App = component$(() => {
       session.ready = true;
       autoBrowserSessionPending.value = browserSessionLoginlessEnabled;
     } finally {
-      if (progressTimer) {
-        window.clearInterval(progressTimer);
-      }
       isLoading.value = false;
     }
   });
@@ -876,22 +866,6 @@ export const App = component$(() => {
     syncPath();
     window.addEventListener('popstate', syncPath);
     cleanup(() => window.removeEventListener('popstate', syncPath));
-  });
-
-  useVisibleTask$(({ cleanup }) => {
-    const intervalId = window.setInterval(() => {
-      if (!autoBrowserSessionPending.value && !isLoading.value) {
-        browserSessionProgress.value = 8;
-        return;
-      }
-
-      browserSessionProgress.value = Math.min(
-        96,
-        browserSessionProgress.value + (browserSessionProgress.value < 55 ? 7 : 3)
-      );
-    }, 650);
-
-    cleanup(() => window.clearInterval(intervalId));
   });
 
   useVisibleTask$(({ cleanup }) => {
