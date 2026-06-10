@@ -72,3 +72,11 @@ Core rule:
 - Smoke and readiness scripts must default to `GESTISAC_LOGIN_NEEDED=false`.
 - Any change that reintroduces manual credential entry in development must fail the repo guard `pnpm run guard:loginless-dev`.
 - Git hooks must block commit/push when that contract is broken.
+
+Critical entry contract:
+
+- Treat login, `browser-session`, API warmup, session storage, app switching and API base URL as infrastructure-critical code.
+- Do not change those paths as part of visual, menu, page, dashboard or business-feature work unless the user explicitly asks for login/session changes.
+- The automatic entry flow must keep retrying recoverable API startup failures and must never leave the user on a dead login screen.
+- The visible test for any change touching those paths is: enter HQ, navigate the main windows, switch app context, then close and repeat; no manual credentials may be typed.
+- The production API must remain validated before the browser user-flow test: `/api/health`, `/api/warmup` and `browser-session` for `hq`, `worker` and `client`.

@@ -37,6 +37,36 @@ const checks = [
     message: 'apps/web/src/app.tsx must use browser-session API for loginless development instead of manual credential entry.'
   },
   {
+    file: 'apps/web/src/app.tsx',
+    pattern: /const BROWSER_SESSION_MAX_ATTEMPTS = 4;/,
+    message: 'apps/web/src/app.tsx must keep multiple automatic browser-session attempts before showing a recoverable error.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /for \(let attempt = 1; attempt <= BROWSER_SESSION_MAX_ATTEMPTS; attempt \+= 1\)/,
+    message: 'apps/web/src/app.tsx must retry the API warmup/browser-session flow automatically.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /await warmupApi\(\);\s*browserSessionProgress\.value[\s\S]*auth = await startBrowserSession\(appContext\.value\);/,
+    message: 'apps/web/src/app.tsx must warm the published API immediately before creating a browser session.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /autoBrowserSessionPending\.value = browserSessionLoginlessEnabled;/,
+    message: 'apps/web/src/app.tsx must keep the loginless retry UI active after a recoverable browser-session failure.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /if \(browserSessionLoginlessEnabled\) \{\s*autoBrowserSessionPending\.value = true;\s*browserSessionProgress\.value = 12;\s*await openBrowserSession\$\(\);\s*\}/s,
+    message: 'apps/web/src/app.tsx must start browser-session automatically when choosing an app without an active token.'
+  },
+  {
+    file: '.github/workflows/keep-api-warm.yml',
+    pattern: /--retry 5[\s\S]*--retry-all-errors[\s\S]*request "\/api\/warmup"[\s\S]*request "\/api\/health"/,
+    message: 'Keep API warm workflow must retry transient failures and ping warmup plus health.'
+  },
+  {
     file: 'apps/web/src/components/auth/LoginPage.tsx',
     pattern: /hideCredentialEntry\?: boolean;/,
     message: 'LoginPage must support hiding manual credential entry.'

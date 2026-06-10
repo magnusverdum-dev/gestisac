@@ -163,6 +163,8 @@ const browserSessionLoginlessEnabled =
 const devLoginEmail = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_EMAIL ?? '') : '';
 const devLoginPassword = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_PASSWORD ?? '') : '';
 const DEV_AUTO_LOGIN_SUPPRESS_KEY = 'gestisac:dev-auto-login-suppress';
+const BROWSER_SESSION_MAX_ATTEMPTS = 4;
+const BROWSER_SESSION_RETRY_DELAY_MS = 1_500;
 
 const readSessionValue = (key: string) => {
   try {
@@ -191,6 +193,8 @@ const removeSessionValue = (key: string) => {
     // Session storage cleanup is best-effort in embedded browsers.
   }
 };
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const readCondominiumShortcutArea = (path: string): CondoAreaId | '' => {
   const queryStart = path.indexOf('?');
@@ -407,10 +411,15 @@ export const App = component$(() => {
       window.history.pushState({}, '', buildAppPath(context, '/login'));
       showEntry.value = false;
       currentPath.value = '/login';
+      if (browserSessionLoginlessEnabled) {
+        autoBrowserSessionPending.value = true;
+        browserSessionProgress.value = 12;
+        await openBrowserSession$();
+      }
       return;
     }
 
-      isLoading.value = true;
+    isLoading.value = true;
     try {
       const storedRefreshToken = readStoredValue(SESSION_REFRESH_KEY);
       if (storedRefreshToken) {
@@ -467,10 +476,35 @@ export const App = component$(() => {
             );
           }, 900);
     try {
-      browserSessionProgress.value = Math.max(browserSessionProgress.value, 24);
-      await warmupApi().catch(() => undefined);
-      browserSessionProgress.value = Math.max(browserSessionProgress.value, 48);
-      const auth = await startBrowserSession(appContext.value);
+      let auth: Awaited<ReturnType<typeof startBrowserSession>> | null = null;
+      let lastError: unknown = null;
+
+      for (let attempt = 1; attempt <= BROWSER_SESSION_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          browserSessionProgress.value = Math.max(
+            browserSessionProgress.value,
+            Math.min(82, 18 + attempt * 12)
+          );
+          await warmupApi();
+          browserSessionProgress.value = Math.max(
+            browserSessionProgress.value,
+            Math.min(88, 30 + attempt * 12)
+          );
+          auth = await startBrowserSession(appContext.value);
+          break;
+        } catch (err) {
+          lastError = err;
+          if (attempt < BROWSER_SESSION_MAX_ATTEMPTS) {
+            error.value = `A API ainda esta a acordar. Nova tentativa automatica ${attempt + 1}/${BROWSER_SESSION_MAX_ATTEMPTS}...`;
+            await delay(BROWSER_SESSION_RETRY_DELAY_MS * attempt);
+          }
+        }
+      }
+
+      if (!auth) {
+        throw lastError instanceof Error ? lastError : new Error('Sessao automatica indisponivel');
+      }
+
       browserSessionProgress.value = 92;
       session.token = auth.token;
       session.user = auth.user;
@@ -494,6 +528,7 @@ export const App = component$(() => {
       session.token = '';
       session.user = null;
       session.ready = true;
+      autoBrowserSessionPending.value = browserSessionLoginlessEnabled;
     } finally {
       if (progressTimer) {
         window.clearInterval(progressTimer);
