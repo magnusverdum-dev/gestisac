@@ -67,6 +67,11 @@ const checks = [
     message: 'apps/web/src/app.tsx must start browser-session automatically when choosing an app without an active token.'
   },
   {
+    file: 'apps/web/src/app.tsx',
+    pattern: /if \(browserSessionLoginlessEnabled\) \{\s*session\.ready = false;\s*session\.token = '';\s*session\.user = null;[\s\S]*writeStoredValue\(SESSION_APP_CONTEXT_KEY, context\);[\s\S]*await openBrowserSession\$\(\);\s*return;\s*\}/s,
+    message: 'apps/web/src/app.tsx must switch apps through a clean context-specific browser-session, not a reused token.'
+  },
+  {
     file: '.github/workflows/keep-api-warm.yml',
     pattern: /--retry 5[\s\S]*--retry-all-errors[\s\S]*request "\/api\/warmup"[\s\S]*request "\/api\/health"/,
     message: 'Keep API warm workflow must retry transient failures and ping warmup plus health.'

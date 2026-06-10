@@ -407,6 +407,23 @@ export const App = component$(() => {
       removeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY);
     }
 
+    if (browserSessionLoginlessEnabled) {
+      session.ready = false;
+      session.token = '';
+      session.user = null;
+      removeStoredValue(SESSION_TOKEN_KEY);
+      removeStoredValue(SESSION_REFRESH_KEY);
+      removeStoredValue(SESSION_EXPIRES_KEY);
+      writeStoredValue(SESSION_APP_CONTEXT_KEY, context);
+      window.history.pushState({}, '', buildAppPath(context, '/login'));
+      showEntry.value = false;
+      currentPath.value = '/login';
+      autoBrowserSessionPending.value = true;
+      browserSessionProgress.value = 12;
+      await openBrowserSession$();
+      return;
+    }
+
     if (!session.token) {
       window.history.pushState({}, '', buildAppPath(context, '/login'));
       showEntry.value = false;
