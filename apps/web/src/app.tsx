@@ -984,7 +984,7 @@ export const App = component$(() => {
 
     if (shouldStartLoginlessSession) {
       autoBrowserSessionPending.value = true;
-      openBrowserSession$();
+      await openBrowserSession$();
       return;
     }
 

@@ -33,6 +33,11 @@ const checks = [
   },
   {
     file: 'apps/web/src/app.tsx',
+    pattern: /if \(shouldStartLoginlessSession\) \{\s*autoBrowserSessionPending\.value = true;\s*await openBrowserSession\$\(\);\s*return;\s*}/s,
+    message: 'apps/web/src/app.tsx must await browser-session when reopening a login route with an existing token.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
     pattern: /startBrowserSession\(appContext\.value\)/,
     message: 'apps/web/src/app.tsx must use browser-session API for loginless development instead of manual credential entry.'
   },
