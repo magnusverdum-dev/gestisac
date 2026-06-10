@@ -45,6 +45,7 @@ export async function apiRequest<T>(
       method: options.method ?? 'GET',
       headers,
       body: options.body,
+      cache: 'no-store',
       signal: controller.signal
     });
   } catch (error) {

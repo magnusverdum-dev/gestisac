@@ -35,6 +35,7 @@ async function main() {
   await checkApiWarmup();
   await checkApiVersion();
   await checkLoginCorsPreflight();
+  await checkLoginlessBrowserCors();
   await checkLoginlessEntryLatency();
   await checkPublishedWeb();
   await checkOldDemoCredentialRejected();
@@ -56,6 +57,44 @@ async function main() {
   }
 
   console.log('Production readiness check passed.');
+}
+
+async function checkLoginlessBrowserCors() {
+  const origin = new URL(webUrl).origin;
+  const targets = [
+    ['/api/warmup', 'warmup'],
+    ['/api/auth/browser-session?appContext=hq&mode=json', 'hq browser-session'],
+    ['/api/auth/browser-session?appContext=worker&mode=json', 'worker browser-session'],
+    ['/api/auth/browser-session?appContext=client&mode=json', 'client browser-session']
+  ];
+
+  for (const [path, label] of targets) {
+    const started = Date.now();
+    try {
+      const response = await fetch(`${apiUrl}${path}`, {
+        headers: {
+          Accept: 'application/json',
+          Origin: origin,
+          'Cache-Control': 'no-store'
+        },
+        signal: AbortSignal.timeout(20_000)
+      });
+      const ms = Date.now() - started;
+      if (response.status !== 200) {
+        failures.push(`${label} browser CORS check returned HTTP ${response.status}.`);
+        continue;
+      }
+
+      const allowOrigin = response.headers.get('access-control-allow-origin') || '';
+      if (allowOrigin !== origin && allowOrigin !== '*') {
+        failures.push(`${label} browser CORS check does not allow web origin ${origin}.`);
+      }
+
+      evidence.push(`${label} browser CORS ${response.status} in ${ms}ms for ${origin}`);
+    } catch (error) {
+      failures.push(`${label} browser CORS check failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 }
 
 function checkApiVercelCompute() {

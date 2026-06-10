@@ -163,7 +163,7 @@ const browserSessionLoginlessEnabled =
 const devLoginEmail = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_EMAIL ?? '') : '';
 const devLoginPassword = isLocalDevelopmentMode ? String(import.meta.env.VITE_GESTISAC_DEV_LOGIN_PASSWORD ?? '') : '';
 const DEV_AUTO_LOGIN_SUPPRESS_KEY = 'gestisac:dev-auto-login-suppress';
-const BROWSER_SESSION_MAX_ATTEMPTS = 4;
+const BROWSER_SESSION_MAX_ATTEMPTS = 6;
 const BROWSER_SESSION_RETRY_DELAY_MS = 1_500;
 
 const readSessionValue = (key: string) => {
@@ -892,6 +892,22 @@ export const App = component$(() => {
     }, 650);
 
     cleanup(() => window.clearInterval(intervalId));
+  });
+
+  useVisibleTask$(({ cleanup }) => {
+    const retryId = window.setInterval(() => {
+      if (
+        browserSessionLoginlessEnabled &&
+        autoBrowserSessionPending.value &&
+        !isLoading.value &&
+        currentPath.value === '/login' &&
+        readSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY) !== '1'
+      ) {
+        void openBrowserSession$();
+      }
+    }, 4_000);
+
+    cleanup(() => window.clearInterval(retryId));
   });
 
   useVisibleTask$(async () => {

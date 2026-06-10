@@ -43,7 +43,7 @@ const checks = [
   },
   {
     file: 'apps/web/src/app.tsx',
-    pattern: /const BROWSER_SESSION_MAX_ATTEMPTS = 4;/,
+    pattern: /const BROWSER_SESSION_MAX_ATTEMPTS = 6;/,
     message: 'apps/web/src/app.tsx must keep multiple automatic browser-session attempts before showing a recoverable error.'
   },
   {
@@ -60,6 +60,16 @@ const checks = [
     file: 'apps/web/src/app.tsx',
     pattern: /autoBrowserSessionPending\.value = browserSessionLoginlessEnabled;/,
     message: 'apps/web/src/app.tsx must keep the loginless retry UI active after a recoverable browser-session failure.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /autoBrowserSessionPending\.value &&\s*!isLoading\.value &&\s*currentPath\.value === '\/login'[\s\S]*void openBrowserSession\$\(\);/s,
+    message: 'apps/web/src/app.tsx must automatically retry loginless entry while the login route is waiting.'
+  },
+  {
+    file: 'apps/web/src/lib/api/http.ts',
+    pattern: /cache: 'no-store'/,
+    message: 'API requests from the web app must bypass stale browser caches during loginless startup.'
   },
   {
     file: 'apps/web/src/app.tsx',
