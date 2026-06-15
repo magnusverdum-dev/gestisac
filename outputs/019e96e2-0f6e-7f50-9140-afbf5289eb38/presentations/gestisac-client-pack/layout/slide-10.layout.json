@@ -1,0 +1,955 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/9livtk",
+    "id": "9livtk",
+    "slide": 10,
+    "layoutId": "2d2732d7-6473-4d8b-ae93-e98858749a07",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "7a0fb364-ddf6-4ee8-8c18-42c1e0f0f663",
+    "masterLayoutName": "Master",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Aptos",
+      "Aptos Display"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "2d2732d7-6473-4d8b-ae93-e98858749a07",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "7a0fb364-ddf6-4ee8-8c18-42c1e0f0f663",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "7a0fb364-ddf6-4ee8-8c18-42c1e0f0f663",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/nyd0z610",
+      "id": "1",
+      "bbox": [
+        0,
+        0,
+        1280,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#FFFFFF",
+      "lineColor": "#FFFFFF",
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/cj6tovah",
+      "id": "2",
+      "bbox": [
+        72,
+        42,
+        720,
+        28
+      ],
+      "geometry": "rect",
+      "text": "ESTADO ATUAL",
+      "textPreview": "ESTADO ATUAL",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 16,
+        "typeface": "Aptos",
+        "color": "#D7A84F",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ESTADO ATUAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ESTADO ATUAL",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "Aptos",
+            "color": "#D7A84F",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "ESTADO ATUAL",
+              "fontSize": 16,
+              "typeface": "Aptos",
+              "color": "#D7A84F",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/54zidony",
+      "id": "3",
+      "bbox": [
+        72,
+        78,
+        760,
+        92
+      ],
+      "geometry": "rect",
+      "text": "Separar feito, parcial e planeado evita promessas vagas",
+      "textPreview": "Separar feito, parcial e planeado evita promessas vagas",
+      "resolvedFontSize": 38,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 38,
+        "typeface": "Aptos Display",
+        "color": "#0B2545",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Separar feito, parcial e planeado evita"
+          },
+          {
+            "index": 2,
+            "text": "promessas vagas"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Separar feito, parcial e planeado evita promessas vagas",
+          "resolvedTextStyle": {
+            "fontSize": 38,
+            "typeface": "Aptos Display",
+            "color": "#0B2545",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Separar feito, parcial e planeado evita promessas vagas",
+              "fontSize": 38,
+              "typeface": "Aptos Display",
+              "color": "#0B2545",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/upwb2hwf",
+      "id": "4",
+      "bbox": [
+        74,
+        168,
+        830,
+        54
+      ],
+      "geometry": "rect",
+      "text": "Isto aumenta confianca: a cliente percebe exatamente onde esta o produto.",
+      "textPreview": "Isto aumenta confianca: a cliente percebe exatamente onde esta o produto.",
+      "resolvedFontSize": 20,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 20,
+        "typeface": "Aptos",
+        "color": "#667085",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Isto aumenta confianca: a cliente percebe exatamente onde esta o produto."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Isto aumenta confianca: a cliente percebe exatamente onde esta o produto.",
+          "resolvedTextStyle": {
+            "fontSize": 20,
+            "typeface": "Aptos",
+            "color": "#667085",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Isto aumenta confianca: a cliente percebe exatamente onde esta o produto.",
+              "fontSize": 20,
+              "typeface": "Aptos",
+              "color": "#667085"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/nap4r65w",
+      "id": "5",
+      "bbox": [
+        94,
+        262,
+        340,
+        300
+      ],
+      "geometry": "rect",
+      "fillColor": "#F8FAFC",
+      "lineColor": "#CBD5E1",
+      "lineWidth": 1.2
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/cvixczed",
+      "id": "6",
+      "bbox": [
+        94,
+        262,
+        340,
+        9
+      ],
+      "geometry": "rect",
+      "fillColor": "#2E7D32",
+      "lineColor": "#2E7D32",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5gbq1ory",
+      "id": "7",
+      "bbox": [
+        114,
+        288,
+        300,
+        30
+      ],
+      "geometry": "rect",
+      "text": "Feito / demonstravel",
+      "textPreview": "Feito / demonstravel",
+      "resolvedFontSize": 19,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 19,
+        "typeface": "Aptos",
+        "color": "#0B2545",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Feito / demonstravel"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Feito / demonstravel",
+          "resolvedTextStyle": {
+            "fontSize": 19,
+            "typeface": "Aptos",
+            "color": "#0B2545",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Feito / demonstravel",
+              "fontSize": 19,
+              "typeface": "Aptos",
+              "color": "#0B2545",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/u18jqh0f",
+      "id": "8",
+      "bbox": [
+        116,
+        342,
+        286,
+        168
+      ],
+      "geometry": "rect",
+      "text": "loginless demo; HQ / Worker / Client; menu limpo; Hoje, Equipa, Tarefas, Pedidos e Agenda; API publicada e checks",
+      "textPreview": "loginless demo; HQ / Worker / Client; menu limpo; Hoje, Equipa, Tarefas, Pedidos e Agenda; API publicada e checks",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "Aptos",
+        "color": "#667085",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "loginless demo; HQ / Worker / Client; menu"
+          },
+          {
+            "index": 2,
+            "text": "limpo; Hoje, Equipa, Tarefas, Pedidos e"
+          },
+          {
+            "index": 3,
+            "text": "Agenda; API publicada e checks"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "loginless demo; HQ / Worker / Client; menu limpo; Hoje, Equipa, Tarefas, Pedidos e Agenda; API publicada e checks",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "Aptos",
+            "color": "#667085",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "loginless demo; HQ / Worker / Client; menu limpo; Hoje, Equipa, Tarefas, Pedidos e Agenda; API publicada e checks",
+              "fontSize": 15,
+              "typeface": "Aptos",
+              "color": "#667085"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/jm1cfa9w",
+      "id": "9",
+      "bbox": [
+        484,
+        262,
+        340,
+        300
+      ],
+      "geometry": "rect",
+      "fillColor": "#F8FAFC",
+      "lineColor": "#CBD5E1",
+      "lineWidth": 1.2
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/b6xkf6dc",
+      "id": "10",
+      "bbox": [
+        484,
+        262,
+        340,
+        9
+      ],
+      "geometry": "rect",
+      "fillColor": "#B36B00",
+      "lineColor": "#B36B00",
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/il0rqd4v",
+      "id": "11",
+      "bbox": [
+        504,
+        288,
+        300,
+        30
+      ],
+      "geometry": "rect",
+      "text": "Parcial / validar",
+      "textPreview": "Parcial / validar",
+      "resolvedFontSize": 19,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 19,
+        "typeface": "Aptos",
+        "color": "#0B2545",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Parcial / validar"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Parcial / validar",
+          "resolvedTextStyle": {
+            "fontSize": 19,
+            "typeface": "Aptos",
+            "color": "#0B2545",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Parcial / validar",
+              "fontSize": 19,
+              "typeface": "Aptos",
+              "color": "#0B2545",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tcj6tova",
+      "id": "12",
+      "bbox": [
+        506,
+        342,
+        286,
+        168
+      ],
+      "geometry": "rect",
+      "text": "ficha profunda de condominios; documentos; estados finais; auditoria detalhada; permissoes finas",
+      "textPreview": "ficha profunda de condominios; documentos; estados finais; auditoria detalhada; permissoes finas",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "Aptos",
+        "color": "#667085",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ficha profunda de condominios; documentos;"
+          },
+          {
+            "index": 2,
+            "text": "estados finais; auditoria detalhada; permissoes"
+          },
+          {
+            "index": 3,
+            "text": "finas"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ficha profunda de condominios; documentos; estados finais; auditoria detalhada; permissoes finas",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "Aptos",
+            "color": "#667085",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "ficha profunda de condominios; documentos; estados finais; auditoria detalhada; permissoes finas",
+              "fontSize": 15,
+              "typeface": "Aptos",
+              "color": "#667085"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0rqd4vmt",
+      "id": "13",
+      "bbox": [
+        874,
+        262,
+        340,
+        300
+      ],
+      "geometry": "rect",
+      "fillColor": "#F8FAFC",
+      "lineColor": "#CBD5E1",
+      "lineWidth": 1.2
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/byhgn29g",
+      "id": "14",
+      "bbox": [
+        874,
+        262,
+        340,
+        9
+      ],
+      "geometry": "rect",
+      "fillColor": "#2E74B5",
+      "lineColor": "#2E74B5",
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/idonyd0z",
+      "id": "15",
+      "bbox": [
+        894,
+        288,
+        300,
+        30
+      ],
+      "geometry": "rect",
+      "text": "Planeado",
+      "textPreview": "Planeado",
+      "resolvedFontSize": 19,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 19,
+        "typeface": "Aptos",
+        "color": "#0B2545",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Planeado"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Planeado",
+          "resolvedTextStyle": {
+            "fontSize": 19,
+            "typeface": "Aptos",
+            "color": "#0B2545",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Planeado",
+              "fontSize": 19,
+              "typeface": "Aptos",
+              "color": "#0B2545",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/t47y1kre",
+      "id": "16",
+      "bbox": [
+        896,
+        342,
+        286,
+        168
+      ],
+      "geometry": "rect",
+      "text": "contabilidade completa; relatorios executivos; notificacoes; integracoes; importacao historica",
+      "textPreview": "contabilidade completa; relatorios executivos; notificacoes; integracoes; importacao historica",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "Aptos",
+        "color": "#667085",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "contabilidade completa; relatorios executivos;"
+          },
+          {
+            "index": 2,
+            "text": "notificacoes; integracoes; importacao historica"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "contabilidade completa; relatorios executivos; notificacoes; integracoes; importacao historica",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "Aptos",
+            "color": "#667085",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "contabilidade completa; relatorios executivos; notificacoes; integracoes; importacao historica",
+              "fontSize": 15,
+              "typeface": "Aptos",
+              "color": "#667085"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0je9cvix",
+      "id": "17",
+      "bbox": [
+        72,
+        670,
+        1136,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#CBD5E1",
+      "lineColor": "#CBD5E1",
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/bulwval8",
+      "id": "18",
+      "bbox": [
+        72,
+        682,
+        520,
+        20
+      ],
+      "geometry": "rect",
+      "text": "GESTISAC | pacote executivo-tecnico",
+      "textPreview": "GESTISAC | pacote executivo-tecnico",
+      "resolvedFontSize": 12,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 12,
+        "typeface": "Aptos",
+        "color": "#667085",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "GESTISAC | pacote executivo-tecnico"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "GESTISAC | pacote executivo-tecnico",
+          "resolvedTextStyle": {
+            "fontSize": 12,
+            "typeface": "Aptos",
+            "color": "#667085",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "GESTISAC | pacote executivo-tecnico",
+              "fontSize": 12,
+              "typeface": "Aptos",
+              "color": "#667085"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/i9s36hcr",
+      "id": "19",
+      "bbox": [
+        1165,
+        682,
+        44,
+        20
+      ],
+      "geometry": "rect",
+      "text": "10",
+      "textPreview": "10",
+      "resolvedFontSize": 12,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 12,
+        "typeface": "Aptos",
+        "color": "#667085",
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "10"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "10",
+          "resolvedTextStyle": {
+            "fontSize": 12,
+            "typeface": "Aptos",
+            "color": "#667085",
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "10",
+              "fontSize": 12,
+              "typeface": "Aptos",
+              "color": "#667085"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

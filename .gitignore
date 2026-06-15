@@ -19,3 +19,5 @@ apps/api/data/
 **/.env.local
 **/.env.*.local
 **/.vercel/
+__pycache__/
+**/__pycache__/

@@ -4104,8 +4104,7 @@ kbd {
   border-color: rgba(255, 216, 107, 0.44);
 }
 
-.condo-map-panel iframe,
-.condo-three-canvas {
+.condo-map-panel iframe {
   width: 100%;
   min-height: 220px;
   border: 0;

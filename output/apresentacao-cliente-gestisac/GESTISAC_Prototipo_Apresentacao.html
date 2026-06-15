@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GESTISAC - Prototipo de apresentacao</title>
+  <style>
+    :root {
+      --ink: #0b2545;
+      --navy: #163b66;
+      --blue: #2e74b5;
+      --sky: #e8eef5;
+      --paper: #f8fafc;
+      --line: #cbd5e1;
+      --muted: #667085;
+      --gold: #d7a84f;
+      --green: #2e7d32;
+      --amber: #b36b00;
+      --red: #9b1c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      letter-spacing: 0;
+    }
+    a { color: inherit; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(248, 250, 252, 0.94);
+      backdrop-filter: blur(12px);
+    }
+    .brand { font-weight: 800; letter-spacing: .02em; }
+    .topbar nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .topbar a {
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 650;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      background: white;
+    }
+    .section {
+      min-height: calc(100vh - 58px);
+      padding: 58px clamp(28px, 6vw, 92px);
+      border-bottom: 1px solid var(--line);
+    }
+    .kicker {
+      color: var(--gold);
+      text-transform: uppercase;
+      font-weight: 800;
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
+    h1, h2 {
+      margin: 0;
+      color: var(--ink);
+      line-height: 1.04;
+      max-width: 960px;
+    }
+    h1 { font-size: clamp(44px, 7vw, 84px); }
+    h2 { font-size: clamp(34px, 5vw, 58px); }
+    .lead {
+      max-width: 880px;
+      color: var(--muted);
+      font-size: clamp(18px, 2.2vw, 24px);
+      line-height: 1.42;
+      margin: 18px 0 0;
+    }
+    .metric-row, .lane-grid, .profile-grid, .status-grid {
+      display: grid;
+      gap: 18px;
+      margin-top: 48px;
+    }
+    .metric-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .lane-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .profile-grid, .status-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .metric, .lane, .profile, .status-card, .module-card {
+      background: white;
+      border: 1px solid var(--line);
+      padding: 22px;
+      min-height: 150px;
+    }
+    .metric { border-left: 7px solid var(--blue); }
+    .metric:nth-child(2) { border-left-color: var(--gold); }
+    .metric:nth-child(3) { border-left-color: var(--green); }
+    .metric b {
+      display: block;
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+    .metric span, .lane p, .profile p, .status-card p, .module-card p, .module-card small {
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .lane { border-top: 7px solid var(--blue); }
+    .lane:nth-child(1) { border-top-color: var(--red); }
+    .lane:nth-child(2) { border-top-color: var(--amber); }
+    .lane:nth-child(4) { border-top-color: var(--green); }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+      margin-top: 52px;
+    }
+    .flow div {
+      background: white;
+      border: 1px solid var(--line);
+      min-height: 140px;
+      padding: 20px;
+      position: relative;
+    }
+    .flow b {
+      display: block;
+      color: var(--gold);
+      font-size: 28px;
+      margin-bottom: 18px;
+    }
+    .demo-table, .requirements {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 42px;
+      background: white;
+      font-size: 14px;
+    }
+    .demo-table th, .demo-table td, .requirements th, .requirements td {
+      border: 1px solid var(--line);
+      padding: 13px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .demo-table th, .requirements th {
+      background: var(--ink);
+      color: white;
+    }
+    .badge, .done, .partial, .planned, .validate {
+      display: inline-block;
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .done { color: var(--green); }
+    .partial { color: var(--amber); }
+    .planned { color: var(--blue); }
+    .validate { color: var(--red); }
+    .badge {
+      padding: 5px 8px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .diagram {
+      display: block;
+      width: min(1040px, 100%);
+      margin: 42px auto 0;
+      border: 1px solid var(--line);
+      background: white;
+    }
+    .modules {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 36px;
+    }
+    .module-card { min-height: 170px; }
+    .module-card header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+    .demo-script {
+      display: grid;
+      gap: 10px;
+      margin-top: 34px;
+      padding: 0;
+      list-style: none;
+    }
+    .demo-script li {
+      display: grid;
+      grid-template-columns: 230px 1fr 1.3fr;
+      gap: 18px;
+      padding: 15px 18px;
+      border: 1px solid var(--line);
+      background: white;
+    }
+    .demo-script span { color: var(--muted); }
+    .demo-script em { color: var(--navy); font-style: normal; }
+    .questions {
+      columns: 2;
+      column-gap: 48px;
+      margin-top: 34px;
+      font-size: 18px;
+      line-height: 1.5;
+    }
+    .questions li { margin-bottom: 12px; break-inside: avoid; }
+    .empty-cell { min-width: 170px; }
+    .note {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+    @media (max-width: 900px) {
+      .metric-row, .lane-grid, .profile-grid, .status-grid, .modules, .flow {
+        grid-template-columns: 1fr;
+      }
+      .demo-script li { grid-template-columns: 1fr; }
+      .questions { columns: 1; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .topbar nav { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">GESTISAC</div>
+    <nav>
+      <a href="#abertura">Abertura</a>
+      <a href="#operacao">Operacao</a>
+      <a href="#demo">Demo</a>
+      <a href="#arquitetura">Arquitetura</a>
+      <a href="#requisitos">Requisitos</a>
+      <a href="#roteiro">Roteiro</a>
+    </nav>
+  </header>
+
+  <section id="abertura" class="section">
+    <div class="kicker">Prototipo visual</div>
+    <h1>GESTISAC</h1>
+    <p class="lead">Operacao de condominios organizada, visivel e validavel. Esta pagina serve para rever a narrativa antes de decidir se a apresentacao final fica em HTML ou slides.</p>
+    <div class="metric-row">
+      <article class="metric"><b>6</b><span>Janelas principais: Hoje, Condominios, Equipa, Tarefas, Pedidos e Agenda.</span></article>
+      <article class="metric"><b>3</b><span>Perfis separados: HQ/Admin, Funcionario e Cliente.</span></article>
+      <article class="metric"><b>Qwik + Rust + PostgreSQL</b><span>PWA, API robusta e dados estruturados.</span></article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="kicker">Problema</div>
+    <h2>A operacao perde tempo quando a informacao vive fora do sistema</h2>
+    <p class="lead">A conversa com a cliente deve comecar pelo custo operacional: pedidos dispersos, falta de visibilidade, dados desligados e clientes a perguntar pelo estado.</p>
+    <div class="lane-grid">
+      <article class="lane"><h3>Pedidos dispersos</h3><p>Chamadas, emails e mensagens dificultam dono, prioridade e historico.</p></article>
+      <article class="lane"><h3>Equipa sem visibilidade</h3><p>A administracao nao ve facilmente carga, validacoes e atrasos.</p></article>
+      <article class="lane"><h3>Dados desconectados</h3><p>Condominio, agenda, documentos, tarefas e contabilidade ficam em silos.</p></article>
+      <article class="lane"><h3>Cliente sem estado</h3><p>Sem transparencia controlada, aumenta o trabalho manual de resposta.</p></article>
+    </div>
+  </section>
+
+  <section id="operacao" class="section">
+    <div class="kicker">Organizacao</div>
+    <h2>O produto organiza a empresa por trabalho real</h2>
+    <p class="lead">As seis janelas principais formam a camada diaria. Os modulos administrativos continuam ligados por contexto, sem dominar o menu.</p>
+    <div class="modules">
+        <article class="module-card">
+          <header><span>Hoje / Dashboard</span><strong class="done">Implementado</strong></header>
+          <p>Centro de comando diario para acompanhar prioridades, indicadores e proximas acoes.</p>
+          <small>Afinar indicadores finais com regras internas da empresa e thresholds de prioridade.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Condominios</span><strong class="partial">Parcial</strong></header>
+          <p>Ficha operacional de cada condominio, com estrutura, fraccoes, equipamentos, pedidos e relacoes.</p>
+          <small>Completar regras de dados obrigatorios, documentos associados e relatorios por condominio.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Equipa</span><strong class="done">Implementado</strong></header>
+          <p>Visao real de utilizadores/funcionarios, carga operacional, validacoes e atividade recente.</p>
+          <small>Validar permissoes, categorias de equipa e metricas de produtividade que a empresa quer acompanhar.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Tarefas</span><strong class="done">Implementado</strong></header>
+          <p>Vista composta do trabalho diario a partir de tickets, manutencao, vistorias e agenda.</p>
+          <small>Formalizar regras de prioridade, SLA, validacao e escalonamento.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Pedidos / Tickets</span><strong class="done">Implementado</strong></header>
+          <p>Registo, triagem, acompanhamento, atribuicao, execucao e historico de pedidos.</p>
+          <small>Validar estados finais, templates de comunicacao e regras de notificacao.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Agenda</span><strong class="done">Implementado</strong></header>
+          <p>Planeamento de eventos, visitas, prazos e atividades ligadas a pedidos e condominios.</p>
+          <small>Validar sincronizacao externa, lembretes e tipos oficiais de eventos.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Documentos</span><strong class="partial">Parcial</strong></header>
+          <p>Organizar documentos por contexto: condominio, pedido, utilizador ou area administrativa.</p>
+          <small>Definir estrutura documental, permissoes, modelos e retencao.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Contabilidade</span><strong class="planned">Planeado</strong></header>
+          <p>Apoiar quotas, despesas, saldos, avisos, recibos e controlo financeiro por condominio.</p>
+          <small>Validar processos atuais, mapas obrigatorios, integracoes e calendario de cobranca.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Relatorios</span><strong class="planned">Planeado</strong></header>
+          <p>Criar visoes executivas e operacionais para gestao, clientes e auditoria.</p>
+          <small>Definir formatos, periodicidade, destinatarios e indicadores oficiais.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Manutencao / Vistorias</span><strong class="partial">Parcial</strong></header>
+          <p>Registar intervencoes, inspecoes, estado, responsavel e ligacao a pedidos/tarefas.</p>
+          <small>Validar checklists, evidencias fotograficas, assinaturas e validacao final.</small>
+        </article>
+        
+
+        <article class="module-card">
+          <header><span>Fornecedores</span><strong class="planned">Planeado</strong></header>
+          <p>Centralizar contactos, especialidades, historico e ligacao a intervencoes.</p>
+          <small>Definir categorias, avaliacao, documentos obrigatorios e regras de adjudicacao.</small>
+        </article>
+        </div>
+  </section>
+
+  <section class="section">
+    <div class="kicker">Fluxo diario</div>
+    <h2>Da prioridade do dia ao historico auditavel</h2>
+    <p class="lead">O valor esta em ligar cada acao a um responsavel, a um estado e a um contexto.</p>
+    <div class="flow">
+      <div><b>1</b><strong>Entrar</strong><p>sessao demo sem escrita manual</p></div>
+      <div><b>2</b><strong>Priorizar</strong><p>Hoje mostra o que exige atencao</p></div>
+      <div><b>3</b><strong>Atribuir</strong><p>pedido/tarefa ganha responsavel</p></div>
+      <div><b>4</b><strong>Executar</strong><p>funcionario atualiza progresso</p></div>
+      <div><b>5</b><strong>Validar</strong><p>administracao confirma resultado</p></div>
+      <div><b>6</b><strong>Registar</strong><p>historico fica consultavel</p></div>
+    </div>
+    <img class="diagram" src="assets/fluxo-pedido-fim-a-fim.png" alt="Fluxo de pedido do inicio ao fim">
+  </section>
+
+  <section id="demo" class="section">
+    <div class="kicker">Demo</div>
+    <h2>As 6 janelas principais mostram a operacao completa</h2>
+    <p class="lead">A demo deve seguir uma ordem simples: primeiro a administracao, depois equipa/trabalho, depois cliente.</p>
+    <table class="demo-table">
+      <thead><tr><th>Janela</th><th>Mensagem</th><th>Estado</th></tr></thead>
+      <tbody>
+        <tr><td>Hoje</td><td>Centro de comando e prioridades.</td><td><span class="done">Implementado</span></td></tr>
+        <tr><td>Condominios</td><td>Ficha operacional e relacoes.</td><td><span class="partial">Parcial</span></td></tr>
+        <tr><td>Equipa</td><td>Carga e atribuicoes.</td><td><span class="done">Implementado</span></td></tr>
+        <tr><td>Tarefas</td><td>Vista composta do trabalho real.</td><td><span class="done">Implementado</span></td></tr>
+        <tr><td>Pedidos</td><td>Ciclo de acompanhamento.</td><td><span class="done">Implementado</span></td></tr>
+        <tr><td>Agenda</td><td>Planeamento e eventos.</td><td><span class="done">Implementado</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="arquitetura" class="section">
+    <div class="kicker">Arquitetura</div>
+    <h2>Tecnologia escolhida para rapidez, seguranca e evolucao</h2>
+    <p class="lead">Explicacao simples para decisora: app no browser/PWA, API Rust, PostgreSQL/Supabase, Vercel/GitHub para deploy e validacao.</p>
+    <img class="diagram" src="assets/arquitetura-sistema.png" alt="Arquitetura GESTISAC">
+    <img class="diagram" src="assets/modelo-dados-simplificado.png" alt="Modelo de dados simplificado">
+  </section>
+
+  <section class="section">
+    <div class="kicker">Estado atual</div>
+    <h2>Separar feito, parcial e planeado evita promessas vagas</h2>
+    <div class="status-grid">
+      <article class="status-card"><h3 class="done">Feito / demonstravel</h3><p>Loginless demo, HQ/Worker/Client, menu limpo, Hoje, Equipa, Tarefas, Pedidos, Agenda, API publicada e checks.</p></article>
+      <article class="status-card"><h3 class="partial">Parcial / validar</h3><p>Ficha profunda de condominios, documentos, estados finais, auditoria detalhada e permissoes finas.</p></article>
+      <article class="status-card"><h3 class="planned">Planeado</h3><p>Contabilidade completa, relatorios executivos, notificacoes, integracoes e importacao historica.</p></article>
+    </div>
+  </section>
+
+  <section id="requisitos" class="section">
+    <div class="kicker">Matriz de requisitos</div>
+    <h2>A matriz transforma a reuniao numa validacao concreta</h2>
+    <p class="lead">Nao e para prometer tudo. E para marcar o que fica aprovado, o que muda e o que falta.</p>
+    <table class="requirements">
+      <thead><tr><th>Codigo</th><th>Area</th><th>Requisito</th><th>Prioridade</th><th>Estado</th><th>Observacoes</th><th>Validacao cliente</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>RF-001</td>
+          <td>Acesso</td>
+          <td>Entrada em ambiente de demonstracao sem escrita manual de credenciais.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Contrato loginless para desenvolvimento e smoke tests.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-002</td>
+          <td>Acesso</td>
+          <td>Separacao de perfis HQ/Admin, Funcionario e Cliente.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Cada contexto tem menu e permissoes filtradas.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-003</td>
+          <td>Acesso</td>
+          <td>Gestao de utilizadores e equipa com dados reais da base de dados.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Endpoint /api/team expõe apenas dados publicos e metricas operacionais.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-004</td>
+          <td>Hoje</td>
+          <td>Dashboard operacional com indicadores e prioridades do dia.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Centro de comando para apresentacao e operacao diaria.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-005</td>
+          <td>Hoje</td>
+          <td>Cartoes/resumos de modulos principais para entrada rapida.</td>
+          <td>Media</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>A confirmar se estes sao os quatro cartoes finais para cliente.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-006</td>
+          <td>Condominios</td>
+          <td>Listar condominios com estado, localidade, fraccoes e completude.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Vista operacional densa, sem cartoes repetitivos.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-007</td>
+          <td>Condominios</td>
+          <td>Abrir ficha operacional do condominio e ver relacoes ligadas.</td>
+          <td>Alta</td>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Dados base presentes; regras finais de ficha a validar.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-008</td>
+          <td>Condominios</td>
+          <td>Gerir fraccoes, blocos, elevadores e equipamentos.</td>
+          <td>Alta</td>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Funcionalidade ligada ao modelo; validar campos obrigatorios.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-009</td>
+          <td>Condominios</td>
+          <td>Associar documentos e historico ao condominio.</td>
+          <td>Media</td>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Depende de estrutura documental final.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-010</td>
+          <td>Equipa</td>
+          <td>Listar membros da equipa com papel, contacto e carga operacional.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Usa users e atribuicoes existentes.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-011</td>
+          <td>Equipa</td>
+          <td>Ver tarefas/pedidos atribuidos por funcionario.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Ligado a tickets.assigned_worker_id e inspections.assigned_worker_id.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-012</td>
+          <td>Equipa</td>
+          <td>Validar perfis, departamentos e permissoes detalhadas.</td>
+          <td>Alta</td>
+          <td><span class="badge validate">A validar</span></td>
+          <td>Precisa de matriz de autoridade real da empresa.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-013</td>
+          <td>Tarefas</td>
+          <td>Agregacao operacional de tickets, manutencao, vistorias e eventos.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Nao cria tabela tasks; e uma vista composta.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-014</td>
+          <td>Tarefas</td>
+          <td>Filtros de hoje, em curso, validacao e atrasadas.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Ajustar criterios com a empresa.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-015</td>
+          <td>Tarefas</td>
+          <td>Acao seguinte e responsavel visiveis no painel contextual.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Padrao visual transversal.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-016</td>
+          <td>Pedidos</td>
+          <td>Criar, listar, abrir e acompanhar pedidos/tickets.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Ciclo demonstravel por perfil.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-017</td>
+          <td>Pedidos</td>
+          <td>Atribuir pedido a funcionario.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Usa assigned_worker_id.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-018</td>
+          <td>Pedidos</td>
+          <td>Atualizar estado do pedido e acompanhar historico.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Validar nomes finais dos estados.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-019</td>
+          <td>Pedidos</td>
+          <td>Permitir validacao final pela administracao.</td>
+          <td>Alta</td>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Fluxo existe conceptualmente; regras finais a confirmar.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-020</td>
+          <td>Pedidos</td>
+          <td>Anexos, fotos e documentos no pedido.</td>
+          <td>Media</td>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Estrutura existe/planeada; validar armazenamento e limites.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-021</td>
+          <td>Agenda</td>
+          <td>Ver eventos e proximas atividades por perfil.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Ligacao a calendar_events.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-022</td>
+          <td>Agenda</td>
+          <td>Criar e relacionar eventos com pedido, tarefa ou condominio.</td>
+          <td>Alta</td>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Confirmar regras de criacao e notificacao.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-023</td>
+          <td>Agenda</td>
+          <td>Lembretes e notificacoes automáticas.</td>
+          <td>Media</td>
+          <td><span class="badge planned">Planeado</span></td>
+          <td>Definir canais: email, push, SMS ou WhatsApp.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-024</td>
+          <td>Documentos</td>
+          <td>Biblioteca documental por condominio/pedido/utilizador.</td>
+          <td>Alta</td>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Definir taxonomia documental.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-025</td>
+          <td>Documentos</td>
+          <td>Permissoes de visualizacao por perfil.</td>
+          <td>Alta</td>
+          <td><span class="badge validate">A validar</span></td>
+          <td>Depende de regras legais e internas.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-026</td>
+          <td>Contabilidade</td>
+          <td>Registo de quotas, pagamentos e dividas.</td>
+          <td>Alta</td>
+          <td><span class="badge planned">Planeado</span></td>
+          <td>Validar processo financeiro atual antes de implementar.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-027</td>
+          <td>Contabilidade</td>
+          <td>Mapas financeiros e extratos para clientes.</td>
+          <td>Alta</td>
+          <td><span class="badge planned">Planeado</span></td>
+          <td>Formato deve ser aprovado pela administracao.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-028</td>
+          <td>Relatorios</td>
+          <td>Relatorios de operacao, SLA, pedidos e manutencao.</td>
+          <td>Media</td>
+          <td><span class="badge planned">Planeado</span></td>
+          <td>Definir periodicidade e destinatarios.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-029</td>
+          <td>Vistorias</td>
+          <td>Planeamento, execucao e validacao de vistorias.</td>
+          <td>Alta</td>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Ligado a inspections e tarefas.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RF-030</td>
+          <td>Fornecedores</td>
+          <td>Cadastro e historico de fornecedores.</td>
+          <td>Media</td>
+          <td><span class="badge planned">Planeado</span></td>
+          <td>Necessita validacao de campos legais/operacionais.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-001</td>
+          <td>Seguranca</td>
+          <td>API protegida, sem expor segredos no frontend.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Rust/Axum e variaveis de ambiente controladas.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-002</td>
+          <td>Seguranca</td>
+          <td>Separacao de dados por tenant/cliente.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Modelo multi-tenant existente.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-003</td>
+          <td>Auditoria</td>
+          <td>Historico de alteracoes relevantes.</td>
+          <td>Alta</td>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Definir eventos obrigatorios e prazo de retencao.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-004</td>
+          <td>Performance</td>
+          <td>Interface rapida e instalavel como PWA.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Qwik e PWA para mobile/desktop.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-005</td>
+          <td>Disponibilidade</td>
+          <td>Deploy publicado com checks, smoke tests e warmup.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Vercel/GitHub e scripts de producao.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-006</td>
+          <td>Backups</td>
+          <td>Backups e recuperacao de base de dados.</td>
+          <td>Alta</td>
+          <td><span class="badge validate">A validar</span></td>
+          <td>Confirmar politica Supabase/contratual.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-007</td>
+          <td>Escalabilidade</td>
+          <td>Preparado para crescimento de utilizadores e condominios.</td>
+          <td>Media</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Rust/PostgreSQL; indices e checks a manter.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-008</td>
+          <td>Mobile</td>
+          <td>Uso em telemovel/PWA sem instalacao complexa.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>PWA pronta para instalar.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-009</td>
+          <td>Qualidade</td>
+          <td>Smoke tests por API e por perfil de utilizador.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Contrato interno: API primeiro, depois HQ/Worker/Client.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        
+
+        <tr>
+          <td>RNF-010</td>
+          <td>Operacao</td>
+          <td>Sem localhost como validacao final.</td>
+          <td>Alta</td>
+          <td><span class="badge done">Implementado</span></td>
+          <td>Validacao deve usar URL publicada/preview.</td>
+          <td class="empty-cell"></td>
+        </tr>
+        </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <div class="kicker">Perguntas</div>
+    <h2>As melhores perguntas desbloqueiam o contrato</h2>
+    <ol class="questions"><li>Que perfis existem na empresa e que decisoes cada perfil pode tomar?</li>
+<li>Quais os estados oficiais de um pedido, desde a entrada ate ao fecho?</li>
+<li>Que tempos de resposta/SLA querem medir por tipo de pedido?</li>
+<li>Que documentos sao obrigatorios por condominio, fraccao, fornecedor e pedido?</li>
+<li>Que relatorios a administracao precisa mensalmente e quais sao para clientes?</li>
+<li>Como funciona hoje a contabilidade: quotas, recibos, dividas, despesas e aprovacao?</li>
+<li>Que notificacoes fazem sentido: email, push, SMS, WhatsApp ou apenas dentro da app?</li>
+<li>Que informacao o cliente pode ver sem expor dados internos da equipa?</li>
+<li>Que integracoes sao obrigatorias para fechar a primeira fase?</li>
+<li>Que dados historicos precisam de ser importados antes do arranque?</li></ol>
+  </section>
+
+  <section id="roteiro" class="section">
+    <div class="kicker">Roteiro de demo</div>
+    <h2>Ordem de cliques e mensagens-chave</h2>
+    <ol class="demo-script">
+        <li>
+          <b>1. Abrir HQ</b>
+          <span>Entrar em https://gestisac-web.vercel.app/hq/login e confirmar que a sessao de demonstracao abre sem escrever credenciais.</span>
+          <em>A entrada sem friccao serve para demonstracao, desenvolvimento e smoke tests; producao real mantem controlo de acesso.</em>
+        </li>
+        
+
+        <li>
+          <b>2. Hoje / Dashboard</b>
+          <span>Mostrar indicadores, prioridades e os quatro cartoes/resumos principais.</span>
+          <em>Esta e a mesa de comando: a administracao ve o que precisa de atencao antes de entrar no detalhe.</em>
+        </li>
+        
+
+        <li>
+          <b>3. Condominios</b>
+          <span>Abrir a lista, selecionar um condominio e mostrar o painel lateral.</span>
+          <em>O condominio deixa de ser uma ficha isolada: liga pedidos, tarefas, agenda, documentos e equipa.</em>
+        </li>
+        
+
+        <li>
+          <b>4. Pedidos</b>
+          <span>Selecionar um pedido, ver estado, responsavel e historico.</span>
+          <em>O pedido passa a ter vida operacional: entra, e triado, atribuido, executado, validado e fica registado.</em>
+        </li>
+        
+
+        <li>
+          <b>5. Equipa</b>
+          <span>Abrir a equipa e selecionar um membro.</span>
+          <em>A administracao consegue perceber carga de trabalho, validacoes pendentes e distribuicao do dia.</em>
+        </li>
+        
+
+        <li>
+          <b>6. Tarefas</b>
+          <span>Filtrar por Hoje/Em curso/Validacao/Atrasadas.</span>
+          <em>Tarefas nao e uma tabela nova; e uma vista operacional sobre trabalho real ja existente.</em>
+        </li>
+        
+
+        <li>
+          <b>7. Agenda</b>
+          <span>Mostrar proximos eventos e ligacoes.</span>
+          <em>A agenda transforma tarefas e pedidos em planeamento visivel.</em>
+        </li>
+        
+
+        <li>
+          <b>8. Worker</b>
+          <span>Abrir https://gestisac-web.vercel.app/worker/login.</span>
+          <em>O funcionario ve o que tem de executar, sem acesso a areas administrativas indevidas.</em>
+        </li>
+        
+
+        <li>
+          <b>9. Client</b>
+          <span>Abrir https://gestisac-web.vercel.app/client/login.</span>
+          <em>O cliente acompanha o que lhe diz respeito, com linguagem simples e sem informacao interna.</em>
+        </li>
+        
+
+        <li>
+          <b>10. Fecho</b>
+          <span>Abrir a matriz de requisitos.</span>
+          <em>A reuniao fecha com validacao: isto esta feito, isto esta parcial, isto esta planeado, e isto precisa da vossa decisao.</em>
+        </li>
+        </ol>
+    <p class="note">Links reais: HQ https://gestisac-web.vercel.app/hq/login | Worker https://gestisac-web.vercel.app/worker/login | Client https://gestisac-web.vercel.app/client/login</p>
+  </section>
+</body>
+</html>

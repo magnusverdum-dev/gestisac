@@ -1,0 +1,2599 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#061126" />
+    <meta
+      name="description"
+      content="Levantamento funcional interativo da GCSoftware para validação de MVP, escolha de módulos e selecção de funcionalidades pela cliente."
+    />
+    <title>GCSoftware | Inventário Funcional Interativo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a0a0a;
+        --bg-2: #081427;
+        --panel: rgba(4, 10, 20, 0.94);
+        --panel-2: rgba(6, 14, 28, 0.98);
+        --line: rgba(140, 170, 220, 0.18);
+        --line-strong: rgba(140, 170, 220, 0.3);
+        --text: #eef4ff;
+        --muted: #9badc7;
+        --blue: #89b9ff;
+        --blue-2: #dbe6f7;
+        --amber: #ffb000;
+        --amber-2: #ffd27a;
+        --green: #6ee7b7;
+        --danger: #ff8d8d;
+        --shadow: none;
+        font-family:
+          'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono',
+          monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        background: var(--bg);
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 12% 0%, rgba(137, 185, 255, 0.12), transparent 32rem),
+          radial-gradient(circle at 88% 12%, rgba(255, 176, 0, 0.12), transparent 26rem),
+          linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 50%, #040812 100%);
+        font-family: inherit;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .scanlines {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.16;
+        background:
+          repeating-linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.04) 0,
+            rgba(255, 255, 255, 0.04) 1px,
+            transparent 1px,
+            transparent 4px
+          );
+        mix-blend-mode: soft-light;
+      }
+
+      .shell {
+        position: relative;
+        z-index: 1;
+        width: min(1580px, calc(100vw - 24px));
+        margin: 0 auto;
+        padding: 14px 0 40px;
+      }
+
+      .panel,
+      .module,
+      .toolbar,
+      .summary,
+      .footer {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 0;
+        box-shadow: none;
+        backdrop-filter: none;
+      }
+
+      .header {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+        gap: 14px;
+        align-items: stretch;
+      }
+
+      .brand {
+        padding: 18px;
+      }
+
+      .brand-top {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .kicker {
+        display: inline-flex;
+        align-items: center;
+        min-height: 22px;
+        padding: 0 8px;
+        border: 1px solid rgba(255, 176, 0, 0.26);
+        background: rgba(255, 176, 0, 0.08);
+        color: var(--amber);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .logo {
+        margin: 10px 0 0;
+        color: var(--blue);
+        font-size: 10px;
+        line-height: 1.25;
+        text-shadow: 0 0 6px rgba(137, 185, 255, 0.22);
+        overflow-x: auto;
+      }
+
+      .brand h1 {
+        margin: 10px 0 0;
+        color: #f8fbff;
+        font-size: clamp(1.8rem, 3.2vw, 3rem);
+        line-height: 1;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .brand p {
+        max-width: 82ch;
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .summary {
+        display: grid;
+        gap: 10px;
+        padding: 18px;
+        align-content: start;
+      }
+
+      .summary-title {
+        color: var(--amber);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .summary-card {
+        padding: 14px;
+        border: 1px solid rgba(140, 170, 220, 0.16);
+        background: rgba(0, 0, 0, 0.22);
+      }
+
+      .summary-card span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .summary-card strong {
+        display: block;
+        margin-top: 6px;
+        color: #f8fbff;
+        font-size: 22px;
+      }
+
+      .summary-note {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) auto auto;
+        gap: 12px;
+        align-items: center;
+        margin-top: 14px;
+        padding: 14px;
+      }
+
+      .search {
+        display: grid;
+        gap: 8px;
+      }
+
+      .search label {
+        color: var(--amber);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .search input {
+        width: 100%;
+        min-height: 44px;
+        padding: 0 12px;
+        color: var(--text);
+        border: 1px solid var(--line-strong);
+        border-radius: 0;
+        background: rgba(0, 0, 0, 0.26);
+      }
+
+      .search input:focus {
+        outline: none;
+        border-color: var(--blue);
+        box-shadow: 0 0 0 1px rgba(137, 185, 255, 0.15);
+      }
+
+      .filters,
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 0 12px;
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border: 1px solid var(--line);
+        border-radius: 0;
+        background: rgba(0, 0, 0, 0.28);
+        cursor: pointer;
+        transition:
+          background 160ms ease,
+          border-color 160ms ease,
+          color 160ms ease,
+          transform 160ms ease;
+      }
+
+      .btn:hover,
+      .btn:focus-visible,
+      .btn.active {
+        color: #08121f;
+        border-color: var(--blue);
+        background: var(--blue);
+        transform: translateY(-1px);
+        outline: none;
+      }
+
+      .btn-amber {
+        color: #08121f;
+        background: var(--amber);
+        border-color: var(--amber);
+      }
+
+      .btn-amber:hover,
+      .btn-amber:focus-visible {
+        background: var(--blue);
+        border-color: var(--blue);
+      }
+
+      .content {
+        display: grid;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .module {
+        padding: 16px;
+      }
+
+      .module[hidden] {
+        display: none !important;
+      }
+
+      .module summary {
+        list-style: none;
+        cursor: pointer;
+      }
+
+      .module summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .module-head {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+
+      .module-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .module-title strong {
+        font-size: 18px;
+        line-height: 1.1;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .module-code {
+        color: var(--amber);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .module-summary {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .group-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .group {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        border: 1px solid rgba(140, 170, 220, 0.14);
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .group-title {
+        color: var(--blue);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .features {
+        display: grid;
+        gap: 8px;
+      }
+
+      .feature {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: start;
+        padding: 10px 12px;
+        border: 1px solid rgba(140, 170, 220, 0.14);
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .feature:hover {
+        border-color: rgba(137, 185, 255, 0.34);
+      }
+
+      .feature input {
+        width: 16px;
+        height: 16px;
+        margin-top: 2px;
+        accent-color: var(--amber);
+      }
+
+      .feature-main {
+        display: grid;
+        gap: 4px;
+      }
+
+      .feature-main strong {
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .feature-main span {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 22px;
+        padding: 0 8px;
+        color: #08121f;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .pill.verificado {
+        background: var(--green);
+      }
+
+      .pill.docs {
+        background: var(--blue);
+      }
+
+      .pill.pendente {
+        background: var(--amber);
+      }
+
+      .pill.a-confirmar {
+        background: var(--danger);
+      }
+
+      .feature[data-status='verificado'] {
+        border-color: rgba(110, 231, 183, 0.22);
+      }
+
+      .feature[data-status='docs'] {
+        border-color: rgba(137, 185, 255, 0.22);
+      }
+
+      .feature[data-status='pendente'] {
+        border-color: rgba(255, 176, 0, 0.24);
+      }
+
+      .feature[data-status='a-confirmar'] {
+        border-color: rgba(255, 141, 141, 0.24);
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .footer {
+        margin-top: 14px;
+        padding: 16px 18px;
+      }
+
+      .footer p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      .footer a {
+        color: var(--amber);
+      }
+
+      .terminal-line {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        color: #e9effb;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .terminal-line span:last-child {
+        color: var(--amber);
+        text-align: right;
+      }
+
+      @media (max-width: 1180px) {
+        .header,
+        .toolbar {
+          grid-template-columns: 1fr;
+        }
+
+        .group-grid,
+        .summary-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .filters,
+        .actions {
+          justify-content: flex-start;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .shell {
+          width: min(100vw - 16px, 1580px);
+          padding: 8px 0 24px;
+        }
+
+        .brand,
+        .summary,
+        .toolbar,
+        .module,
+        .footer {
+          padding: 14px;
+        }
+
+        .feature {
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .pill {
+          grid-column: 2 / -1;
+          justify-self: start;
+        }
+      }
+
+      @media print {
+        body {
+          background: #fff;
+          color: #000;
+        }
+
+        .scanlines,
+        .toolbar,
+        .btn,
+        .summary-note {
+          display: none !important;
+        }
+
+        .shell {
+          width: 100%;
+          padding: 0;
+        }
+
+        .panel,
+        .module,
+        .summary,
+        .footer,
+        .group,
+        .feature {
+          background: #fff !important;
+          border-color: #999 !important;
+          box-shadow: none !important;
+        }
+
+        * {
+          text-shadow: none !important;
+          animation: none !important;
+          transition: none !important;
+        }
+
+        .kicker,
+        .module-code,
+        .summary-title,
+        .group-title,
+        .pill {
+          color: #000 !important;
+          background: transparent !important;
+          border-color: #000 !important;
+        }
+
+        .brand h1,
+        .module-title strong,
+        .feature-main strong {
+          color: #000 !important;
+        }
+
+        .brand p,
+        .module-summary,
+        .feature-main span,
+        .footer p {
+          color: #111 !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="scanlines" aria-hidden="true"></div>
+    <main class="shell">
+      <section class="header">
+        <article class="panel brand">
+          <div class="brand-top">
+            <span class="kicker">LEVANTAMENTO FUNCIONAL</span>
+            <span class="kicker">GC SOFTWARE</span>
+          </div>
+          <pre class="logo" aria-hidden="true">+--------------------------------------------------+
+|  GC SOFTWARE // INVENTÁRIO FUNCIONAL INTERATIVO  |
+|  PERCURSO COMPLETO DO BACKOFFICE, PORTAIS E APPS  |
++--------------------------------------------------+</pre>
+          <h1>folha interactiva para validar o mvp com a cliente</h1>
+          <p>
+            Esta página foi pensada para mostrares, ponto por ponto, tudo o que o
+            produto cobre hoje: módulos, submódulos, páginas, fluxos, relatórios,
+            integrações, portais, IA e configurações. A cliente pode marcar o que quer
+            manter no MVP, o que fica para fase futura e o que deve ser adaptado.
+          </p>
+        </article>
+
+        <aside class="summary" aria-label="Resumo do inventário">
+          <span class="summary-title">Resumo operacional</span>
+          <div class="summary-grid">
+            <div class="summary-card">
+              <span>Funcionalidades</span>
+              <strong id="totalCount">0</strong>
+            </div>
+            <div class="summary-card">
+              <span>Seleccionadas</span>
+              <strong id="selectedCount">0</strong>
+            </div>
+            <div class="summary-card">
+              <span>Verificadas</span>
+              <strong id="verifiedCount">0</strong>
+            </div>
+            <div class="summary-card">
+              <span>Docs / pendentes</span>
+              <strong id="docsCount">0</strong>
+            </div>
+          </div>
+          <p class="summary-note">
+            Status:
+            <strong>verde</strong> = verificado no demo,
+            <strong>azul</strong> = confirmado na documentação,
+            <strong>âmbar</strong> = a confirmar/expandir.
+          </p>
+        </aside>
+      </section>
+
+      <section class="toolbar panel" aria-label="Controlos de filtro">
+        <div class="search">
+          <label for="search">Pesquisar funcionalidades</label>
+          <input
+            id="search"
+            type="search"
+            placeholder="Ex.: recibos, assembleias, IA, open banking, QR, email, condóminos..."
+          />
+        </div>
+
+        <div class="filters" role="toolbar" aria-label="Filtros de estado">
+          <button class="btn active" type="button" data-filter="all">Tudo</button>
+          <button class="btn" type="button" data-filter="verificado">Verificado</button>
+          <button class="btn" type="button" data-filter="docs">Docs</button>
+          <button class="btn" type="button" data-filter="pendente">Pendente</button>
+          <button class="btn" type="button" data-filter="a-confirmar">A confirmar</button>
+          <button class="btn" type="button" data-filter="selected">Seleccionado</button>
+        </div>
+
+        <div class="actions">
+          <button class="btn" type="button" id="toggleAll">Abrir tudo</button>
+          <button class="btn" type="button" id="clearSelection">Limpar selecção</button>
+          <button class="btn btn-amber" type="button" id="printPage">Exportar PDF</button>
+        </div>
+      </section>
+
+      <section class="content" id="modules"></section>
+
+      <footer class="footer">
+        <p>
+          Fontes usadas para esta folha: demo do backoffice, documentação oficial da
+          GCSoftware, páginas de ajuda e listagens das aplicações.
+          <a href="https://www.gcsoftware.pt/backoffice/?demo=1" target="_blank" rel="noreferrer">
+            Demo
+          </a>
+          ·
+          <a href="https://docs.gcsoftware.pt/" target="_blank" rel="noreferrer">
+            Documentação
+          </a>
+          ·
+          <a href="https://docs.gcsoftware.pt/general/links-apps/" target="_blank" rel="noreferrer">
+            Apps oficiais
+          </a>
+        </p>
+      </footer>
+    </main>
+
+    <script>
+      const inventory = [
+        {
+          code: '01',
+          title: 'Administração',
+          summary:
+            'Núcleo de configuração, perfis, permissões, comunicação, IA, tabelas e registo operacional.',
+          groups: [
+            {
+              title: 'Base do sistema',
+              items: [
+                {
+                  label: 'Empresa: perfil, contactos, administrador, serviços e imagem da empresa',
+                  status: 'verificado',
+                  detail: 'Página de administração da identidade do cliente e dos serviços activos.'
+                },
+                {
+                  label: 'Utilizadores: criação, edição, associação a perfis e acesso ao sistema',
+                  status: 'verificado',
+                  detail: 'Gestão de utilizadores do backoffice.'
+                },
+                {
+                  label: 'Permissões por perfil e controlo de acesso',
+                  status: 'verificado',
+                  detail: 'Acesso segmentado por funções.'
+                },
+                {
+                  label: 'Parâmetros do sistema',
+                  status: 'verificado',
+                  detail: 'Configuração base do comportamento da aplicação.'
+                },
+                {
+                  label: 'Registo de atividade',
+                  status: 'verificado',
+                  detail: 'Histórico operativo e auditoria.'
+                },
+                {
+                  label: 'Tabelas e relatórios administrativos',
+                  status: 'verificado',
+                  detail: 'Tabelas auxiliares e listagens do módulo.'
+                }
+              ]
+            },
+            {
+              title: 'E-mail e SMS',
+              items: [
+                {
+                  label: 'E-Mail > Contas de Envio',
+                  status: 'verificado',
+                  detail: 'Gestão de contas SMTP e envio de mensagens.'
+                },
+                {
+                  label: 'E-Mail > Documentos',
+                  status: 'verificado',
+                  detail: 'Associação de templates e documentos enviados por e-mail.'
+                },
+                {
+                  label: 'E-Mail > Templates',
+                  status: 'verificado',
+                  detail: 'Modelos reutilizáveis para comunicação automatizada.'
+                },
+                {
+                  label: 'SMS > Configuração',
+                  status: 'verificado',
+                  detail: 'Parâmetros do serviço SMS.'
+                },
+                {
+                  label: 'SMS > Encomendas',
+                  status: 'verificado',
+                  detail: 'Compra e gestão de créditos/encomendas.'
+                },
+                {
+                  label: 'Newsletters',
+                  status: 'verificado',
+                  detail: 'Comunicações em massa e campanhas.'
+                }
+              ]
+            },
+            {
+              title: 'Inteligência Artificial',
+              items: [
+                {
+                  label: 'IA > Funcionalidades',
+                  status: 'verificado',
+                  detail: 'Activação de capacidades por canal e módulo.'
+                },
+                {
+                  label: 'IA > Chat Externo',
+                  status: 'verificado',
+                  detail: 'Assistente IA para site externo.'
+                },
+                {
+                  label: 'IA > Respostas Automáticas',
+                  status: 'verificado',
+                  detail: 'Respostas automáticas e apoio inteligente.'
+                },
+                {
+                  label: 'IA > Subscrição',
+                  status: 'verificado',
+                  detail: 'Gestão do plano activo de IA.'
+                },
+                {
+                  label: 'IA > Consumos',
+                  status: 'verificado',
+                  detail: 'Monitorização do uso e do saldo disponível.'
+                },
+                {
+                  label: 'IA > Conversas',
+                  status: 'verificado',
+                  detail: 'Histórico de conversas com assistentes.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '02',
+          title: 'CRM Comercial',
+          summary:
+            'Área comercial documentada no produto, usada para propostas, planos e gestão de oportunidade.',
+          groups: [
+            {
+              title: 'Área comercial',
+              items: [
+                {
+                  label: 'Planos / Serviços',
+                  status: 'a-confirmar',
+                  detail: 'Funcionalidade comercial referida no menu e na página de preços.'
+                },
+                {
+                  label: 'Tabela de preços',
+                  status: 'a-confirmar',
+                  detail: 'Tabela comercial para apresentação e contratação.'
+                },
+                {
+                  label: 'Pedidos de orçamento',
+                  status: 'a-confirmar',
+                  detail: 'Entrada de leads ou pedidos comerciais.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '03',
+          title: 'Condomínios',
+          summary:
+            'Gestão de edifícios, ficha do condomínio, contas bancárias, cobranças, BI, ficheiros e mapa.',
+          groups: [
+            {
+              title: 'Lista e contexto',
+              items: [
+                {
+                  label: 'Listagem de condomínios com pesquisa e estado activo/inactivo',
+                  status: 'verificado',
+                  detail: 'Selecção e filtragem de edifícios.'
+                },
+                {
+                  label: 'Histórico consolidado',
+                  status: 'docs',
+                  detail: 'Agrupamento histórico e gestão de edifícios ao longo do tempo.'
+                },
+                {
+                  label: 'Inquéritos',
+                  status: 'docs',
+                  detail: 'Ferramentas de recolha de feedback.'
+                },
+                {
+                  label: 'Relatórios do módulo',
+                  status: 'verificado',
+                  detail: 'Listagens e mapas do universo do condomínio.'
+                }
+              ]
+            },
+            {
+              title: 'Ficha principal',
+              items: [
+                {
+                  label:
+                    'Código, NIF, descrição, morada, porta, CP, localidade postal, localidade, distrito, concelho, freguesia e finanças',
+                  status: 'verificado',
+                  detail: 'Identificação fiscal e geográfica completa.'
+                },
+                {
+                  label: 'Gestor, administrativo e local de cobrança',
+                  status: 'verificado',
+                  detail: 'Responsáveis internos e ponto de cobrança.'
+                },
+                {
+                  label: 'Periodicidade de quotas e do FCR',
+                  status: 'verificado',
+                  detail: 'Periodicidade de cobrança do condomínio.'
+                },
+                {
+                  label: 'Formato da permilagem',
+                  status: 'verificado',
+                  detail: 'Percentagem ou permilagem.'
+                },
+                {
+                  label: 'Tipo de leitura de manutenção',
+                  status: 'verificado',
+                  detail: 'Nenhum, QR Code ou Tag NFC.'
+                },
+                {
+                  label: 'Estado, datas de início/fim e observações',
+                  status: 'verificado',
+                  detail: 'Controlo de ciclo de vida do condomínio.'
+                }
+              ]
+            },
+            {
+              title: 'Conta bancária e cobrança',
+              items: [
+                {
+                  label: 'Contas bancárias: ordem, conta, tipo, banco e SWIFT',
+                  status: 'verificado',
+                  detail: 'Gestão de contas bancárias do condomínio.'
+                },
+                {
+                  label: 'Cobranças: Multibanco, MB Way, Payshop, API key e débito directo',
+                  status: 'verificado',
+                  detail: 'Pagamentos electrónicos e configuração de cobrança.'
+                },
+                {
+                  label: 'Quem paga, notificações e automatização dos avisos',
+                  status: 'verificado',
+                  detail: 'Regras de cobrança por documento e por entidade.'
+                },
+                {
+                  label: 'Limite de pagamento, débitos desde/até, saldo anterior e cabeçalho',
+                  status: 'verificado',
+                  detail: 'Detalhes do processamento dos avisos de cobrança.'
+                }
+              ]
+            },
+            {
+              title: 'BI, ficheiros e mapa',
+              items: [
+                {
+                  label: 'B.I. do condomínio: construção, pisos, cobertura, contadores individuais e equipamento',
+                  status: 'verificado',
+                  detail: 'Ficha técnica do edifício e dados estruturais.'
+                },
+                {
+                  label: 'Seguros e valores de reconstrução no BI',
+                  status: 'verificado',
+                  detail: 'Área, valor por m2 e partes comuns para seguro.'
+                },
+                {
+                  label: 'Ficheiros fiscais e documentação do edifício',
+                  status: 'verificado',
+                  detail: 'Arquivo documental do condomínio.'
+                },
+                {
+                  label: 'Localização no mapa',
+                  status: 'verificado',
+                  detail: 'Mapa embebido na ficha do condomínio.'
+                },
+                {
+                  label: 'Ações rápidas: extrato bancário, história, frações, condóminos, seguros e tarefas',
+                  status: 'verificado',
+                  detail: 'Atalhos operacionais dentro da ficha.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '04',
+          title: 'Frações',
+          summary:
+            'Gestão da unidade autónoma, proprietários, arrendatários, contadores, ficheiros e atributos da fração.',
+          groups: [
+            {
+              title: 'Lista e ficha',
+              items: [
+                {
+                  label: 'Listagem e pesquisa de frações',
+                  status: 'verificado',
+                  detail: 'Navegação por unidade autónoma.'
+                },
+                {
+                  label: 'Ficha principal da fração',
+                  status: 'verificado',
+                  detail: 'Separadores operacionais por unidade.'
+                },
+                {
+                  label:
+                    'Ordem, fração, bloco, piso, porta, permilagem real, permilagem administrada e tipo de fração',
+                  status: 'verificado',
+                  detail: 'Campos estruturais da unidade.'
+                },
+                {
+                  label: 'Arrendamento, fração administrada, tem locatário e alojamento local',
+                  status: 'verificado',
+                  detail: 'Flags operacionais da unidade.'
+                }
+              ]
+            },
+            {
+              title: 'Associações',
+              items: [
+                {
+                  label: 'Proprietários',
+                  status: 'verificado',
+                  detail: 'Ligação entre fração e titulares.'
+                },
+                {
+                  label: 'Arrendatários',
+                  status: 'verificado',
+                  detail: 'Gestão de ocupação em regime de arrendamento.'
+                },
+                {
+                  label: 'Outras localizações',
+                  status: 'verificado',
+                  detail: 'Locais associados à fração.'
+                },
+                {
+                  label: 'Contadores: número, tipo e quem paga',
+                  status: 'verificado',
+                  detail: 'Medição e responsabilidade do consumo.'
+                },
+                {
+                  label: 'Ficheiros',
+                  status: 'verificado',
+                  detail: 'Arquivo documental da fração.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '05',
+          title: 'Entidades',
+          summary:
+            'Gestão de condóminos, fornecedores, funcionários, ausências, férias, salários, recibos e RGPD.',
+          groups: [
+            {
+              title: 'Condóminos',
+              items: [
+                {
+                  label: 'Condóminos: listagem, pesquisa e filtros',
+                  status: 'verificado',
+                  detail: 'Exploração do universo de entidades.'
+                },
+                {
+                  label: 'Atualização de dados',
+                  status: 'docs',
+                  detail: 'Fluxo documental de actualização cadastral.'
+                },
+                {
+                  label: 'Convidar para o portal',
+                  status: 'docs',
+                  detail: 'Convite para portal/app de condóminos.'
+                },
+                {
+                  label: 'Relatórios de condóminos',
+                  status: 'verificado',
+                  detail: 'Listagens e mapas operacionais.'
+                }
+              ]
+            },
+            {
+              title: 'Ficha do condómino',
+              items: [
+                {
+                  label:
+                    'Primeiro e segundo titular, nome, foto, data de nascimento, contribuinte, cartão de cidadão, validade, segurança social, saúde, passaporte e cartão de mobilidade',
+                  status: 'verificado',
+                  detail: 'Identificação completa da entidade.'
+                },
+                {
+                  label: 'Portal/app activado, ver todos os condóminos e autenticação em duas etapas',
+                  status: 'verificado',
+                  detail: 'Segurança e permissões do portal.'
+                },
+                {
+                  label: 'Conta corrente, abrir ocorrência, filtrar por condomínio, copiar e cancelar D.D.',
+                  status: 'verificado',
+                  detail: 'Ações rápidas sobre a entidade.'
+                },
+                {
+                  label: 'Moradas, contactos, informação bancária e ficheiros',
+                  status: 'verificado',
+                  detail: 'Separadores do registo de condómino.'
+                }
+              ]
+            },
+            {
+              title: 'Comunicação e RGPD',
+              items: [
+                {
+                  label: 'Correspondência útil: email, telefone, fax e preferências de contacto',
+                  status: 'verificado',
+                  detail: 'Canal de contacto por entidade.'
+                },
+                {
+                  label: 'Envio de correspondência: convocatórias, atas, relatórios de contas, avisos e recibos',
+                  status: 'verificado',
+                  detail: 'Regras de expedição por canal.'
+                },
+                {
+                  label:
+                    'Registada, correio normal e depósito em caixa de correio para documentos enviados',
+                  status: 'verificado',
+                  detail: 'Modalidades de entrega.'
+                },
+                {
+                  label: 'Consentimentos: email, SMS, telefone, carta, promoções, newsletters e campanhas',
+                  status: 'verificado',
+                  detail: 'Preferências e tratamento de dados.'
+                },
+                {
+                  label: 'Assembleia electrónica, não oposição e assinatura digital de atas',
+                  status: 'verificado',
+                  detail: 'Participação remota e conformidade.'
+                },
+                {
+                  label: 'Idioma PT / EN e tratamento de dados pessoais',
+                  status: 'verificado',
+                  detail: 'Localização e conformidade RGPD.'
+                },
+                {
+                  label: 'Acessos aos dados dos condóminos e anonimização',
+                  status: 'verificado',
+                  detail: 'RGPD, auditoria e anonimização.'
+                }
+              ]
+            },
+            {
+              title: 'Funcionários e recibos',
+              items: [
+                {
+                  label: 'Fornecedores',
+                  status: 'verificado',
+                  detail: 'Gestão de contactos e entidades fornecedoras.'
+                },
+                {
+                  label: 'Funcionários do condomínio e funcionários associados ao condomínio',
+                  status: 'verificado',
+                  detail: 'Pessoal de manutenção e equipas ligadas ao edifício.'
+                },
+                {
+                  label: 'Ausências, férias e horas trabalhadas',
+                  status: 'verificado',
+                  detail: 'Controlo laboral e operacional.'
+                },
+                {
+                  label: 'Processamento de salários e avenças',
+                  status: 'verificado',
+                  detail: 'Remunerações e processamento recorrente.'
+                },
+                {
+                  label: 'Consulta de recibos',
+                  status: 'verificado',
+                  detail: 'Acesso documental por entidade.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '06',
+          title: 'Orçamentos e quotas',
+          summary:
+            'Estrutura de orçamento, distribuição de custos, emissão de quotas, penalidades e distritos de consumo.',
+          groups: [
+            {
+              title: 'Orçamento',
+              items: [
+                {
+                  label: 'Criar orçamentos por assistente',
+                  status: 'docs',
+                  detail: 'Assistente guiado de criação de orçamento.'
+                },
+                {
+                  label: 'Estrutura de orçamento por centros de custo, contas e categorias',
+                  status: 'docs',
+                  detail: 'Base de distribuição contabilística.'
+                },
+                {
+                  label: 'Distribuição de custos por fração / permilagem',
+                  status: 'docs',
+                  detail: 'Cálculo da repartição do orçamento.'
+                },
+                {
+                  label: 'Permilagem vs orçamento',
+                  status: 'docs',
+                  detail: 'Cenários de cálculo por unidade e centro de custo.'
+                }
+              ]
+            },
+            {
+              title: 'Emissão de quotas',
+              items: [
+                {
+                  label: 'Lançar quotas e emitir avisos de cobrança',
+                  status: 'docs',
+                  detail: 'Geração de dívida por período.'
+                },
+                {
+                  label: 'Coimas / penalidades',
+                  status: 'docs',
+                  detail: 'Penalização por incumprimento.'
+                },
+                {
+                  label: 'Eliminar quotas',
+                  status: 'docs',
+                  detail: 'Cancelamento do lançamento.'
+                },
+                {
+                  label: 'Dívidas incobráveis',
+                  status: 'docs',
+                  detail: 'Tratamento de dívida não recuperável.'
+                },
+                {
+                  label: 'Rendimentos',
+                  status: 'docs',
+                  detail: 'Distribuição e tratamento de receitas.'
+                },
+                {
+                  label: 'Carregamento de carro eléctrico',
+                  status: 'docs',
+                  detail: 'Tipo de despesa/serviço específico.'
+                },
+                {
+                  label: 'Sugestões de orçamento com apoio de IA',
+                  status: 'verificado',
+                  detail: 'Assistência inteligente para elaboração de orçamento.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '07',
+          title: 'Tesouraria',
+          summary:
+            'Recibos, avisos de cobrança, pagamentos desconhecidos, notas de crédito e alertas.',
+          groups: [
+            {
+              title: 'Recibos',
+              items: [
+                {
+                  label: 'Processar recibo',
+                  status: 'verificado',
+                  detail: 'Emissão de recibo com filtros por condomínio, fração e condómino.'
+                },
+                {
+                  label: 'Consultar recibo',
+                  status: 'verificado',
+                  detail: 'Pesquisa por referência, número, transação, data e montante.'
+                },
+                {
+                  label: 'Gerar recibo electrónico',
+                  status: 'verificado',
+                  detail: 'Emissão electrónica do documento.'
+                },
+                {
+                  label: 'Eliminar recibo',
+                  status: 'verificado',
+                  detail: 'Anulação do documento emitido.'
+                },
+                {
+                  label: 'Impressão de seguida',
+                  status: 'verificado',
+                  detail: 'Fluxo de impressão automática após emissão.'
+                },
+                {
+                  label: 'Nota de crédito do condómino',
+                  status: 'docs',
+                  detail: 'Crédito manual na conta corrente.'
+                }
+              ]
+            },
+            {
+              title: 'Avisos e pagamentos',
+              items: [
+                {
+                  label: 'Recebimento de desconhecidos',
+                  status: 'verificado',
+                  detail: 'Tratamento de valores sem origem imediata.'
+                },
+                {
+                  label: 'Avisos de cobrança: processar, consultar e eliminar',
+                  status: 'verificado',
+                  detail: 'Gestão completa dos avisos.'
+                },
+                {
+                  label: 'Processamento manual e automático dos avisos de cobrança',
+                  status: 'verificado',
+                  detail: 'Rotina recorrente com automação.'
+                },
+                {
+                  label: 'Alertas',
+                  status: 'verificado',
+                  detail: 'Notificações e avisos operacionais.'
+                },
+                {
+                  label: 'Relatórios',
+                  status: 'verificado',
+                  detail: 'Listagens de tesouraria.'
+                }
+              ]
+            },
+            {
+              title: 'Campos e filtros vistos no demo',
+              items: [
+                {
+                  label:
+                    'Condomínio, fração, condómino, tipo de recibo, modo de pagamento, valor, data do documento e observações',
+                  status: 'verificado',
+                  detail: 'Campos de processamento do recibo.'
+                },
+                {
+                  label:
+                    'Saldo anterior agrupado/detalhado, descrição do saldo anterior e descrição no cabeçalho',
+                  status: 'verificado',
+                  detail: 'Configuração do aviso de cobrança.'
+                },
+                {
+                  label: 'Enviou por email e anexo adicional ao email',
+                  status: 'verificado',
+                  detail: 'Expedição digital do aviso.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '08',
+          title: 'Contabilidade',
+          summary:
+            'Lançamentos, fornecedores, documentos contabilísticos, fecho do exercício e relatórios detalhados.',
+          groups: [
+            {
+              title: 'Lançamentos e operações',
+              items: [
+                {
+                  label: 'Juros bancários',
+                  status: 'docs',
+                  detail: 'Registo de receitas bancárias.'
+                },
+                {
+                  label: 'Adiantamento por condómino',
+                  status: 'docs',
+                  detail: 'Entrada antecipada em conta contabilística.'
+                },
+                {
+                  label: 'Pagamentos a fornecedor',
+                  status: 'docs',
+                  detail: 'Liquidação de faturas e pagamentos.'
+                },
+                {
+                  label: 'Notas de crédito de fornecedor',
+                  status: 'docs',
+                  detail: 'Lançamento de notas de crédito.'
+                },
+                {
+                  label: 'Anular faturas de fornecedores e anular pagamento de fatura',
+                  status: 'docs',
+                  detail: 'Processos de anulação quando o documento está errado.'
+                },
+                {
+                  label: 'Correção de valores em mapas',
+                  status: 'docs',
+                  detail: 'Ajuste de valores contabilísticos.'
+                },
+                {
+                  label: 'Fecho e reabertura do exercício',
+                  status: 'docs',
+                  detail: 'Encerramento anual e reposição de exercício.'
+                },
+                {
+                  label: 'Saldo do fundo de reserva',
+                  status: 'docs',
+                  detail: 'Gestão do fundo comum de reserva.'
+                },
+                {
+                  label: 'Transferências de caixa (conta 115)',
+                  status: 'docs',
+                  detail: 'Transferência entre caixa e contas.'
+                },
+                {
+                  label: 'Talões de depósito',
+                  status: 'docs',
+                  detail: 'Registo de depósitos bancários.'
+                },
+                {
+                  label: 'Condómino pagou fatura de fornecedor',
+                  status: 'docs',
+                  detail: 'Fluxo especial de pagamento.'
+                },
+                {
+                  label: 'Indemnizações de seguros',
+                  status: 'docs',
+                  detail: 'Contabilização de compensações de seguro.'
+                }
+              ]
+            },
+            {
+              title: 'Documentos contabilísticos',
+              items: [
+                {
+                  label: 'Documentos contabilísticos',
+                  status: 'verificado',
+                  detail: 'Base documental da contabilidade.'
+                },
+                {
+                  label: 'Faturas de fornecedor',
+                  status: 'verificado',
+                  detail: 'Entrada e gestão de documentos de fornecedores.'
+                },
+                {
+                  label: 'Processar fatura de fornecedor',
+                  status: 'verificado',
+                  detail: 'Lançamento individual.'
+                },
+                {
+                  label: 'Processar faturas de fornecedor em lote',
+                  status: 'verificado',
+                  detail: 'Processamento em massa.'
+                },
+                {
+                  label: 'Processar fatura de consumo',
+                  status: 'verificado',
+                  detail: 'Faturas de consumos e utilidades.'
+                },
+                {
+                  label: 'Processar fatura de produtos de limpeza',
+                  status: 'verificado',
+                  detail: 'Categoria específica de despesa.'
+                }
+              ]
+            },
+            {
+              title: 'Relatórios contabilísticos',
+              items: [
+                {
+                  label: 'Relatório de Contas Unificado',
+                  status: 'verificado',
+                  detail: 'Visão agregada das contas.'
+                },
+                {
+                  label: 'Capa do Relatório de Contas',
+                  status: 'verificado',
+                  detail: 'Página de rosto do relatório.'
+                },
+                {
+                  label: 'Resumo das Contas',
+                  status: 'verificado',
+                  detail: 'Síntese dos movimentos.'
+                },
+                {
+                  label: 'Balancete Analítico',
+                  status: 'verificado',
+                  detail: 'Pormenor contabilístico.'
+                },
+                {
+                  label: 'Demonstração de Resultados',
+                  status: 'verificado',
+                  detail: 'Resultado do exercício.'
+                },
+                {
+                  label: 'Balanço',
+                  status: 'verificado',
+                  detail: 'Posição financeira.'
+                },
+                {
+                  label: 'Resultados Mensais',
+                  status: 'verificado',
+                  detail: 'Desempenho mês a mês.'
+                },
+                {
+                  label: 'Balancete de Fornecedores',
+                  status: 'verificado',
+                  detail: 'Saldos de fornecedores.'
+                },
+                {
+                  label: 'Balancete de Condóminos',
+                  status: 'verificado',
+                  detail: 'Saldos por condómino.'
+                },
+                {
+                  label: 'Relatório de Contas Completo',
+                  status: 'verificado',
+                  detail: 'Versão completa para auditoria.'
+                },
+                {
+                  label: 'Relatório de Contas Simplificado I',
+                  status: 'verificado',
+                  detail: 'Versão resumida.'
+                },
+                {
+                  label: 'Relatório de Contas Simplificado II',
+                  status: 'verificado',
+                  detail: 'Versão resumida alternativa.'
+                },
+                {
+                  label: 'Verbete Contabilístico',
+                  status: 'verificado',
+                  detail: 'Ficha de registo contabilístico.'
+                },
+                {
+                  label: 'Contas SNC',
+                  status: 'verificado',
+                  detail: 'Mapeamento SNC.'
+                },
+                {
+                  label: 'Rúbricas',
+                  status: 'verificado',
+                  detail: 'Classificação contabilística.'
+                },
+                {
+                  label: 'Balancete de Condóminos (Obras)',
+                  status: 'verificado',
+                  detail: 'Separação para obras.'
+                },
+                {
+                  label: 'Edifícios por Fechar',
+                  status: 'verificado',
+                  detail: 'Condomínios por encerrar.'
+                },
+                {
+                  label: 'Edifícios Fechados',
+                  status: 'verificado',
+                  detail: 'Condomínios encerrados.'
+                },
+                {
+                  label: 'CTT',
+                  status: 'verificado',
+                  detail: 'Listagem para expedição postal.'
+                },
+                {
+                  label: 'Proveitos',
+                  status: 'verificado',
+                  detail: 'Mapa de receitas.'
+                },
+                {
+                  label: 'Despesas com Fornecedores',
+                  status: 'verificado',
+                  detail: 'Mapa de despesas.'
+                },
+                {
+                  label: 'Despesas com Fornecedores - Recibos Verdes',
+                  status: 'verificado',
+                  detail: 'Despesa por recibos verdes.'
+                },
+                {
+                  label: 'Despesas - Recibos Verdes',
+                  status: 'verificado',
+                  detail: 'Relatório específico.'
+                },
+                {
+                  label: 'Despesas',
+                  status: 'verificado',
+                  detail: 'Mapa geral de despesa.'
+                },
+                {
+                  label: 'Gráficos',
+                  status: 'verificado',
+                  detail: 'Visualização gráfica dos saldos.'
+                },
+                {
+                  label: 'Extrato de Lançamentos',
+                  status: 'verificado',
+                  detail: 'Movimentos contabilísticos.'
+                },
+                {
+                  label: 'Condomínios com diferenças de saldos',
+                  status: 'verificado',
+                  detail: 'Detecção de divergências.'
+                },
+                {
+                  label: 'Frações com diferenças de saldos',
+                  status: 'verificado',
+                  detail: 'Detecção de divergências por fração.'
+                },
+                {
+                  label: 'Extrato de FCR',
+                  status: 'verificado',
+                  detail: 'Movimento do fundo comum de reserva.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '09',
+          title: 'Avarias e manutenção',
+          summary:
+            'Produtos, contratos, locais, rotas, inspeções, tarefas e stock para operação técnica.',
+          groups: [
+            {
+              title: 'Operação técnica',
+              items: [
+                {
+                  label: 'Produtos de armazém',
+                  status: 'verificado',
+                  detail: 'Catálogo de bens e consumíveis.'
+                },
+                {
+                  label: 'Contratos de manutenção',
+                  status: 'verificado',
+                  detail: 'Acordos e contratos por local.'
+                },
+                {
+                  label: 'Locais de manutenção',
+                  status: 'verificado',
+                  detail: 'Pontos físicos de intervenção.'
+                },
+                {
+                  label: 'Plano de rotas',
+                  status: 'verificado',
+                  detail: 'Planeamento operacional.'
+                },
+                {
+                  label: 'Rotas',
+                  status: 'verificado',
+                  detail: 'Execução de rotas e deslocações.'
+                },
+                {
+                  label: 'Inspeções periódicas',
+                  status: 'verificado',
+                  detail: 'Rotinas recorrentes e checks periódicos.'
+                },
+                {
+                  label: 'Tarefas',
+                  status: 'verificado',
+                  detail: 'Gestão de trabalho atribuída.'
+                },
+                {
+                  label: 'Relatórios',
+                  status: 'verificado',
+                  detail: 'Relatórios operacionais e de manutenção.'
+                }
+              ]
+            },
+            {
+              title: 'Stock e associação',
+              items: [
+                {
+                  label: 'Gestão de stock em armazém',
+                  status: 'verificado',
+                  detail: 'Quantidade disponível e controlo de inventário.'
+                },
+                {
+                  label: 'Associação de produtos a utilizadores',
+                  status: 'verificado',
+                  detail: 'Quem usa o quê em cada tarefa.'
+                },
+                {
+                  label: 'Quantidade em stock',
+                  status: 'verificado',
+                  detail: 'Quantidade física e operacional.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '10',
+          title: 'Assembleias',
+          summary:
+            'Agenda, votação, convocatórias, atas, comprovativos, add-in Word e presenças.',
+          groups: [
+            {
+              title: 'Módulo de assembleias',
+              items: [
+                {
+                  label: 'Agenda de assembleias',
+                  status: 'verificado',
+                  detail: 'Gestão da agenda e do calendário.'
+                },
+                {
+                  label: 'Assembleia digital',
+                  status: 'verificado',
+                  detail: 'Sessão digital / remota.'
+                },
+                {
+                  label: 'Votações',
+                  status: 'verificado',
+                  detail: 'Votação e registo de decisão.'
+                },
+                {
+                  label: 'Convocatórias',
+                  status: 'verificado',
+                  detail: 'Preparação e envio.'
+                },
+                {
+                  label: 'Emissão de convocatórias',
+                  status: 'verificado',
+                  detail: 'Geração do documento de convocação.'
+                },
+                {
+                  label: 'Comprovativos de envios',
+                  status: 'verificado',
+                  detail: 'Prova de expedição.'
+                },
+                {
+                  label: 'Atas',
+                  status: 'verificado',
+                  detail: 'Registo de atas de reunião.'
+                },
+                {
+                  label: 'Envio de atas',
+                  status: 'verificado',
+                  detail: 'Distribuição da ata aos destinatários.'
+                },
+                {
+                  label: 'Add-In do Word',
+                  status: 'verificado',
+                  detail: 'Integração com modelos em Word.'
+                },
+                {
+                  label: 'Relatórios',
+                  status: 'verificado',
+                  detail: 'Mapas e listagens de assembleias.'
+                }
+              ]
+            },
+            {
+              title: 'Dados da agenda e lista de presenças',
+              items: [
+                {
+                  label: 'Número, exercício, tipo de assembleia, local, data e hora',
+                  status: 'verificado',
+                  detail: 'Campos da agenda.'
+                },
+                {
+                  label: 'Segunda convocatória com dias e tempo',
+                  status: 'verificado',
+                  detail: 'Configuração da segunda chamada.'
+                },
+                {
+                  label: 'Assembleia adiada',
+                  status: 'verificado',
+                  detail: 'Estado da sessão.'
+                },
+                {
+                  label: 'Gestor e assessor',
+                  status: 'verificado',
+                  detail: 'Responsáveis pela reunião.'
+                },
+                {
+                  label: 'Upload de ata, relatório de contas e orçamento',
+                  status: 'verificado',
+                  detail: 'Ficheiros de suporte da reunião.'
+                },
+                {
+                  label:
+                    'Fração, letra, bloco, piso, porta, permilagem, votação, presente, procurador, respondido, nome do procurador e presença online',
+                  status: 'verificado',
+                  detail: 'Lista de presenças detalhada.'
+                },
+                {
+                  label: 'Upload de procuração',
+                  status: 'verificado',
+                  detail: 'Documento de representação.'
+                },
+                {
+                  label: 'Totais automáticos: presentes, procuradores e total',
+                  status: 'verificado',
+                  detail: 'Somatórios automáticos.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '11',
+          title: 'Correspondência',
+          summary:
+            'Envio de emails e SMS, documentos enviados, templates, cartas e rastreabilidade.',
+          groups: [
+            {
+              title: 'Email',
+              items: [
+                {
+                  label: 'Enviar para o condomínio',
+                  status: 'verificado',
+                  detail: 'Mensagem para um condomínio específico.'
+                },
+                {
+                  label: 'Enviar para condóminos',
+                  status: 'verificado',
+                  detail: 'Envio individual ou em massa para condóminos.'
+                },
+                {
+                  label: 'Enviar para frações',
+                  status: 'verificado',
+                  detail: 'Comunicação por fração.'
+                },
+                {
+                  label: 'Enviar para fornecedores',
+                  status: 'verificado',
+                  detail: 'Comunicação com entidades fornecedoras.'
+                },
+                {
+                  label: 'Assunto, editor rico e anexos 1/2/3',
+                  status: 'verificado',
+                  detail: 'Campos do formulário de email.'
+                },
+                {
+                  label: 'Rever com IA',
+                  status: 'verificado',
+                  detail: 'Apoio inteligente antes de enviar.'
+                }
+              ]
+            },
+            {
+              title: 'SMS',
+              items: [
+                {
+                  label: 'Enviar SMS para o condomínio',
+                  status: 'verificado',
+                  detail: 'Mensagem SMS por condomínio.'
+                },
+                {
+                  label: 'Enviar SMS para a fração',
+                  status: 'verificado',
+                  detail: 'SMS por unidade.'
+                },
+                {
+                  label: 'Envio direto',
+                  status: 'verificado',
+                  detail: 'Envio rápido para um número específico.'
+                },
+                {
+                  label: 'Contador de caracteres e revisão com IA',
+                  status: 'verificado',
+                  detail: 'Controlo de tamanho e revisão assistida.'
+                }
+              ]
+            },
+            {
+              title: 'Documentos e rastreio',
+              items: [
+                {
+                  label: 'Consulta de documentos enviados',
+                  status: 'verificado',
+                  detail: 'Rastreabilidade completa do que foi expedido.'
+                },
+                {
+                  label: 'Registo coletivo',
+                  status: 'docs',
+                  detail: 'Registo central de documentos.'
+                },
+                {
+                  label: 'Explicação da elaboração de cartas',
+                  status: 'verificado',
+                  detail: 'Ajuda operacional para criação de cartas.'
+                },
+                {
+                  label: 'Elaboração de templates de documentos',
+                  status: 'verificado',
+                  detail: 'Modelos editáveis para comunicação.'
+                },
+                {
+                  label: 'Processamento de documentos',
+                  status: 'verificado',
+                  detail: 'Fluxo de tratamento documental.'
+                },
+                {
+                  label: 'Mensagens, alertas e saldo de extrato de conta',
+                  status: 'docs',
+                  detail: 'Campos de consulta e notificação.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '12',
+          title: 'Seguros',
+          summary:
+            'Seguros do condomínio, individuais, simulações, processamento, alertas e relatórios.',
+          groups: [
+            {
+              title: 'Funcionalidades do seguro',
+              items: [
+                {
+                  label: 'Seguros do condomínio',
+                  status: 'verificado',
+                  detail: 'Ficha principal de seguro do edifício.'
+                },
+                {
+                  label: 'Seguros individuais',
+                  status: 'verificado',
+                  detail: 'Seguros associados a frações/entidades.'
+                },
+                {
+                  label: 'Simulador de orçamentos: criar simulação',
+                  status: 'verificado',
+                  detail: 'Criação de simulações e cotações.'
+                },
+                {
+                  label: 'Simulador de orçamentos: consultar/anular simulação',
+                  status: 'verificado',
+                  detail: 'Consulta e cancelamento.'
+                },
+                {
+                  label: 'Processamento de seguro: processar seguro',
+                  status: 'verificado',
+                  detail: 'Lançamento do seguro.'
+                },
+                {
+                  label: 'Processamento de seguro: consultar/anular seguro',
+                  status: 'verificado',
+                  detail: 'Consulta e anulação.'
+                },
+                {
+                  label: 'Alertas',
+                  status: 'verificado',
+                  detail: 'Notificações de renovação e datas limite.'
+                },
+                {
+                  label: 'Relatórios',
+                  status: 'verificado',
+                  detail: 'Listagens do módulo de seguros.'
+                }
+              ]
+            },
+            {
+              title: 'Ficha do seguro do condomínio',
+              items: [
+                {
+                  label:
+                    'Tipo de seguro, apólice, seguradora, mediador, capital seguro e periodicidade de pagamento',
+                  status: 'verificado',
+                  detail: 'Dados do contrato de seguro.'
+                },
+                {
+                  label: 'Data de início, renovação, fim e observações',
+                  status: 'verificado',
+                  detail: 'Ciclo de vigência do seguro.'
+                },
+                {
+                  label: 'Parte do orçamento vs centro de custo à parte',
+                  status: 'verificado',
+                  detail: 'Definição do tratamento contabilístico.'
+                },
+                {
+                  label: 'Nº de recibo, data início/fim, prémio e ficheiro',
+                  status: 'verificado',
+                  detail: 'Separador de pagamentos do seguro.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '13',
+          title: 'Obrigações declarativas',
+          summary:
+            'Documentos e relatórios declarativos produzidos a partir dos dados do condomínio.',
+          groups: [
+            {
+              title: 'Relatórios e documentos',
+              items: [
+                {
+                  label: 'Declaração de Não Dívida',
+                  status: 'docs',
+                  detail: 'Documento de situação financeira.'
+                },
+                {
+                  label: 'Declaração de IRS (Condomínio)',
+                  status: 'docs',
+                  detail: 'Emitida para efeitos fiscais.'
+                },
+                {
+                  label: 'Declaração de Retenção na Fonte (Prediais)',
+                  status: 'docs',
+                  detail: 'Documento fiscal do condomínio.'
+                },
+                {
+                  label: 'Atualização de Rendas',
+                  status: 'docs',
+                  detail: 'Tratamento de rendas e actualizações.'
+                },
+                {
+                  label: 'Listagem de Rendimentos Prediais',
+                  status: 'docs',
+                  detail: 'Mapa de rendimentos para declaração.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '14',
+          title: 'Pagamentos electrónicos',
+          summary:
+            'Serviços de pagamento, referências Multibanco, MB Way, Payshop, Ifthenpay, euPago e erros de transferência.',
+          groups: [
+            {
+              title: 'Métodos e integrações',
+              items: [
+                {
+                  label: 'Multibanco Reference Payment Flow',
+                  status: 'docs',
+                  detail: 'Fluxo de pagamento por referência.'
+                },
+                {
+                  label: 'MB Way',
+                  status: 'docs',
+                  detail: 'Método de pagamento móvel.'
+                },
+                {
+                  label: 'Payshop',
+                  status: 'docs',
+                  detail: 'Método de pagamento em rede física.'
+                },
+                {
+                  label: 'Débito directo',
+                  status: 'docs',
+                  detail: 'Cobrança recorrente e automática.'
+                },
+                {
+                  label: 'Payment Method Costs',
+                  status: 'docs',
+                  detail: 'Custos associados a cada método.'
+                },
+                {
+                  label: 'Configuration for Ifthenpay',
+                  status: 'docs',
+                  detail: 'Configuração do prestador de pagamento.'
+                },
+                {
+                  label: 'Configuration for euPago',
+                  status: 'docs',
+                  detail: 'Configuração de outra gateway de pagamentos.'
+                },
+                {
+                  label: 'Error Creating the Transfer',
+                  status: 'docs',
+                  detail: 'Tratamento de erros na criação da transferência.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '15',
+          title: 'Comunicação, email e ficheiros',
+          summary:
+            'Configuração de email, contas de envio, email por condomínio, cloud drives, open banking e outras integrações de suporte.',
+          groups: [
+            {
+              title: 'Email e notificações',
+              items: [
+                {
+                  label: 'Contas de envio',
+                  status: 'docs',
+                  detail: 'Gestão de contas SMTP e credenciais.'
+                },
+                {
+                  label: 'Gmail simplificado com 2FA e app password',
+                  status: 'docs',
+                  detail: 'Setup guiado para Gmail.'
+                },
+                {
+                  label: 'Envio automático de emails',
+                  status: 'docs',
+                  detail: 'Automatização de e-mails do sistema.'
+                },
+                {
+                  label: 'Configuração de email específica por condomínio',
+                  status: 'docs',
+                  detail: 'Email dedicado a cada prédio.'
+                },
+                {
+                  label: 'Email comercial, tesouraria, contabilidade, RGPD, manutenção, reuniões e API invoice',
+                  status: 'docs',
+                  detail: 'Tipos de email por departamento/integração.'
+                }
+              ]
+            },
+            {
+              title: 'Gestão de ficheiros e integrações',
+              items: [
+                {
+                  label: 'Cloud Drive Integration',
+                  status: 'docs',
+                  detail: 'Ligação a armazenamento externo.'
+                },
+                {
+                  label: 'Dropbox',
+                  status: 'docs',
+                  detail: 'Integração de armazenamento em nuvem.'
+                },
+                {
+                  label: 'Google Drive',
+                  status: 'docs',
+                  detail: 'Integração de armazenamento em nuvem.'
+                },
+                {
+                  label: 'FTP / SFTP em servidor do cliente',
+                  status: 'docs',
+                  detail: 'Ligação a localização externa de ficheiros.'
+                },
+                {
+                  label: 'Open Banking',
+                  status: 'docs',
+                  detail: 'Ligação bancária e leitura automática de extratos.'
+                },
+                {
+                  label: 'Reconciliação e conferência automática',
+                  status: 'docs',
+                  detail: 'Apoio à reconciliação bancária.'
+                },
+                {
+                  label: 'Instalação no desktop / modo PWA',
+                  status: 'docs',
+                  detail: 'Execução instalável em desktop.'
+                }
+              ]
+            },
+            {
+              title: 'Suporte operacional',
+              items: [
+                {
+                  label: 'Mensagens',
+                  status: 'docs',
+                  detail: 'Mensagens e alertas internos do sistema.'
+                },
+                {
+                  label: 'Alertas',
+                  status: 'docs',
+                  detail: 'Notificações da plataforma.'
+                },
+                {
+                  label: 'Declaração de não dívida',
+                  status: 'docs',
+                  detail: 'Documento de suporte ao condómino.'
+                },
+                {
+                  label: 'Available Application Links',
+                  status: 'docs',
+                  detail: 'Links oficiais para backoffice, apps e portais.'
+                },
+                {
+                  label: 'Bulk Registered Mail',
+                  status: 'docs',
+                  detail: 'Correio registado em massa.'
+                },
+                {
+                  label: 'Account Statement Balances',
+                  status: 'docs',
+                  detail: 'Consulta de saldos e extratos.'
+                },
+                {
+                  label: 'View Sent Documents',
+                  status: 'docs',
+                  detail: 'Consulta de documentos já enviados.'
+                },
+                {
+                  label: 'Installing Software on the Desktop',
+                  status: 'docs',
+                  detail: 'Guia de instalação do software.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '16',
+          title: 'IA, portais e apps',
+          summary:
+            'Capacidades inteligentes e aplicações destinadas a condóminos, técnicos e operação externa.',
+          groups: [
+            {
+              title: 'IA no backoffice',
+              items: [
+                {
+                  label: 'Melhorar emails automaticamente',
+                  status: 'verificado',
+                  detail: 'Revisão e melhoria automática de texto.'
+                },
+                {
+                  label: 'Descrever ocorrências automaticamente a partir de fotografias',
+                  status: 'verificado',
+                  detail: 'Análise de imagem para descrição.'
+                },
+                {
+                  label: 'Gerar sugestões de orçamento',
+                  status: 'verificado',
+                  detail: 'Apoio inteligente ao orçamento.'
+                },
+                {
+                  label: 'Assistente para condóminos',
+                  status: 'verificado',
+                  detail: 'Assistência ao utilizador final.'
+                },
+                {
+                  label: 'Chat externo no website',
+                  status: 'verificado',
+                  detail: 'Assistente IA para o site público.'
+                }
+              ]
+            },
+            {
+              title: 'Portal / App de Condóminos',
+              items: [
+                {
+                  label: 'Consulta da conta e situação do condomínio',
+                  status: 'docs',
+                  detail: 'Visão de conta corrente e estado.'
+                },
+                {
+                  label: 'Consulta de recibos',
+                  status: 'docs',
+                  detail: 'Acesso a documentos emitidos.'
+                },
+                {
+                  label: 'Consulta de avisos / facturação',
+                  status: 'docs',
+                  detail: 'Avisos de cobrança e facturação.'
+                },
+                {
+                  label: 'Consulta de despesas, documentos, extratos e informação financeira',
+                  status: 'docs',
+                  detail: 'Consulta documental e financeira.'
+                },
+                {
+                  label: 'Consulta de regulamentos e formas de pagamento',
+                  status: 'docs',
+                  detail: 'Documentação e meios de pagamento.'
+                },
+                {
+                  label: 'Notícias e comunicações da administração',
+                  status: 'docs',
+                  detail: 'Comunicação institucional.'
+                },
+                {
+                  label: 'Participação em assembleias e votação digital',
+                  status: 'docs',
+                  detail: 'Interacção remota com o condomínio.'
+                },
+                {
+                  label: 'Reporte de ocorrências com fotografia e acompanhamento do estado',
+                  status: 'docs',
+                  detail: 'Registo e seguimento de tickets.'
+                },
+                {
+                  label: 'Actualização de dados pessoais e alteração de password',
+                  status: 'docs',
+                  detail: 'Auto-serviço do utilizador.'
+                },
+                {
+                  label: 'Assistente/apoio por IA',
+                  status: 'docs',
+                  detail: 'Apoio inteligente no portal.'
+                },
+                {
+                  label: 'Idiomas PT / EN / ES e modo claro/escuro',
+                  status: 'docs',
+                  detail: 'Localização e preferências visuais.'
+                }
+              ]
+            },
+            {
+              title: 'Portal / App de Técnicos',
+              items: [
+                {
+                  label: 'Dashboard com rotas de manutenção e agenda diária',
+                  status: 'docs',
+                  detail: 'Operação diária do técnico.'
+                },
+                {
+                  label: 'Intervenções pendentes, fecho de intervenções e nova ocorrência',
+                  status: 'docs',
+                  detail: 'Gestão da actividade técnica.'
+                },
+                {
+                  label: 'Consulta das ocorrências em que o técnico interveio',
+                  status: 'docs',
+                  detail: 'Histórico do técnico.'
+                },
+                {
+                  label: 'Confirmação por QR Code e NFC',
+                  status: 'docs',
+                  detail: 'Validação de presença/intervenção.'
+                },
+                {
+                  label: 'Gestão de locais de manutenção por QR/NFC',
+                  status: 'docs',
+                  detail: 'Identificação dos espaços físicos.'
+                },
+                {
+                  label: 'Web app instalável, idiomas PT / EN / ES e modo claro/escuro',
+                  status: 'docs',
+                  detail: 'App utilizável no terreno.'
+                }
+              ]
+            }
+          ]
+        },
+        {
+          code: '17',
+          title: 'Arranque, apresentação e suporte',
+          summary:
+            'Fluxos guiados de início, vídeos, apresentações e base de conhecimento para suporte operacional.',
+          groups: [
+            {
+              title: 'Onboarding',
+              items: [
+                {
+                  label: 'Getting Started with GC',
+                  status: 'docs',
+                  detail: 'Guia inicial do produto.'
+                },
+                {
+                  label: 'System Configuration',
+                  status: 'docs',
+                  detail: 'Passo 1 do arranque.'
+                },
+                {
+                  label: 'Add Buildings',
+                  status: 'docs',
+                  detail: 'Passo 2 do onboarding.'
+                },
+                {
+                  label: 'Create Budget and Generate Fees / Generate Fees',
+                  status: 'docs',
+                  detail: 'Fluxo consoante existir ou não orçamento definido.'
+                },
+                {
+                  label: 'Issue Billing Notices',
+                  status: 'docs',
+                  detail: 'Passo 4 do arranque.'
+                },
+                {
+                  label: 'Issue Receipts',
+                  status: 'docs',
+                  detail: 'Passo 5 do arranque.'
+                }
+              ]
+            },
+            {
+              title: 'Presentations e vídeos',
+              items: [
+                {
+                  label: 'Condominium Setup',
+                  status: 'docs',
+                  detail: 'Apresentação de configuração do condomínio.'
+                },
+                {
+                  label: 'Budgets',
+                  status: 'docs',
+                  detail: 'Apresentação sobre orçamentos.'
+                },
+                {
+                  label: 'Condominium Fees',
+                  status: 'docs',
+                  detail: 'Apresentação sobre quotas.'
+                },
+                {
+                  label: 'Meters',
+                  status: 'docs',
+                  detail: 'Apresentação sobre contadores.'
+                },
+                {
+                  label: 'Condominium Staff',
+                  status: 'docs',
+                  detail: 'Apresentação sobre equipas e pessoal.'
+                },
+                {
+                  label: 'Vídeos de Administração, Assembleias, Contabilidade, Manutenção, Litígios, etc.',
+                  status: 'docs',
+                  detail: 'Base multimédia de formação e suporte.'
+                }
+              ]
+            }
+          ]
+        }
+      ];
+
+      const state = {
+        query: '',
+        filter: 'all',
+        selection: new Set()
+      };
+
+      const storageKey = 'gcsoftware-functional-selection-v1';
+      const modulesRoot = document.getElementById('modules');
+      const searchInput = document.getElementById('search');
+      const totalCountEl = document.getElementById('totalCount');
+      const selectedCountEl = document.getElementById('selectedCount');
+      const verifiedCountEl = document.getElementById('verifiedCount');
+      const docsCountEl = document.getElementById('docsCount');
+      const filterButtons = [...document.querySelectorAll('[data-filter]')];
+      const toggleAllBtn = document.getElementById('toggleAll');
+      const clearSelectionBtn = document.getElementById('clearSelection');
+      const printBtn = document.getElementById('printPage');
+
+      function slugify(text) {
+        return String(text)
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+      }
+
+      function statusLabel(status) {
+        switch (status) {
+          case 'verificado':
+            return 'verificado';
+          case 'docs':
+            return 'docs';
+          case 'a-confirmar':
+            return 'a confirmar';
+          default:
+            return 'pendente';
+        }
+      }
+
+      function isVisibleByFilter(item, selected) {
+        if (state.filter === 'all') return true;
+        if (state.filter === 'selected') return selected;
+        return item.status === state.filter;
+      }
+
+      function buildInventory() {
+        modulesRoot.innerHTML = inventory
+          .map((module, moduleIndex) => {
+            const moduleId = slugify(`${module.code}-${module.title}`);
+            return `
+              <details class="module panel" open data-module-id="${moduleId}">
+                <summary>
+                  <div class="module-head">
+                    <div class="module-title">
+                      <span class="module-code">${module.code}</span>
+                      <strong>${module.title}</strong>
+                    </div>
+                    <p class="module-summary">${module.summary}</p>
+                  </div>
+                </summary>
+                <div class="group-grid">
+                  ${module.groups
+                    .map((group, groupIndex) => {
+                      const groupId = `${moduleId}-${groupIndex}`;
+                      return `
+                        <section class="group" data-group-id="${groupId}">
+                          <span class="group-title">${group.title}</span>
+                          <div class="features">
+                            ${group.items
+                              .map((item, itemIndex) => {
+                                const id = `${groupId}-${itemIndex}-${slugify(item.label).slice(0, 40)}`;
+                                const selected = state.selection.has(id);
+                                return `
+                                  <label
+                                    class="feature"
+                                    data-item-id="${id}"
+                                    data-status="${item.status}"
+                                    data-search="${(module.title + ' ' + group.title + ' ' + item.label + ' ' + item.detail).toLowerCase()}"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      data-id="${id}"
+                                      ${selected ? 'checked' : ''}
+                                      aria-label="${item.label}"
+                                    />
+                                    <span class="feature-main">
+                                      <strong>${item.label}</strong>
+                                      <span>${item.detail}</span>
+                                    </span>
+                                    <span class="pill ${item.status}">${statusLabel(item.status)}</span>
+                                  </label>
+                                `;
+                              })
+                              .join('')}
+                          </div>
+                        </section>
+                      `;
+                    })
+                    .join('')}
+                </div>
+              </details>
+            `;
+          })
+          .join('');
+
+        modulesRoot.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+          checkbox.addEventListener('change', (event) => {
+            const target = event.currentTarget;
+            const id = target.dataset.id;
+            if (!id) return;
+            if (target.checked) {
+              state.selection.add(id);
+            } else {
+              state.selection.delete(id);
+            }
+            persistSelection();
+            updateSummary();
+          });
+        });
+      }
+
+      function persistSelection() {
+        localStorage.setItem(storageKey, JSON.stringify([...state.selection]));
+      }
+
+      function loadSelection() {
+        try {
+          const raw = localStorage.getItem(storageKey);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return;
+          state.selection = new Set(parsed.map(String));
+        } catch {
+          state.selection = new Set();
+        }
+      }
+
+      function updateSummary() {
+        const allItems = [...document.querySelectorAll('.feature')];
+        const visibleItems = [];
+        let verified = 0;
+        let docs = 0;
+
+        allItems.forEach((item) => {
+          const status = item.dataset.status;
+          const selected = state.selection.has(item.dataset.itemId);
+          const matchesQuery = item.dataset.search.includes(state.query);
+          const matchesStatus = isVisibleByFilter({ status }, selected);
+          const visible = matchesQuery && matchesStatus;
+          item.classList.toggle('hidden', !visible);
+          if (visible) visibleItems.push(item);
+          if (status === 'verificado') verified += 1;
+          if (status === 'docs' || status === 'pendente' || status === 'a-confirmar') docs += 1;
+        });
+
+        document.querySelectorAll('.group').forEach((group) => {
+          const groupHasVisible = [...group.querySelectorAll('.feature')].some(
+            (feature) => !feature.classList.contains('hidden')
+          );
+          group.classList.toggle('hidden', !groupHasVisible);
+        });
+
+        document.querySelectorAll('.module').forEach((module) => {
+          const moduleHasVisible = [...module.querySelectorAll('.feature')].some(
+            (feature) => !feature.classList.contains('hidden')
+          );
+          module.hidden = !moduleHasVisible;
+        });
+
+        totalCountEl.textContent = String(allItems.length);
+        selectedCountEl.textContent = String(state.selection.size);
+        verifiedCountEl.textContent = String(verified);
+        docsCountEl.textContent = String(docs);
+      }
+
+      function setFilter(filter) {
+        state.filter = filter;
+        filterButtons.forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.filter === filter);
+        });
+        updateSummary();
+      }
+
+      function toggleDetails(open) {
+        document.querySelectorAll('details.module').forEach((node) => {
+          node.open = open;
+        });
+      }
+
+      loadSelection();
+      buildInventory();
+      updateSummary();
+
+      searchInput.addEventListener('input', () => {
+        state.query = searchInput.value.trim().toLowerCase();
+        updateSummary();
+      });
+
+      filterButtons.forEach((btn) => {
+        btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+      });
+
+      toggleAllBtn.addEventListener('click', () => {
+        const modules = [...document.querySelectorAll('details.module')];
+        const shouldOpen = modules.some((item) => !item.open);
+        toggleDetails(shouldOpen);
+        toggleAllBtn.textContent = shouldOpen ? 'Fechar tudo' : 'Abrir tudo';
+      });
+
+      clearSelectionBtn.addEventListener('click', () => {
+        state.selection.clear();
+        persistSelection();
+        document.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+          checkbox.checked = false;
+        });
+        updateSummary();
+      });
+
+      printBtn.addEventListener('click', () => window.print());
+    </script>
+  </body>
+</html>

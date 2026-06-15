@@ -1,4 +1,4 @@
-import { component$, useSignal, useVisibleTask$, type PropFunction } from '@builder.io/qwik';
+import { component$, type PropFunction } from '@builder.io/qwik';
 import type { CompletenessReport, Condominium, CondominiumAlert, CondominiumPlanMarker } from '../../lib/api';
 
 export type FieldKind = 'text' | 'number' | 'textarea' | 'checkbox';
@@ -228,6 +228,8 @@ export const FuturePanel = component$((props: {
   const plan = props.selected.media?.find((media) => media.mediaType.toLowerCase().includes('planta')) ?? props.selected.media?.[0];
   const mapUrl = mapEmbedUrl(props.selected);
   const model = props.selected.media?.find((media) => /\.(glb|gltf)$/i.test(media.fileUrl || media.fileName));
+  const modelUrl = model?.fileUrl || model?.downloadUrl || '';
+  const viewerUrl = modelUrl ? buildThreeViewerUrl(modelUrl, props.selected.name) : '';
 
   return (
     <section class="condo-future-panel">
@@ -285,47 +287,19 @@ export const FuturePanel = component$((props: {
       </article>
       <article class="condo-three-panel">
         <strong>Visualizador 3D</strong>
-        {model ? <ThreePreview url={model.fileUrl || model.downloadUrl} /> : <span>Associa um ficheiro .glb ou .gltf para ativar o modelo 3D.</span>}
+        {model ? (
+          <>
+            <span>O viewer abre fora do bundle principal para manter a app leve no arranque.</span>
+            <a class="secondary-action" href={viewerUrl} target="_blank" rel="noreferrer">
+              Abrir vista 3D
+            </a>
+          </>
+        ) : (
+          <span>Associa um ficheiro .glb ou .gltf para ativar o modelo 3D.</span>
+        )}
       </article>
     </section>
   );
-});
-
-export const ThreePreview = component$((props: { url: string }) => {
-  const mountId = useSignal(`three-${Math.random().toString(36).slice(2)}`);
-
-  useVisibleTask$(async () => {
-    const mount = document.getElementById(mountId.value);
-    if (!mount) return;
-    const THREE = await import('three');
-    const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, 1.6, 0.1, 100);
-    camera.position.set(2.4, 1.7, 2.8);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(mount.clientWidth || 360, 220);
-    mount.innerHTML = '';
-    mount.appendChild(renderer.domElement);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x334155, 2.2));
-    const loader = new GLTFLoader();
-    loader.load(props.url, (gltf) => {
-      scene.add(gltf.scene);
-      renderer.render(scene, camera);
-    }, undefined, () => {
-      const geometry = new THREE.BoxGeometry(1, 1, 1);
-      const material = new THREE.MeshStandardMaterial({ color: 0x2f6f73 });
-      scene.add(new THREE.Mesh(geometry, material));
-      renderer.render(scene, camera);
-    });
-    const loop = () => {
-      scene.rotation.y += 0.005;
-      renderer.render(scene, camera);
-      requestAnimationFrame(loop);
-    };
-    loop();
-  });
-
-  return <div class="condo-three-canvas" id={mountId.value} />;
 });
 
 function valueFor(values: Record<string, unknown> | undefined, name: string): string {
@@ -355,6 +329,14 @@ function mapEmbedUrl(item: Condominium): string {
     return `https://www.openstreetmap.org/export/embed.html?bbox=${lon - 0.002}%2C${lat - 0.002}%2C${lon + 0.002}%2C${lat + 0.002}&layer=mapnik&marker=${lat}%2C${lon}`;
   }
   return '';
+}
+
+function buildThreeViewerUrl(modelUrl: string, title: string): string {
+  const searchParams = new URLSearchParams({
+    model: modelUrl,
+    title,
+  });
+  return `/viewer-3d/index.html?${searchParams.toString()}`;
 }
 
 function shortAddress(item: Condominium): string {

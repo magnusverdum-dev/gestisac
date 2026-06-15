@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>GCSoftware | Folha de Assinatura</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #ffffff;
+        --paper: #ffffff;
+        --ink: #111827;
+        --muted: #475569;
+        --line: #cbd5e1;
+        --line-strong: #94a3b8;
+        --accent: #0f2747;
+        --accent-2: #9a6700;
+        --ok: #166534;
+        --shadow: none;
+        font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+      }
+
+      body {
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .page {
+        width: min(1180px, calc(100vw - 24px));
+        margin: 0 auto;
+        padding: 16px 0 24px;
+      }
+
+      .header {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(250px, 0.6fr);
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .box {
+        border: 1px solid var(--line);
+        background: var(--paper);
+      }
+
+      .title-box {
+        padding: 16px;
+      }
+
+      .kicker {
+        display: inline-block;
+        padding: 2px 8px;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        background: var(--accent);
+      }
+
+      h1 {
+        margin: 10px 0 8px;
+        font-size: 22px;
+        line-height: 1.15;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .summary {
+        padding: 14px;
+      }
+
+      .summary h2 {
+        margin: 0 0 10px;
+        color: var(--accent);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .summary-item {
+        padding: 10px;
+        border: 1px solid var(--line);
+      }
+
+      .summary-item span {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .summary-item strong {
+        display: block;
+        margin-top: 4px;
+        font-size: 18px;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .controls .box {
+        padding: 10px;
+      }
+
+      .search {
+        width: 100%;
+        min-height: 38px;
+        padding: 0 10px;
+        border: 1px solid var(--line-strong);
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
+        padding: 0 12px;
+        border: 1px solid var(--line-strong);
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+      }
+
+      .btn.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .legend {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .swatch {
+        width: 10px;
+        height: 10px;
+        border: 1px solid currentColor;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .module {
+        padding: 12px;
+        break-inside: avoid;
+      }
+
+      .module[hidden],
+      .group[hidden],
+      .feature.hidden {
+        display: none !important;
+      }
+
+      .module-head {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+
+      .module-code {
+        color: var(--accent-2);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .module h2 {
+        margin: 0;
+        font-size: 16px;
+        text-transform: uppercase;
+        line-height: 1.2;
+      }
+
+      .module p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .group {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+
+      .group-title {
+        margin-bottom: 8px;
+        color: var(--accent);
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .features {
+        display: grid;
+        gap: 6px;
+      }
+
+      .feature {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: start;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+      }
+
+      .feature input {
+        width: 14px;
+        height: 14px;
+        margin-top: 2px;
+        accent-color: var(--accent);
+      }
+
+      .feature strong {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 12px;
+      }
+
+      .feature span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 18px;
+        padding: 0 6px;
+        color: #fff;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .tag.verificado {
+        background: var(--ok);
+      }
+
+      .tag.docs {
+        background: var(--accent);
+      }
+
+      .tag.pendente {
+        background: var(--accent-2);
+      }
+
+      .tag.a-confirmar {
+        background: #b91c1c;
+      }
+
+      .footer {
+        margin-top: 12px;
+        padding: 14px;
+      }
+
+      .signatures {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .signature {
+        min-height: 90px;
+        padding: 12px;
+        border: 1px solid var(--line);
+      }
+
+      .signature strong {
+        display: block;
+        margin-bottom: 42px;
+        color: var(--accent);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .line {
+        border-top: 1px solid #111;
+        padding-top: 6px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .meta div {
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+      }
+
+      .meta span {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .meta strong {
+        display: block;
+        margin-top: 4px;
+        font-size: 12px;
+      }
+
+      @media (max-width: 980px) {
+        .header,
+        .controls,
+        .grid,
+        .signatures,
+        .meta {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media print {
+        @page {
+          size: A4;
+          margin: 10mm;
+        }
+
+        body {
+          color: #000;
+          background: #fff;
+        }
+
+        .controls,
+        .btn {
+          display: none !important;
+        }
+
+        .page {
+          width: 100%;
+          padding: 0;
+        }
+
+        .box,
+        .module,
+        .feature,
+        .summary-item,
+        .signature,
+        .meta div {
+          break-inside: avoid;
+          background: #fff !important;
+          border-color: #999 !important;
+        }
+
+        .module p,
+        .feature span,
+        .subtitle,
+        .line,
+        .meta span,
+        .summary-item span {
+          color: #333 !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="header">
+        <article class="box title-box">
+          <span class="kicker">Folha para assinatura manual</span>
+          <h1>GCSoftware - levantamento funcional resumido</h1>
+          <p class="subtitle">
+            Documento simplificado em colunas para ser impresso, revisto e assinado
+            manualmente pela cliente. Mantém o inventário funcional por módulo e
+            permite assinalar, com clareza, o que entra no MVP, o que fica para fases
+            seguintes e o que ainda deve ser confirmado.
+          </p>
+          <div class="meta">
+            <div>
+              <span>Projecto</span>
+              <strong>GCSoftware / GESTISAC</strong>
+            </div>
+            <div>
+              <span>Formato</span>
+              <strong>PDF / impressão</strong>
+            </div>
+            <div>
+              <span>Utilização</span>
+              <strong>Selecção de funcionalidades</strong>
+            </div>
+          </div>
+        </article>
+
+        <aside class="box summary" aria-label="Resumo">
+          <h2>Resumo rápido</h2>
+          <div class="summary-grid">
+            <div class="summary-item">
+              <span>Funcionalidades</span>
+              <strong id="totalCount">0</strong>
+            </div>
+            <div class="summary-item">
+              <span>Seleccionadas</span>
+              <strong id="selectedCount">0</strong>
+            </div>
+            <div class="summary-item">
+              <span>Verificadas</span>
+              <strong id="verifiedCount">0</strong>
+            </div>
+            <div class="summary-item">
+              <span>Docs / pendentes</span>
+              <strong id="docsCount">0</strong>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="controls">
+        <div class="box">
+          <input id="search" class="search" type="search" placeholder="Pesquisar módulo, função ou detalhe..." />
+        </div>
+        <button class="btn" type="button" id="clearSelection">Limpar selecção</button>
+        <button class="btn primary" type="button" id="printPage">Imprimir / PDF</button>
+      </section>
+
+      <div class="legend" aria-label="Legenda">
+        <span><i class="swatch" style="color: var(--ok)"></i>Verificado no demo</span>
+        <span><i class="swatch" style="color: var(--accent)"></i>Confirmado na documentação</span>
+        <span><i class="swatch" style="color: var(--accent-2)"></i>A confirmar / pendente</span>
+      </div>
+
+      <section class="grid" id="modules"></section>
+
+      <section class="footer box">
+        <div class="signatures">
+          <div class="signature">
+            <strong>Assinatura da cliente</strong>
+            <div class="line">Nome: ________________________________________________</div>
+            <div class="line">Assinatura: __________________________________________</div>
+          </div>
+          <div class="signature">
+            <strong>Data e observações</strong>
+            <div class="line">Data: ___________________   Hora: ___________________</div>
+            <div class="line">Observações: ________________________________________</div>
+          </div>
+        </div>
+        <p class="subtitle" style="margin-top: 10px;">
+          Fontes: demo oficial do backoffice e documentação pública da GCSoftware.
+          Esta folha foi desenhada para apoio a reunião, validação e assinatura manual.
+        </p>
+      </section>
+    </main>
+
+    <script type="module">
+      async function loadInventory() {
+        const response = await fetch('./gcsoftware-funcionalidades.html', { cache: 'no-store' });
+        const html = await response.text();
+        const scriptMatch = html.match(/<script>([\s\S]*)<\/script>\s*<\/body>/i);
+        if (!scriptMatch) throw new Error('Inventory script not found.');
+
+        const script = scriptMatch[1];
+        const start = script.indexOf('const inventory = [');
+        const stateStart = script.indexOf('\n      const state =', start);
+        if (start === -1 || stateStart === -1) throw new Error('Inventory block not found.');
+
+        const arraySource = script.slice(start + 'const inventory = '.length, stateStart).trim();
+        return Function(`"use strict"; return (${arraySource});`)();
+      }
+
+      const state = {
+        query: '',
+        selection: new Set()
+      };
+
+      const storageKey = 'gcsoftware-functional-selection-v1';
+      const modulesRoot = document.getElementById('modules');
+      const searchInput = document.getElementById('search');
+      const totalCountEl = document.getElementById('totalCount');
+      const selectedCountEl = document.getElementById('selectedCount');
+      const verifiedCountEl = document.getElementById('verifiedCount');
+      const docsCountEl = document.getElementById('docsCount');
+      const clearSelectionBtn = document.getElementById('clearSelection');
+      const printBtn = document.getElementById('printPage');
+
+      function slugify(text) {
+        return String(text)
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+      }
+
+      function persistSelection() {
+        localStorage.setItem(storageKey, JSON.stringify([...state.selection]));
+      }
+
+      function loadSelection() {
+        try {
+          const raw = localStorage.getItem(storageKey);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) state.selection = new Set(parsed.map(String));
+        } catch {
+          state.selection = new Set();
+        }
+      }
+
+      function render(inventory) {
+        const total = inventory.reduce((sum, module) => {
+          return (
+            sum +
+            module.groups.reduce((groupSum, group) => groupSum + group.items.length, 0)
+          );
+        }, 0);
+        state.total = total;
+
+        modulesRoot.innerHTML = inventory
+          .map((module) => {
+            const moduleId = slugify(`${module.code}-${module.title}`);
+            return `
+              <article class="box module" data-module-id="${moduleId}">
+                <div class="module-head">
+                  <span class="module-code">${module.code}</span>
+                  <h2>${module.title}</h2>
+                  <p>${module.summary}</p>
+                </div>
+                ${module.groups
+                  .map((group) => `
+                    <section class="group">
+                      <div class="group-title">${group.title}</div>
+                      <div class="features">
+                        ${group.items
+                          .map((item) => {
+                            const id = `${moduleId}-${slugify(item.label).slice(0, 48)}`;
+                            const selected = state.selection.has(id);
+                            return `
+                              <label
+                                class="feature"
+                                data-status="${item.status}"
+                                data-search="${(module.title + ' ' + group.title + ' ' + item.label + ' ' + item.detail).toLowerCase()}"
+                                data-item-id="${id}"
+                              >
+                                <input type="checkbox" data-id="${id}" ${selected ? 'checked' : ''} />
+                                <div>
+                                  <strong>${item.label}</strong>
+                                  <span>${item.detail}</span>
+                                </div>
+                                <span class="tag ${item.status}">${item.status}</span>
+                              </label>
+                            `;
+                          })
+                          .join('')}
+                      </div>
+                    </section>
+                  `)
+                  .join('')}
+              </article>
+            `;
+          })
+          .join('');
+
+        modulesRoot.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+          checkbox.addEventListener('change', (event) => {
+            const target = event.currentTarget;
+            const id = target.dataset.id;
+            if (!id) return;
+            if (target.checked) {
+              state.selection.add(id);
+            } else {
+              state.selection.delete(id);
+            }
+            persistSelection();
+            update(inventory, total);
+          });
+        });
+
+        update(inventory);
+      }
+
+      function update(inventory) {
+        const query = state.query;
+        let selected = 0;
+        let verified = 0;
+        let docs = 0;
+
+        document.querySelectorAll('.feature').forEach((el) => {
+          const matches = !query || el.dataset.search.includes(query);
+          el.classList.toggle('hidden', !matches);
+          if (state.selection.has(el.dataset.itemId)) selected += 1;
+          if (el.dataset.status === 'verificado') verified += 1;
+          if (el.dataset.status === 'docs' || el.dataset.status === 'pendente' || el.dataset.status === 'a-confirmar') {
+            docs += 1;
+          }
+        });
+
+        document.querySelectorAll('.group').forEach((group) => {
+          const visible = [...group.querySelectorAll('.feature')].some((feature) => !feature.classList.contains('hidden'));
+          group.hidden = !visible;
+        });
+
+        document.querySelectorAll('.module').forEach((module) => {
+          const visible = [...module.querySelectorAll('.feature')].some((feature) => !feature.classList.contains('hidden'));
+          module.hidden = !visible;
+        });
+
+        totalCountEl.textContent = String(state.total || 0);
+        selectedCountEl.textContent = String(selected);
+        verifiedCountEl.textContent = String(verified);
+        docsCountEl.textContent = String(docs);
+      }
+
+      loadSelection();
+      const inventory = await loadInventory();
+      render(inventory);
+      const total = state.total || 0;
+
+      searchInput.addEventListener('input', () => {
+        state.query = searchInput.value.trim().toLowerCase();
+        update(inventory);
+      });
+
+      clearSelectionBtn.addEventListener('click', () => {
+        state.selection.clear();
+        persistSelection();
+        document.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+          checkbox.checked = false;
+        });
+        update(inventory);
+      });
+
+      printBtn.addEventListener('click', () => window.print());
+    </script>
+  </body>
+</html>

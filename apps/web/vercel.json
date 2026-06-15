@@ -29,6 +29,14 @@
   ],
   "rewrites": [
     {
+      "source": "/viewer-3d",
+      "destination": "/viewer-3d/index.html"
+    },
+    {
+      "source": "/viewer-3d/(.*)",
+      "destination": "/viewer-3d/$1"
+    },
+    {
       "source": "/:path((?!api/).*)",
       "destination": "/index.html"
     }

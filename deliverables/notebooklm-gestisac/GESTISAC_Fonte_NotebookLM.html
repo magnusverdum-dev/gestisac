@@ -1,0 +1,1286 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GESTISAC - Dossier Fonte para NotebookLM</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 16mm 15mm 16mm 15mm;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: #13202f;
+      background: #eef3f8;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.48;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 18mm 16mm 16mm;
+      background: #ffffff;
+      page-break-after: always;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .page:last-child {
+      page-break-after: auto;
+    }
+
+    .cover {
+      color: #f7fbff;
+      background:
+        linear-gradient(135deg, rgba(8, 28, 50, 0.96), rgba(16, 63, 94, 0.94)),
+        radial-gradient(circle at 80% 20%, rgba(71, 178, 255, 0.36), transparent 32%),
+        #081c32;
+    }
+
+    .cover h1 {
+      margin: 24mm 0 7mm;
+      font-size: 42pt;
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .cover .subtitle {
+      max-width: 150mm;
+      margin: 0 0 12mm;
+      font-size: 16pt;
+      color: #d9ecff;
+      line-height: 1.32;
+    }
+
+    .cover .meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4mm;
+      margin-top: 26mm;
+    }
+
+    .cover .meta div {
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 4mm;
+    }
+
+    .brand-line {
+      width: 48mm;
+      height: 2mm;
+      background: #49c3ff;
+      margin-bottom: 8mm;
+    }
+
+    h2 {
+      margin: 0 0 6mm;
+      color: #0c3557;
+      font-size: 21pt;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 7mm 0 3mm;
+      color: #174969;
+      font-size: 13.5pt;
+      letter-spacing: 0;
+    }
+
+    h4 {
+      margin: 5mm 0 2mm;
+      color: #174969;
+      font-size: 10.8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    p {
+      margin: 0 0 3.2mm;
+    }
+
+    ul, ol {
+      margin: 2mm 0 4mm 5mm;
+      padding-left: 5mm;
+    }
+
+    li {
+      margin-bottom: 1.6mm;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 4mm 0 5mm;
+      font-size: 9.4pt;
+      page-break-inside: avoid;
+    }
+
+    th {
+      text-align: left;
+      color: #ffffff;
+      background: #174969;
+      padding: 2.7mm 3mm;
+      font-weight: 700;
+    }
+
+    td {
+      border: 1px solid #d7e2ec;
+      padding: 2.7mm 3mm;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background: #f7fafc;
+    }
+
+    .small {
+      font-size: 9pt;
+      color: #526578;
+    }
+
+    .lead {
+      font-size: 13pt;
+      line-height: 1.35;
+      color: #20364a;
+      margin-bottom: 6mm;
+    }
+
+    .note {
+      border-left: 4px solid #2d9cdb;
+      background: #eef8ff;
+      padding: 4mm;
+      border-radius: 0 6px 6px 0;
+      margin: 4mm 0 5mm;
+    }
+
+    .decision {
+      border: 1px solid #b9d6e8;
+      background: #f5fbff;
+      border-radius: 7px;
+      padding: 4mm;
+      margin: 4mm 0 5mm;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5mm;
+      margin: 4mm 0 5mm;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4mm;
+      margin: 4mm 0 5mm;
+    }
+
+    .card {
+      border: 1px solid #d9e5ee;
+      border-radius: 7px;
+      background: #ffffff;
+      padding: 4mm;
+      page-break-inside: avoid;
+    }
+
+    .card h3,
+    .card h4 {
+      margin-top: 0;
+    }
+
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 1mm 2.4mm;
+      font-size: 8.5pt;
+      font-weight: 700;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .done { color: #095b37; background: #dcf7e9; }
+    .partial { color: #7a4b00; background: #fff1cc; }
+    .todo { color: #86323a; background: #ffe0e4; }
+    .info { color: #164668; background: #e3f4ff; }
+
+    .flow {
+      display: grid;
+      gap: 3mm;
+      margin: 5mm 0;
+    }
+
+    .flow.horizontal {
+      grid-template-columns: repeat(5, 1fr);
+      align-items: stretch;
+    }
+
+    .flow.three {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .flow.four {
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    .node {
+      position: relative;
+      min-height: 23mm;
+      border: 1px solid #c7d8e5;
+      border-radius: 8px;
+      background: #f8fbfd;
+      padding: 3.5mm;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 1.4mm;
+      page-break-inside: avoid;
+    }
+
+    .node strong {
+      color: #0c3557;
+      font-size: 10.5pt;
+    }
+
+    .node span {
+      color: #526578;
+      font-size: 8.8pt;
+    }
+
+    .arrow {
+      position: relative;
+    }
+
+    .arrow::after {
+      content: ">";
+      position: absolute;
+      right: -4mm;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #2d9cdb;
+      font-size: 15pt;
+      font-weight: 700;
+    }
+
+    .system-map {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr 1fr;
+      gap: 5mm;
+      align-items: center;
+      margin: 5mm 0;
+    }
+
+    .system-map .center {
+      background: #0c3557;
+      color: #ffffff;
+      border-color: #0c3557;
+      min-height: 38mm;
+    }
+
+    .system-map .center strong {
+      color: #ffffff;
+      font-size: 13pt;
+    }
+
+    .section-label {
+      margin-bottom: 3mm;
+      color: #5c7488;
+      font-size: 8.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .toc {
+      columns: 2;
+      column-gap: 12mm;
+      margin-top: 8mm;
+    }
+
+    .toc p {
+      break-inside: avoid;
+      border-bottom: 1px solid #e2ebf2;
+      padding-bottom: 2mm;
+      margin-bottom: 3mm;
+    }
+
+    .footer {
+      position: absolute;
+      left: 16mm;
+      right: 16mm;
+      bottom: 8mm;
+      display: flex;
+      justify-content: space-between;
+      color: #7d8c99;
+      font-size: 8pt;
+      border-top: 1px solid #e3edf4;
+      padding-top: 2.5mm;
+    }
+
+    .quote {
+      font-size: 15pt;
+      line-height: 1.28;
+      color: #0c3557;
+      border-left: 5px solid #49c3ff;
+      padding-left: 5mm;
+      margin: 6mm 0;
+    }
+
+    .status-table td:first-child {
+      width: 30mm;
+      white-space: nowrap;
+    }
+
+    .kbd {
+      font-family: Consolas, "Courier New", monospace;
+      background: #eef3f8;
+      border: 1px solid #d7e2ec;
+      border-radius: 4px;
+      padding: 0.4mm 1.2mm;
+      font-size: 8.6pt;
+    }
+  </style>
+</head>
+<body>
+  <section class="page cover">
+    <div class="brand-line"></div>
+    <div class="section-label" style="color:#9bdcff;">Dossier fonte para NotebookLM</div>
+    <h1>GESTISAC</h1>
+    <p class="subtitle">Apresentação completa do estado atual do programa, do que falta para o MVP total e da arquitetura explicada para pessoas sem perfil técnico.</p>
+    <div class="meta">
+      <div>
+        <strong>Objetivo</strong><br />
+        Fonte de conhecimento para gerar slides, discurso, resumo executivo e perguntas de reunião.
+      </div>
+      <div>
+        <strong>Público</strong><br />
+        Cliente, gestão, direção ou decisor que não precisa de perceber informática.
+      </div>
+      <div>
+        <strong>Data</strong><br />
+        11/06/2026
+      </div>
+    </div>
+    <div class="footer" style="color:#b8d8ef;border-top-color:rgba(255,255,255,.24);">
+      <span>GESTISAC</span>
+      <span>Fonte NotebookLM</span>
+    </div>
+  </section>
+
+  <section class="page">
+    <h2>Como Usar Este Documento</h2>
+    <p class="lead">Este PDF foi preparado para ser carregado no NotebookLM como fonte principal. O conteúdo está escrito em linguagem simples, com secções bem marcadas, para a ferramenta conseguir gerar explicações, slides, resumos e guiões de apresentação.</p>
+    <div class="decision">
+      <h3>Pedido recomendado ao NotebookLM</h3>
+      <p>Depois de carregar este PDF, pode pedir: <strong>"Cria uma apresentação clara sobre o GESTISAC para uma pessoa que não percebe informática. Explica o que está feito, o que falta para o MVP total, as 3 apps e a arquitetura de forma visual e simples."</strong></p>
+    </div>
+    <h3>Índice</h3>
+    <div class="toc">
+      <p>1. Resumo executivo</p>
+      <p>2. Problema que o GESTISAC resolve</p>
+      <p>3. Visão do produto</p>
+      <p>4. As 3 apps separadas</p>
+      <p>5. Fluxo simples de uma avaria</p>
+      <p>6. O que já está feito</p>
+      <p>7. O que está parcial</p>
+      <p>8. O que falta para o MVP total</p>
+      <p>9. Arquitetura simples do sistema</p>
+      <p>10. Tecnologias escolhidas</p>
+      <p>11. Segurança e permissões</p>
+      <p>12. Roteiro de demonstração</p>
+      <p>13. Mensagens-chave para reunião</p>
+      <p>14. Perguntas prováveis e respostas</p>
+      <p>15. Glossário não técnico</p>
+      <p>16. Prompts úteis para NotebookLM</p>
+    </div>
+    <div class="note">
+      <strong>Nota importante:</strong> Este documento separa claramente o que está demonstrável, o que está em construção e o que ainda falta. A apresentação deve evitar vender como terminado aquilo que ainda está em fase parcial ou planeada.
+    </div>
+    <div class="footer"><span>GESTISAC</span><span>Como usar</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Resumo Executivo</h2>
+    <p class="quote">O GESTISAC transforma a gestão de condomínios numa operação visível: cada pedido entra no sistema, fica atribuído, é acompanhado e deixa histórico.</p>
+    <p>O GESTISAC é uma plataforma para centralizar a gestão diária de condomínios. Em vez de ter informação espalhada por chamadas, emails, folhas Excel, mensagens e pastas soltas, o sistema cria um ponto único de organização.</p>
+    <p>A proposta não é apenas criar "mais uma aplicação". A proposta é criar uma mesa de comando para a empresa: ver condomínios, pedidos, tarefas, equipa, documentos, agenda e contabilidade num ambiente único.</p>
+    <h3>Ideia simples para explicar a qualquer pessoa</h3>
+    <p>Imagine uma receção organizada. Tudo o que chega fica registado, cada assunto tem responsável, há prioridade, há estado, há histórico e sabe-se sempre o que está pendente. O GESTISAC é essa receção, mas em formato digital.</p>
+    <h3>O que já existe</h3>
+    <ul>
+      <li>Uma aplicação principal com dashboard e várias áreas de gestão.</li>
+      <li>Separação inicial em três apps: administração, cliente e funcionário.</li>
+      <li>API central online para guardar e servir informação.</li>
+      <li>Base de dados real em PostgreSQL/Supabase.</li>
+      <li>Fluxos iniciais para tickets, condomínios, documentos, agenda, tarefas, equipa e contabilidade base.</li>
+    </ul>
+    <h3>O que falta para o MVP total</h3>
+    <ul>
+      <li>Fechar os fluxos principais de ponta a ponta com casos reais.</li>
+      <li>Consolidar permissões por perfil e separar totalmente o que cada app pode ver.</li>
+      <li>Completar funcionalidades críticas como anexos, notificações, documentos finais, contabilidade operacional e relatórios.</li>
+      <li>Validar em produção com smoke tests e uso real por HQ, Worker e Client.</li>
+    </ul>
+    <div class="footer"><span>GESTISAC</span><span>Resumo executivo</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Problema Que O Sistema Resolve</h2>
+    <p class="lead">A gestão de condomínios tem muitos pequenos assuntos que, quando estão espalhados, tornam-se difíceis de controlar.</p>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Situação atual comum</h3>
+        <ul>
+          <li>Pedidos chegam por telefone, email, WhatsApp ou presencialmente.</li>
+          <li>Nem sempre há histórico claro do que foi prometido.</li>
+          <li>É difícil saber quem ficou responsável por cada assunto.</li>
+          <li>Documentos, atas, recibos e relatórios ficam dispersos.</li>
+          <li>A administração perde tempo a procurar informação.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Situação pretendida</h3>
+        <ul>
+          <li>Todos os pedidos entram no mesmo sistema.</li>
+          <li>Cada pedido tem estado, prioridade e responsável.</li>
+          <li>Cliente, administração e funcionário veem a informação adequada.</li>
+          <li>Documentos e histórico ficam associados ao condomínio certo.</li>
+          <li>A equipa consegue decidir com base em informação atualizada.</li>
+        </ul>
+      </div>
+    </div>
+    <h3>Mensagem para reunião</h3>
+    <p>O problema não é apenas "ter uma app". O problema é ter controlo operacional. O GESTISAC serve para responder rapidamente a perguntas simples:</p>
+    <ul>
+      <li>Que condomínios precisam de atenção hoje?</li>
+      <li>Que pedidos estão abertos?</li>
+      <li>Quem está responsável?</li>
+      <li>O que já foi feito?</li>
+      <li>O que ainda falta resolver?</li>
+      <li>Que documentos, pagamentos ou decisões estão pendentes?</li>
+    </ul>
+    <div class="footer"><span>GESTISAC</span><span>Problema</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Visão Do Produto</h2>
+    <p class="lead">O GESTISAC foi pensado para esconder a complexidade técnica e mostrar uma experiência simples: organização, controlo e confiança.</p>
+    <div class="flow four">
+      <div class="node">
+        <strong>Condomínios</strong>
+        <span>Prédios, frações, moradores, contactos e alertas.</span>
+      </div>
+      <div class="node">
+        <strong>Operação</strong>
+        <span>Pedidos, tickets, manutenção, tarefas e equipa.</span>
+      </div>
+      <div class="node">
+        <strong>Financeiro</strong>
+        <span>Quotas, pagamentos, dívidas, despesas e recibos.</span>
+      </div>
+      <div class="node">
+        <strong>Documentos</strong>
+        <span>Atas, relatórios, anexos, modelos e arquivo.</span>
+      </div>
+    </div>
+    <h3>Regra central do produto</h3>
+    <p>O sistema deve começar sempre por uma vista simples e visual. A pessoa vê primeiro o resumo, as prioridades e os avisos. Só depois entra nos detalhes, listas e registos.</p>
+    <div class="decision">
+      <strong>Forma simples de explicar:</strong> o dashboard é a mesa de trabalho. As páginas de detalhe são as gavetas organizadas.
+    </div>
+    <h3>Princípios de apresentação</h3>
+    <ul>
+      <li><strong>Não falar primeiro de tecnologia.</strong> Falar primeiro de problemas resolvidos.</li>
+      <li><strong>Mostrar as 3 apps como papéis do dia a dia.</strong> Administração, cliente e funcionário.</li>
+      <li><strong>Usar um caso real.</strong> Uma avaria é o exemplo mais fácil.</li>
+      <li><strong>Separar feito, parcial e falta.</strong> Isto transmite confiança e evita promessas vagas.</li>
+    </ul>
+    <div class="footer"><span>GESTISAC</span><span>Visão</span></div>
+  </section>
+
+  <section class="page">
+    <h2>As 3 Apps Separadas</h2>
+    <p class="lead">O sistema não mostra a mesma coisa a toda a gente. Cada pessoa entra pela sua porta e vê apenas aquilo que precisa para trabalhar.</p>
+    <div class="flow three">
+      <div class="node">
+        <strong>HQ / Administração</strong>
+        <span>Gestão completa da operação, condomínios, equipa, tickets, documentos e visão financeira.</span>
+      </div>
+      <div class="node">
+        <strong>Client / Cliente</strong>
+        <span>Portal simples para reportar pedidos, acompanhar estados e consultar informação permitida.</span>
+      </div>
+      <div class="node">
+        <strong>Worker / Funcionário</strong>
+        <span>Fila de trabalho focada no terreno: tarefas atribuídas, urgentes, em curso e resolvidas.</span>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>App</th>
+          <th>Para quem é</th>
+          <th>O que deve ver</th>
+          <th>O que não deve ver</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>HQ</strong></td>
+          <td>Administração da empresa</td>
+          <td>Gestão global, triagem, equipa, tarefas, contabilidade agregada, documentos e relatórios.</td>
+          <td>Dados devem respeitar permissões internas e contexto autorizado.</td>
+        </tr>
+        <tr>
+          <td><strong>Client</strong></td>
+          <td>Cliente, condómino ou representante</td>
+          <td>Pedidos próprios, estados públicos, documentos permitidos e comunicação simples.</td>
+          <td>Custos internos, notas técnicas, fornecedores internos, validação HQ e dados de outros clientes.</td>
+        </tr>
+        <tr>
+          <td><strong>Worker</strong></td>
+          <td>Funcionário ou técnico no terreno</td>
+          <td>Tarefas atribuídas, prioridades, local, instruções e ações de execução.</td>
+          <td>Contabilidade, gestão global, dados administrativos sensíveis e informação fora da sua intervenção.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <strong>Mensagem-chave:</strong> a separação das 3 apps não é detalhe técnico. É uma decisão de produto: cada pessoa vê a sua área, com menos ruído e mais segurança.
+    </div>
+    <div class="footer"><span>GESTISAC</span><span>3 apps</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Fluxo Simples: Uma Avaria</h2>
+    <p class="lead">Este é o melhor exemplo para apresentar o sistema a alguém sem perfil técnico, porque mostra a utilidade real das 3 apps.</p>
+    <div class="flow horizontal">
+      <div class="node arrow">
+        <strong>1. Cliente reporta</strong>
+        <span>Descreve a avaria e identifica local.</span>
+      </div>
+      <div class="node arrow">
+        <strong>2. HQ recebe</strong>
+        <span>Vê prioridade, contexto e histórico.</span>
+      </div>
+      <div class="node arrow">
+        <strong>3. HQ atribui</strong>
+        <span>Escolhe funcionário ou fornecedor.</span>
+      </div>
+      <div class="node arrow">
+        <strong>4. Worker executa</strong>
+        <span>Atualiza estado no terreno.</span>
+      </div>
+      <div class="node">
+        <strong>5. Cliente acompanha</strong>
+        <span>Vê o progresso e confirmação.</span>
+      </div>
+    </div>
+    <h3>Explicação em linguagem de reunião</h3>
+    <p>Quando aparece uma avaria, ela deixa de viver numa chamada ou numa mensagem perdida. Passa a ter uma ficha no sistema. Essa ficha mostra quem pediu, onde é, qual o estado, quem ficou responsável e o que aconteceu até à resolução.</p>
+    <h3>Benefício prático</h3>
+    <ul>
+      <li>Menos chamadas repetidas para saber o estado.</li>
+      <li>Menos risco de esquecer pedidos.</li>
+      <li>Mais transparência para o cliente.</li>
+      <li>Mais controlo para a administração.</li>
+      <li>Mais clareza para o funcionário.</li>
+      <li>Histórico guardado para futuras consultas.</li>
+    </ul>
+    <div class="decision">
+      <strong>Frase curta para apresentar:</strong> "O cliente comunica, a administração organiza, o funcionário executa e o sistema guarda o histórico."
+    </div>
+    <div class="footer"><span>GESTISAC</span><span>Fluxo de avaria</span></div>
+  </section>
+
+  <section class="page">
+    <h2>O Que Já Está Feito</h2>
+    <p class="lead">Estado atual resumido para apresentação. Esta lista deve ser tratada como base demonstrável ou já estruturada no projeto.</p>
+    <table class="status-table">
+      <thead>
+        <tr>
+          <th>Estado</th>
+          <th>Área</th>
+          <th>Descrição simples</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Dashboard principal</td>
+          <td>Vista inicial com indicadores, prioridades, avisos e entrada para os módulos principais.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Condomínios</td>
+          <td>Base para organizar condomínios, edifícios, frações, moradores e informação associada.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Pedidos / Tickets</td>
+          <td>Registo e acompanhamento de ocorrências, avarias, prioridades, estados e responsáveis.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Equipa</td>
+          <td>Vista de membros, carga operacional, tarefas abertas e validações pendentes.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Tarefas</td>
+          <td>Vista operacional para trabalho diário, com pedidos, manutenção, vistorias e agenda.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Agenda</td>
+          <td>Calendário operacional ligado a eventos, vistorias, reuniões, tickets e manutenção.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Documentos</td>
+          <td>Base para arquivo documental, modelos, documentos por condomínio e futuras gerações de PDF.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Relatórios</td>
+          <td>Área para relatórios, exportações, mapas e inteligência operacional.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>API central</td>
+          <td>Motor que recebe pedidos das apps e comunica com a base de dados.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Base de dados real</td>
+          <td>PostgreSQL/Supabase como base preparada para produção e dados relacionais.</td>
+        </tr>
+        <tr>
+          <td><span class="badge done">Feito</span></td>
+          <td>Separação inicial das apps</td>
+          <td>Existem apps próprias para HQ, Client e Worker, com contratos iniciais de API por contexto.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <strong>Como dizer ao cliente:</strong> "Já existe uma fundação funcional e demonstrável. Agora o trabalho principal é fechar os fluxos reais, completar permissões e transformar a base atual num MVP totalmente pronto."
+    </div>
+    <div class="footer"><span>GESTISAC</span><span>Feito</span></div>
+  </section>
+
+  <section class="page">
+    <h2>O Que Está Parcial Ou Em Consolidação</h2>
+    <p class="lead">Estas áreas já têm base, mas ainda precisam de fecho funcional, validação com casos reais ou polimento antes de serem tratadas como MVP total.</p>
+    <table class="status-table">
+      <thead>
+        <tr>
+          <th>Estado</th>
+          <th>Área</th>
+          <th>O que existe</th>
+          <th>O que falta consolidar</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>3 apps independentes</td>
+          <td>HQ, Client e Worker existem como apps separadas.</td>
+          <td>Garantir paridade, navegação final, deploy separado se necessário e contratos fechados.</td>
+        </tr>
+        <tr>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Permissões</td>
+          <td>Há contexto por app e regras iniciais de visibilidade.</td>
+          <td>Fechar matriz de permissões real por perfil, cliente, condomínio e operação.</td>
+        </tr>
+        <tr>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Contabilidade</td>
+          <td>Existem módulos de quotas, pagamentos, dívidas, recibos, despesas e visão geral.</td>
+          <td>Validar regras reais, reconciliação, recibos finais, exportações e privacidade por contexto.</td>
+        </tr>
+        <tr>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Documentos</td>
+          <td>Área documental e modelos estão mapeados.</td>
+          <td>Completar upload, anexos, geração final, permissões, arquivo e versões.</td>
+        </tr>
+        <tr>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Fluxo Worker</td>
+          <td>Há visão de tarefas atribuídas e ações de execução previstas.</td>
+          <td>Fechar uso no terreno: iniciar, pausar, pedir peças, anexar foto, resolver e submeter validação.</td>
+        </tr>
+        <tr>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Fluxo Client</td>
+          <td>Há visão simples para pedidos e acompanhamento.</td>
+          <td>Fechar criação pública, anexos, comentários permitidos, notificações e documentos visíveis.</td>
+        </tr>
+        <tr>
+          <td><span class="badge partial">Parcial</span></td>
+          <td>Produção</td>
+          <td>Web e API estão publicadas e ligadas a base de dados real.</td>
+          <td>Estabilizar deploys, smoke tests, ambientes, backups, monitorização e rotina de operação.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>GESTISAC</span><span>Parcial</span></div>
+  </section>
+
+  <section class="page">
+    <h2>O Que Falta Para O MVP Total</h2>
+    <p class="lead">MVP total significa ter o ciclo principal do negócio a funcionar de forma fiável, simples e demonstrável em ambiente real.</p>
+    <h3>Critério simples de MVP</h3>
+    <p>O MVP não precisa de ter todas as ideias futuras. Precisa de permitir que a empresa use o sistema nos fluxos essenciais sem depender de soluções paralelas.</p>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Essencial para MVP</h3>
+        <ul>
+          <li>Login e entrada sem bloqueios.</li>
+          <li>HQ consegue gerir pedidos e condomínios.</li>
+          <li>Cliente consegue abrir e acompanhar pedidos.</li>
+          <li>Funcionário consegue ver e atualizar tarefas.</li>
+          <li>Documentos e anexos funcionam no fluxo real.</li>
+          <li>Permissões impedem fugas de informação.</li>
+          <li>Produção tem API, base de dados e web estáveis.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Depois do MVP</h3>
+        <ul>
+          <li>Automação avançada.</li>
+          <li>IA para análise e resposta.</li>
+          <li>OCR documental.</li>
+          <li>Pagamentos integrados.</li>
+          <li>Assembleias digitais avançadas.</li>
+          <li>Analytics profundo.</li>
+          <li>Notificações inteligentes multicanal.</li>
+        </ul>
+      </div>
+    </div>
+    <h3>Lista objetiva do que falta</h3>
+    <table class="status-table">
+      <thead>
+        <tr>
+          <th>Prioridade</th>
+          <th>Falta</th>
+          <th>Resultado esperado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge todo">Alta</span></td>
+          <td>Fechar ciclo de avarias ponta a ponta</td>
+          <td>Cliente cria, HQ atribui, Worker resolve, Cliente confirma, HQ audita.</td>
+        </tr>
+        <tr>
+          <td><span class="badge todo">Alta</span></td>
+          <td>Permissões finais</td>
+          <td>Cada perfil vê apenas o que deve ver.</td>
+        </tr>
+        <tr>
+          <td><span class="badge todo">Alta</span></td>
+          <td>Anexos e documentos reais</td>
+          <td>Fotos, PDFs, atas, comprovativos e relatórios associados aos registos certos.</td>
+        </tr>
+        <tr>
+          <td><span class="badge todo">Alta</span></td>
+          <td>Smoke tests por contexto</td>
+          <td>Validar HQ, Worker e Client em produção, não apenas em localhost.</td>
+        </tr>
+        <tr>
+          <td><span class="badge todo">Média</span></td>
+          <td>Contabilidade operacional</td>
+          <td>Fechar regras de quotas, pagamentos, recibos, despesas e relatórios mínimos.</td>
+        </tr>
+        <tr>
+          <td><span class="badge todo">Média</span></td>
+          <td>Notificações</td>
+          <td>Avisar utilizadores quando há mudanças importantes.</td>
+        </tr>
+        <tr>
+          <td><span class="badge todo">Média</span></td>
+          <td>Polimento visual e mobile</td>
+          <td>Garantir experiência clara em desktop, tablet e telemóvel.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>GESTISAC</span><span>MVP total</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Arquitetura Do Sistema, Explicada Simplesmente</h2>
+    <p class="lead">A arquitetura pode ser apresentada como uma cidade organizada: as pessoas entram pelas portas certas, o motor central trata dos pedidos e a base de dados guarda a informação.</p>
+    <div class="system-map">
+      <div class="flow">
+        <div class="node"><strong>HQ</strong><span>Administração</span></div>
+        <div class="node"><strong>Client</strong><span>Cliente / Condómino</span></div>
+        <div class="node"><strong>Worker</strong><span>Funcionário</span></div>
+      </div>
+      <div class="node center">
+        <strong>GESTISAC</strong>
+        <span style="color:#d9ecff;">Motor central/API</span>
+        <span style="color:#d9ecff;">Regras, permissões, estados e comunicação entre apps</span>
+      </div>
+      <div class="flow">
+        <div class="node"><strong>Base de dados</strong><span>Guarda condomínios, pessoas, tickets e valores.</span></div>
+        <div class="node"><strong>Documentos</strong><span>Anexos, atas, PDFs, comprovativos.</span></div>
+        <div class="node"><strong>Publicação online</strong><span>Web e API disponíveis na internet.</span></div>
+      </div>
+    </div>
+    <h3>Explicação para não técnicos</h3>
+    <ul>
+      <li><strong>Apps:</strong> são as portas de entrada. Cada pessoa usa a porta adequada.</li>
+      <li><strong>API:</strong> é o balcão central. Recebe pedidos, aplica regras e responde.</li>
+      <li><strong>Base de dados:</strong> é o arquivo organizado. Guarda a informação de forma segura.</li>
+      <li><strong>Documentos:</strong> são os ficheiros ligados aos processos.</li>
+      <li><strong>Publicação online:</strong> permite aceder ao sistema por browser, sem instalar programas tradicionais.</li>
+    </ul>
+    <div class="decision">
+      <strong>Frase simples:</strong> "As apps mostram a informação, a API decide e organiza, a base de dados guarda."
+    </div>
+    <div class="footer"><span>GESTISAC</span><span>Arquitetura simples</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Arquitetura Visual Em Modo Sistema</h2>
+    <p class="lead">Este diagrama serve para slides. É visualmente simples e evita nomes técnicos em excesso.</p>
+    <div class="flow horizontal">
+      <div class="node arrow">
+        <strong>Utilizador</strong>
+        <span>Abre a app certa</span>
+      </div>
+      <div class="node arrow">
+        <strong>App</strong>
+        <span>Mostra e recolhe informação</span>
+      </div>
+      <div class="node arrow">
+        <strong>Motor central</strong>
+        <span>Aplica regras e permissões</span>
+      </div>
+      <div class="node arrow">
+        <strong>Arquivo digital</strong>
+        <span>Guarda dados e histórico</span>
+      </div>
+      <div class="node">
+        <strong>Resposta</strong>
+        <span>Mostra estado atualizado</span>
+      </div>
+    </div>
+    <h3>Versão técnica leve</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Camada</th>
+          <th>Nome simples</th>
+          <th>Função</th>
+          <th>Exemplo no GESTISAC</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Frontend</td>
+          <td>O que a pessoa vê</td>
+          <td>Ecrãs, botões, listas, dashboards e formulários.</td>
+          <td>HQ, Client e Worker.</td>
+        </tr>
+        <tr>
+          <td>Backend/API</td>
+          <td>Motor central</td>
+          <td>Recebe pedidos, valida regras, calcula respostas e protege dados.</td>
+          <td>Endpoints de dashboard, tickets, contabilidade e sessão.</td>
+        </tr>
+        <tr>
+          <td>Base de dados</td>
+          <td>Arquivo organizado</td>
+          <td>Guarda informação com relações entre entidades.</td>
+          <td>Condomínios, frações, moradores, tickets, quotas, pagamentos.</td>
+        </tr>
+        <tr>
+          <td>Deploy</td>
+          <td>Publicação online</td>
+          <td>Permite que a aplicação esteja acessível por browser.</td>
+          <td>Web e API publicados online.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>GESTISAC</span><span>Arquitetura visual</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Tecnologias Escolhidas, Explicadas Sem Complicar</h2>
+    <p class="lead">A tecnologia não deve ser o centro da apresentação. Deve aparecer apenas como garantia de que o sistema foi feito com uma base moderna, segura e preparada para crescer.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Tecnologia</th>
+          <th>Explicação simples</th>
+          <th>Porque foi escolhida</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Qwik</strong></td>
+          <td>Tecnologia para construir as páginas que o utilizador vê.</td>
+          <td>Foi escolhida para criar uma experiência rápida, moderna e leve no browser.</td>
+        </tr>
+        <tr>
+          <td><strong>Rust</strong></td>
+          <td>Linguagem usada no motor central/API.</td>
+          <td>Foi escolhida pela estabilidade, segurança e previsibilidade em sistemas que tratam dados importantes.</td>
+        </tr>
+        <tr>
+          <td><strong>PostgreSQL / Supabase</strong></td>
+          <td>Base de dados onde a informação fica organizada.</td>
+          <td>Foi escolhida porque condomínios, frações, moradores, quotas, pagamentos e tickets têm muitas ligações entre si.</td>
+        </tr>
+        <tr>
+          <td><strong>Vercel</strong></td>
+          <td>Serviço para publicar a aplicação online.</td>
+          <td>Foi escolhido para disponibilizar web e API com rapidez, HTTPS e deploy mais simples.</td>
+        </tr>
+        <tr>
+          <td><strong>Packages partilhados</strong></td>
+          <td>Peças comuns reutilizadas entre apps.</td>
+          <td>Permitem manter consistência entre HQ, Client e Worker sem copiar lógica em vários sítios.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <strong>Mensagem recomendada:</strong> "Não escolhemos tecnologia por moda. Escolhemos uma base que permite rapidez, segurança, separação de responsabilidades e crescimento futuro."
+    </div>
+    <h3>O que não dizer em excesso</h3>
+    <ul>
+      <li>Não explicar rotas, endpoints ou estruturas internas se a pessoa não for técnica.</li>
+      <li>Não começar por nomes de frameworks.</li>
+      <li>Não transformar a reunião numa demonstração de código.</li>
+    </ul>
+    <div class="footer"><span>GESTISAC</span><span>Tecnologias</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Segurança, Perfis E Permissões</h2>
+    <p class="lead">Segurança aqui significa uma ideia simples: cada pessoa só deve ver aquilo que precisa e tem autorização para ver.</p>
+    <div class="grid-3">
+      <div class="card">
+        <h3>HQ</h3>
+        <p>Vê a gestão da operação, mas ainda assim deve respeitar permissões internas e contexto financeiro autorizado.</p>
+      </div>
+      <div class="card">
+        <h3>Client</h3>
+        <p>Vê apenas pedidos, documentos e estados que lhe dizem respeito. Não deve ver notas internas nem custos sensíveis.</p>
+      </div>
+      <div class="card">
+        <h3>Worker</h3>
+        <p>Vê apenas tarefas atribuídas e informação necessária para executar o trabalho no terreno.</p>
+      </div>
+    </div>
+    <h3>Guardrails importantes</h3>
+    <ul>
+      <li>O cliente não deve ver informação interna da administração.</li>
+      <li>O funcionário não deve ver dados financeiros ou administrativos que não precisa.</li>
+      <li>A administração deve conseguir auditar histórico e decisões.</li>
+      <li>A base de dados deve separar clientes/organizações por contexto.</li>
+      <li>As permissões finais são uma parte crítica do MVP.</li>
+    </ul>
+    <div class="decision">
+      <strong>Frase para reunião:</strong> "O sistema não é só para guardar dados. É para mostrar a informação certa à pessoa certa."
+    </div>
+    <div class="footer"><span>GESTISAC</span><span>Segurança</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Funcionalidades Por Área</h2>
+    <p class="lead">Lista organizada para o NotebookLM conseguir transformar em slides, checklist ou matriz de requisitos.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Área</th>
+          <th>Funcionalidades</th>
+          <th>Valor para o negócio</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Dashboard</strong></td>
+          <td>Indicadores, avisos, prioridades, atalhos, estado geral.</td>
+          <td>Ajuda a perceber rapidamente o que exige atenção.</td>
+        </tr>
+        <tr>
+          <td><strong>Condomínios</strong></td>
+          <td>Condomínios, edifícios, frações, moradores, contactos e alertas.</td>
+          <td>Centraliza a base da operação.</td>
+        </tr>
+        <tr>
+          <td><strong>Pedidos</strong></td>
+          <td>Tickets, ocorrências, avarias, estado, prioridade, responsável e histórico.</td>
+          <td>Evita pedidos perdidos e melhora acompanhamento.</td>
+        </tr>
+        <tr>
+          <td><strong>Equipa</strong></td>
+          <td>Membros, carga de trabalho, tarefas abertas e validações.</td>
+          <td>Ajuda a distribuir trabalho e controlar execução.</td>
+        </tr>
+        <tr>
+          <td><strong>Tarefas</strong></td>
+          <td>Vista do trabalho diário, manutenção, vistorias e agenda.</td>
+          <td>Transforma pedidos em ações concretas.</td>
+        </tr>
+        <tr>
+          <td><strong>Agenda</strong></td>
+          <td>Eventos, vistorias, reuniões, emails planeados, manutenção.</td>
+          <td>Dá visibilidade ao planeamento.</td>
+        </tr>
+        <tr>
+          <td><strong>Contabilidade</strong></td>
+          <td>Quotas, pagamentos, dívidas, recibos, despesas, fundo de reserva.</td>
+          <td>Mostra saúde financeira e pendências.</td>
+        </tr>
+        <tr>
+          <td><strong>Documentos</strong></td>
+          <td>Arquivo, anexos, modelos, atas, relatórios e documentos por condomínio.</td>
+          <td>Reduz dispersão documental.</td>
+        </tr>
+        <tr>
+          <td><strong>Relatórios</strong></td>
+          <td>Relatórios financeiros, exportações, mapas e análises.</td>
+          <td>Ajuda a prestar contas e tomar decisões.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>GESTISAC</span><span>Funcionalidades</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Roteiro De Demonstração</h2>
+    <p class="lead">A demo deve ser curta, concreta e baseada numa história. Não deve começar por menus nem por tecnologia.</p>
+    <h3>Demo recomendada em 10 minutos</h3>
+    <ol>
+      <li><strong>Abrir HQ:</strong> mostrar o dashboard, indicadores e prioridades.</li>
+      <li><strong>Mostrar condomínios:</strong> escolher um condomínio e explicar que tudo fica ligado a ele.</li>
+      <li><strong>Abrir pedidos:</strong> mostrar uma ocorrência com estado, responsável e histórico.</li>
+      <li><strong>Mostrar equipa:</strong> explicar carga de trabalho e validações pendentes.</li>
+      <li><strong>Mostrar tarefas:</strong> filtrar por hoje, em curso, validação ou atrasadas.</li>
+      <li><strong>Mostrar agenda:</strong> ligar pedidos e tarefas ao planeamento.</li>
+      <li><strong>Abrir Worker:</strong> mostrar que o funcionário vê apenas a sua fila de trabalho.</li>
+      <li><strong>Abrir Client:</strong> mostrar que o cliente acompanha o que lhe diz respeito.</li>
+      <li><strong>Fechar com MVP:</strong> listar feito, parcial e falta.</li>
+    </ol>
+    <h3>Demo ideal das 3 apps</h3>
+    <div class="flow horizontal">
+      <div class="node arrow"><strong>Cliente</strong><span>Abre avaria</span></div>
+      <div class="node arrow"><strong>HQ</strong><span>Recebe e atribui</span></div>
+      <div class="node arrow"><strong>Worker</strong><span>Executa</span></div>
+      <div class="node arrow"><strong>Cliente</strong><span>Confirma</span></div>
+      <div class="node"><strong>HQ</strong><span>Valida histórico</span></div>
+    </div>
+    <div class="note">
+      <strong>Mensagem-chave:</strong> "O mesmo pedido atravessa as 3 apps, mas cada pessoa vê a sua parte do processo."
+    </div>
+    <div class="footer"><span>GESTISAC</span><span>Demo</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Estrutura Sugerida Para Slides</h2>
+    <p class="lead">Se o NotebookLM gerar slides, esta é a sequência recomendada para uma apresentação clara.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Slide</th>
+          <th>Título</th>
+          <th>Mensagem principal</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>GESTISAC</td><td>Gestão de condomínios mais simples, organizada e visível.</td></tr>
+        <tr><td>2</td><td>O problema atual</td><td>Informação espalhada cria perda de controlo.</td></tr>
+        <tr><td>3</td><td>A solução</td><td>Um sistema central para acompanhar operação, documentos e responsabilidades.</td></tr>
+        <tr><td>4</td><td>As 3 apps</td><td>Administração, cliente e funcionário têm experiências separadas.</td></tr>
+        <tr><td>5</td><td>Exemplo de avaria</td><td>Cliente reporta, HQ atribui, Worker resolve, cliente acompanha.</td></tr>
+        <tr><td>6</td><td>O que já está feito</td><td>Dashboard, módulos base, API, base de dados e separação inicial.</td></tr>
+        <tr><td>7</td><td>O que falta</td><td>Fluxos finais, permissões, documentos, notificações, testes e polimento.</td></tr>
+        <tr><td>8</td><td>Arquitetura simples</td><td>Apps mostram, motor central organiza, base de dados guarda.</td></tr>
+        <tr><td>9</td><td>Tecnologia escolhida</td><td>Base moderna para rapidez, segurança e crescimento.</td></tr>
+        <tr><td>10</td><td>Próximos passos</td><td>Validar MVP com casos reais e fechar prioridades.</td></tr>
+      </tbody>
+    </table>
+    <h3>Frase de abertura</h3>
+    <p class="quote">"Hoje vamos mostrar como o GESTISAC organiza o trabalho diário da gestão de condomínios: o que já está construído, o que ainda falta fechar e como as três apps trabalham em conjunto."</p>
+    <h3>Frase de fecho</h3>
+    <p class="quote">"O objetivo do MVP total é simples: cliente comunica, administração gere, funcionário executa, e tudo fica registado com segurança."</p>
+    <div class="footer"><span>GESTISAC</span><span>Slides</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Mensagens-Chave Para Reunião</h2>
+    <p class="lead">Estas frases podem ser usadas diretamente numa apresentação, proposta ou conversa com decisores.</p>
+    <h3>Sobre o produto</h3>
+    <ul>
+      <li>"O GESTISAC centraliza a gestão operacional, financeira, documental e administrativa dos condomínios."</li>
+      <li>"A plataforma foi desenhada para dar controlo sem obrigar o utilizador a perceber tecnologia."</li>
+      <li>"A primeira vista deve responder à pergunta: o que precisa de atenção hoje?"</li>
+    </ul>
+    <h3>Sobre as 3 apps</h3>
+    <ul>
+      <li>"A administração tem uma visão completa para gerir."</li>
+      <li>"O cliente tem uma experiência simples para comunicar e acompanhar."</li>
+      <li>"O funcionário tem uma fila de trabalho clara para executar."</li>
+    </ul>
+    <h3>Sobre o estado atual</h3>
+    <ul>
+      <li>"Já existe uma fundação funcional e demonstrável."</li>
+      <li>"O sistema já tem estrutura online, API central e base de dados real."</li>
+      <li>"O que falta é fechar os fluxos críticos do MVP e validar com casos reais."</li>
+    </ul>
+    <h3>Sobre tecnologia</h3>
+    <ul>
+      <li>"A tecnologia foi escolhida para dar rapidez, segurança e capacidade de crescimento."</li>
+      <li>"A pessoa usa a aplicação; a complexidade fica escondida no motor central."</li>
+    </ul>
+    <div class="footer"><span>GESTISAC</span><span>Mensagens</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Perguntas Prováveis E Respostas Simples</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Pergunta</th>
+          <th>Resposta recomendada</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>O sistema já está pronto?</td>
+          <td>Já existe uma base funcional e demonstrável. Para MVP total ainda falta fechar fluxos finais, permissões, documentos, notificações e validação com casos reais.</td>
+        </tr>
+        <tr>
+          <td>Porque existem 3 apps?</td>
+          <td>Porque a administração, o cliente e o funcionário não precisam de ver a mesma coisa. Separar melhora clareza, segurança e experiência de uso.</td>
+        </tr>
+        <tr>
+          <td>O cliente vê dados internos?</td>
+          <td>Não deve ver. A app cliente deve mostrar apenas pedidos, estados e documentos autorizados.</td>
+        </tr>
+        <tr>
+          <td>Funciona online?</td>
+          <td>Sim, existe estrutura online com web, API e base de dados real. Ainda é necessário continuar a estabilizar e validar produção para o MVP.</td>
+        </tr>
+        <tr>
+          <td>Porque não usar só Excel?</td>
+          <td>Excel guarda informação, mas não organiza fluxos, responsabilidades, permissões, histórico, clientes e funcionários em tempo real.</td>
+        </tr>
+        <tr>
+          <td>O que é mais importante acabar primeiro?</td>
+          <td>O ciclo de avarias/pedidos ponta a ponta, permissões, documentos/anexos e smoke tests por HQ, Worker e Client.</td>
+        </tr>
+        <tr>
+          <td>Isto pode crescer no futuro?</td>
+          <td>Sim. A arquitetura foi pensada para crescer com novas automações, IA, notificações, pagamentos e analytics.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>GESTISAC</span><span>Perguntas</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Glossário Para Pessoas Não Técnicas</h2>
+    <p class="lead">Termos que podem aparecer numa reunião, explicados de forma simples.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Termo</th>
+          <th>Explicação simples</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>App</td><td>Área do sistema usada por um tipo de pessoa: administração, cliente ou funcionário.</td></tr>
+        <tr><td>Dashboard</td><td>Ecrã inicial que mostra o estado geral e o que precisa de atenção.</td></tr>
+        <tr><td>Ticket</td><td>Registo de um pedido, avaria ou ocorrência.</td></tr>
+        <tr><td>API</td><td>Motor central que recebe pedidos das apps e responde com informação segura.</td></tr>
+        <tr><td>Base de dados</td><td>Arquivo organizado onde ficam guardados os dados do sistema.</td></tr>
+        <tr><td>Permissões</td><td>Regras que definem quem pode ver ou alterar cada coisa.</td></tr>
+        <tr><td>MVP</td><td>Primeira versão realmente utilizável, com o essencial a funcionar bem.</td></tr>
+        <tr><td>Deploy</td><td>Publicar a aplicação online para poder ser usada por browser.</td></tr>
+        <tr><td>Smoke test</td><td>Teste rápido para confirmar que os fluxos principais continuam a funcionar.</td></tr>
+        <tr><td>PostgreSQL</td><td>Base de dados robusta, usada para guardar informação estruturada.</td></tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>GESTISAC</span><span>Glossário</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Prompts Úteis Para NotebookLM</h2>
+    <p class="lead">Depois de carregar este PDF no NotebookLM, estes pedidos ajudam a transformar a fonte em materiais de apresentação.</p>
+    <h3>Para criar slides</h3>
+    <ul>
+      <li>Cria uma apresentação de 10 slides sobre o GESTISAC para uma pessoa que não percebe informática.</li>
+      <li>Faz uma versão visual e simples, com pouco texto por slide, sobre o que está feito e o que falta para o MVP.</li>
+      <li>Cria uma apresentação focada nas 3 apps: HQ, Client e Worker.</li>
+    </ul>
+    <h3>Para preparar discurso</h3>
+    <ul>
+      <li>Cria um guião de fala de 5 minutos para apresentar o GESTISAC a um decisor não técnico.</li>
+      <li>Cria uma versão mais comercial e uma versão mais operacional da apresentação.</li>
+      <li>Dá-me frases simples para explicar a arquitetura sem usar linguagem técnica.</li>
+    </ul>
+    <h3>Para preparar perguntas</h3>
+    <ul>
+      <li>Lista as perguntas difíceis que um cliente pode fazer sobre este projeto e sugere respostas simples.</li>
+      <li>Cria uma matriz "feito, parcial, falta" para validação em reunião.</li>
+      <li>Que riscos devo mencionar de forma honesta sem assustar o cliente?</li>
+    </ul>
+    <h3>Para gerar documentos complementares</h3>
+    <ul>
+      <li>Cria um resumo executivo de uma página.</li>
+      <li>Cria uma checklist do que falta para o MVP total.</li>
+      <li>Cria um email de envio para acompanhar esta apresentação.</li>
+    </ul>
+    <div class="footer"><span>GESTISAC</span><span>Prompts</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Resumo Final Para A Apresentação</h2>
+    <p class="quote">O GESTISAC já tem a fundação de uma plataforma de gestão de condomínios: apps, dashboard, módulos principais, API e base de dados. O foco agora é fechar o MVP total com fluxos reais, permissões, documentos, testes e polimento.</p>
+    <div class="grid-3">
+      <div class="card">
+        <h3>Feito</h3>
+        <p>Base funcional, módulos principais, API, base de dados real e separação inicial das 3 apps.</p>
+      </div>
+      <div class="card">
+        <h3>Parcial</h3>
+        <p>Fluxos das 3 apps, permissões, contabilidade, documentos e produção precisam de consolidação.</p>
+      </div>
+      <div class="card">
+        <h3>Falta</h3>
+        <p>Fechar MVP ponta a ponta, validar em produção, estabilizar uso real e preparar entrega final.</p>
+      </div>
+    </div>
+    <h3>Mensagem de encerramento</h3>
+    <p>O caminho certo é apresentar o sistema como uma operação organizada, não como uma lista de ecrãs. A pessoa deve sair da reunião a perceber três coisas: o que o sistema resolve, como as três apps trabalham juntas e o que falta para chegar ao MVP total.</p>
+    <h3>Fontes internas usadas para este dossier</h3>
+    <ul>
+      <li><span class="kbd">docs/00-visao-geral.md</span></li>
+      <li><span class="kbd">docs/01-produto-e-modulos.md</span></li>
+      <li><span class="kbd">docs/09-roadmap.md</span></li>
+      <li><span class="kbd">docs/24-app-separation-postgres-roadmap.md</span></li>
+      <li><span class="kbd">docs/31-demo-3-apps-runbook.md</span></li>
+      <li><span class="kbd">docs/35-arquitetura-sistema-base-dados-fluxos.md</span></li>
+      <li><span class="kbd">output/apresentacao-cliente-gestisac/GESTISAC_Roteiro_Demo.md</span></li>
+    </ul>
+    <div class="footer"><span>GESTISAC</span><span>Resumo final</span></div>
+  </section>
+</body>
+</html>

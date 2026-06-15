@@ -1,0 +1,6 @@
+task mode: create
+primary deck-profile: product-platform
+secondary gates: engineering-platform for architecture and production readiness
+required proof objects: workflow map, profile separation, requirements matrix, architecture diagram, status/roadmap
+source requirements: local product docs and published app links supplied in project context
+known missing inputs: final client-specific permission rules, accounting formats, notification channels

@@ -1,20 +1,8 @@
-import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
+import { $, component$, noSerialize, useSignal, useStore, useTask$, useVisibleTask$ } from '@builder.io/qwik';
 import { useLocation } from '@builder.io/qwik-city';
 import { AppEntryPage } from './components/auth/AppEntryPage';
 import { LoginPage } from './components/auth/LoginPage';
-import { DashboardPage } from './components/dashboard/DashboardPage';
-import { CalendarPage } from './components/pages/CalendarPage';
-import { AccountingPage } from './components/pages/AccountingPage';
-import { ChatPage } from './components/pages/ChatPage';
-import { CondominiumsPage, type CondoAreaId } from './components/pages/CondominiumsPage';
-import { DocumentsPage } from './components/pages/DocumentsPage';
-import { EntityDetailPage } from './components/pages/EntityDetailPage';
-import { InspectionsPage } from './components/pages/InspectionsPage';
-import { MaintenancePage } from './components/pages/MaintenancePage';
-import { PageOverview } from './components/pages/PageOverview';
-import { TasksPage } from './components/pages/TasksPage';
-import { TeamPage } from './components/pages/TeamPage';
-import { TicketsPage } from './components/pages/TicketsPage';
+import type { CondoAreaId } from './components/pages/CondominiumsPage';
 import { AppShell } from './components/shell/AppShell';
 import {
   emptyResources,
@@ -23,6 +11,17 @@ import {
   getPageByPath
 } from './data/pages';
 import { buildGlobalSearchResults } from './data/search';
+import {
+  loadPageComponent,
+  resolvePageLoaderKey,
+  type PageLoaderKey,
+  type LazyPageComponent
+} from './lib/lazy-pages';
+import {
+  installBrowserPerformanceTelemetry,
+  recordBrowserPerformanceRouteCommit,
+  recordBrowserPerformanceSpan
+} from './lib/performance-telemetry';
 import {
   SESSION_TOKEN_KEY,
   SESSION_EXPIRES_KEY,
@@ -263,6 +262,17 @@ export const App = component$(() => {
     resource: '',
     version: 0
   });
+  const pageState = useStore<{
+    key: PageLoaderKey;
+    component: LazyPageComponent | undefined;
+    loading: boolean;
+    error: string;
+  }>({
+    key: 'page-overview',
+    component: undefined,
+    loading: false,
+    error: ''
+  });
 
   const applyDashboardData$ = $((dashboardData: typeof fallbackDashboard) => {
     dashboard.value = dashboardData;
@@ -312,10 +322,7 @@ export const App = component$(() => {
     const normalizedPath = normalizeInnerPath(targetPath);
     condominiumShortcutArea.value =
       normalizedPath === '/condominios' ? readCondominiumShortcutArea(targetPath) : '';
-    const navigationStartedAt =
-      import.meta.env.DEV && typeof performance !== 'undefined'
-        ? performance.now()
-        : 0;
+    const navigationStartedAt = typeof performance !== 'undefined' ? performance.now() : 0;
     notice.value = '';
     error.value = '';
     if (normalizedPath !== '/relatorios') {
@@ -327,15 +334,7 @@ export const App = component$(() => {
     currentPath.value = normalizedPath;
     window.history.pushState({}, '', buildAppPath(appContext.value, targetPath));
     window.scrollTo({ top: 0, behavior: 'auto' });
-    if (navigationStartedAt && typeof requestAnimationFrame !== 'undefined') {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          console.info(
-            `[gestisac:navigation] ${normalizedPath} ${Math.round(performance.now() - navigationStartedAt)}ms`
-          );
-        });
-      });
-    }
+    recordBrowserPerformanceRouteCommit(normalizedPath, navigationStartedAt);
   });
 
   const login$ = $(async (email: string, password: string, context: AppContext) => {
@@ -352,7 +351,12 @@ export const App = component$(() => {
       writeStoredValue(SESSION_REFRESH_KEY, auth.refreshToken);
       writeStoredValue(SESSION_EXPIRES_KEY, auth.expiresAt);
       writeStoredValue(SESSION_APP_CONTEXT_KEY, auth.appContext || context);
+      const workspaceStartedAt = typeof performance !== 'undefined' ? performance.now() : 0;
       await loadWorkspace$(auth.token);
+      recordBrowserPerformanceSpan('workspace-load', workspaceStartedAt, {
+        source: 'login',
+        appContext: auth.appContext || context
+      });
       await navigate$('/dashboard');
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Nao foi possivel iniciar sessao';
@@ -484,22 +488,36 @@ export const App = component$(() => {
     browserSessionProgress.value = Math.max(browserSessionProgress.value, 18);
     removeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY);
     try {
+      const browserSessionStartedAt = typeof performance !== 'undefined' ? performance.now() : 0;
       let auth: Awaited<ReturnType<typeof startBrowserSession>> | null = null;
       let lastError: unknown = null;
+      let attemptsUsed = 0;
 
       for (let attempt = 1; attempt <= BROWSER_SESSION_MAX_ATTEMPTS; attempt += 1) {
         try {
+          attemptsUsed = attempt;
           browserSessionProgress.value = Math.max(
             browserSessionProgress.value,
             Math.min(32, 18 + attempt * 4)
           );
+          const warmupStartedAt = typeof performance !== 'undefined' ? performance.now() : 0;
           await warmupApi();
           browserSessionProgress.value = Math.max(
             browserSessionProgress.value,
             Math.min(54, 34 + attempt * 4)
           );
           browserSessionProgress.value = Math.max(browserSessionProgress.value, 58);
+          const browserSessionRequestStartedAt =
+            typeof performance !== 'undefined' ? performance.now() : 0;
           auth = await startBrowserSession(appContext.value);
+          recordBrowserPerformanceSpan('warmup', warmupStartedAt, {
+            attempt,
+            flow: 'browser-session'
+          });
+          recordBrowserPerformanceSpan('browser-session-request', browserSessionRequestStartedAt, {
+            attempt,
+            appContext: appContext.value
+          });
           break;
         } catch (err) {
           lastError = err;
@@ -524,11 +542,21 @@ export const App = component$(() => {
       writeStoredValue(SESSION_EXPIRES_KEY, auth.expiresAt);
       writeStoredValue(SESSION_APP_CONTEXT_KEY, auth.appContext || appContext.value);
       browserSessionProgress.value = Math.max(browserSessionProgress.value, 88);
+      const workspaceStartedAt = typeof performance !== 'undefined' ? performance.now() : 0;
       await loadWorkspace$(auth.token);
+      recordBrowserPerformanceSpan('workspace-load', workspaceStartedAt, {
+        source: 'browser-session',
+        appContext: appContext.value,
+        attempts: attemptsUsed
+      });
       browserSessionProgress.value = 100;
       showEntry.value = false;
       autoBrowserSessionPending.value = false;
       session.ready = true;
+      recordBrowserPerformanceSpan('browser-session', browserSessionStartedAt, {
+        attempts: attemptsUsed,
+        appContext: appContext.value
+      });
       await navigate$('/dashboard');
     } catch (err) {
       error.value =
@@ -847,7 +875,65 @@ export const App = component$(() => {
     documentPreview.value = null;
   });
 
+  const safePath = currentPath.value === '/login' ? '/dashboard' : currentPath.value;
+  const route = matchEntityRoute(safePath);
+  const page = getPageByPath(pageCache.value, route.basePath);
+  const currentPageKey = resolvePageLoaderKey(page.path, route.kind);
+  const WorkspacePage = pageState.key === currentPageKey ? pageState.component : undefined;
+  const currentPageLoadError = pageState.key === currentPageKey ? pageState.error : '';
+  const renderWorkspacePage = (props: Record<string, unknown>) =>
+    WorkspacePage ? <WorkspacePage {...props} /> : <div class="glass-panel">A carregar secao...</div>;
+  const isWorkerContext = appContext.value === 'worker';
+  const isClientContext = appContext.value === 'client';
+
+  useTask$(async ({ track, cleanup }) => {
+    const canRenderWorkspace = track(() => session.ready && Boolean(session.token));
+    const loaderKey = track(() => currentPageKey);
+
+    if (!canRenderWorkspace) {
+      pageState.key = 'page-overview';
+      pageState.component = undefined;
+      pageState.loading = false;
+      pageState.error = '';
+      return;
+    }
+
+    if (pageState.key === loaderKey && pageState.component) {
+      pageState.loading = false;
+      pageState.error = '';
+      return;
+    }
+
+    let cancelled = false;
+    cleanup(() => {
+      cancelled = true;
+    });
+
+    pageState.key = loaderKey;
+    pageState.loading = true;
+    pageState.error = '';
+
+    try {
+      const component = await loadPageComponent(loaderKey);
+      if (cancelled) {
+        return;
+      }
+      pageState.component = noSerialize(component);
+    } catch (err) {
+      if (cancelled) {
+        return;
+      }
+      pageState.component = undefined;
+      pageState.error = err instanceof Error ? err.message : 'Nao foi possivel carregar a pagina';
+    } finally {
+      if (!cancelled) {
+        pageState.loading = false;
+      }
+    }
+  });
+
   useVisibleTask$(({ cleanup }) => {
+    const stopPerfTelemetry = installBrowserPerformanceTelemetry();
     const syncPath = () => {
       const rawPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       const route = parseRouteContext(rawPath);
@@ -865,7 +951,10 @@ export const App = component$(() => {
 
     syncPath();
     window.addEventListener('popstate', syncPath);
-    cleanup(() => window.removeEventListener('popstate', syncPath));
+    cleanup(() => {
+      stopPerfTelemetry();
+      window.removeEventListener('popstate', syncPath);
+    });
   });
 
   useVisibleTask$(({ cleanup }) => {
@@ -1074,12 +1163,6 @@ export const App = component$(() => {
     );
   }
 
-  const safePath = currentPath.value === '/login' ? '/dashboard' : currentPath.value;
-  const route = matchEntityRoute(safePath);
-  const page = getPageByPath(pageCache.value, route.basePath);
-  const isWorkerContext = appContext.value === 'worker';
-  const isClientContext = appContext.value === 'client';
-
   return (
     <AppShell
       currentPath={page.path}
@@ -1093,263 +1176,264 @@ export const App = component$(() => {
     >
       {error.value ? <div class="app-error glass-panel">{error.value}</div> : null}
       {notice.value ? <div class="app-success glass-panel">{notice.value}</div> : null}
+      {currentPageLoadError ? <div class="app-error glass-panel">{currentPageLoadError}</div> : null}
       {isClientContext ? (
         page.path === '/chat' ? (
-          <ChatPage
-            appContext={appContext.value}
-            currentUser={session.user}
-            token={session.token}
-            navigate$={navigate$}
-          />
+          renderWorkspacePage({
+            appContext: appContext.value,
+            currentUser: session.user,
+            token: session.token,
+            navigate$
+          })
         ) : page.path === '/calendario' ? (
-          <CalendarPage
-            resources={resources.value}
-            isSaving={isSaving.value}
-            readOnly
-            initialType={route.kind === 'calendarType' ? route.eventType : ''}
-            navigate$={navigate$}
-            onCreate$={createRecord$}
-            onUpdate$={updateRecord$}
-            onDelete$={deleteRecord$}
-          />
+          renderWorkspacePage({
+            resources: resources.value,
+            isSaving: isSaving.value,
+            readOnly: true,
+            initialType: route.kind === 'calendarType' ? route.eventType : '',
+            navigate$,
+            onCreate$: createRecord$,
+            onUpdate$: updateRecord$,
+            onDelete$: deleteRecord$
+          })
         ) : page.path === '/documentos' ? (
-          <DocumentsPage
-            page={page}
-            isSaving={isSaving.value}
-            isPreviewLoading={isPreviewLoading.value}
-            reportPreview={reportPreview.value}
-            documentPreview={documentPreview.value}
-            createIntentResource={createIntent.path === page.path ? createIntent.resource : ''}
-            createIntentVersion={createIntent.version}
-            navigate$={navigate$}
-            onCreate$={createRecord$}
-            onUpdate$={updateRecord$}
-            onDelete$={deleteRecord$}
-            onUploadDocument$={uploadDocument$}
-            onGenerateDocument$={generateDocument$}
-            onPreviewReport$={previewReport$}
-            onExportReport$={exportReport$}
-            onPreviewDocument$={previewDocument$}
-            onDownloadDocument$={downloadDocument$}
-            onCloseReportPreview$={closeReportPreview$}
-            onCloseDocumentPreview$={closeDocumentPreview$}
-          />
+          renderWorkspacePage({
+            page,
+            isSaving: isSaving.value,
+            isPreviewLoading: isPreviewLoading.value,
+            reportPreview: reportPreview.value,
+            documentPreview: documentPreview.value,
+            createIntentResource: createIntent.path === page.path ? createIntent.resource : '',
+            createIntentVersion: createIntent.version,
+            navigate$,
+            onCreate$: createRecord$,
+            onUpdate$: updateRecord$,
+            onDelete$: deleteRecord$,
+            onUploadDocument$: uploadDocument$,
+            onGenerateDocument$: generateDocument$,
+            onPreviewReport$: previewReport$,
+            onExportReport$: exportReport$,
+            onPreviewDocument$: previewDocument$,
+            onDownloadDocument$: downloadDocument$,
+            onCloseReportPreview$: closeReportPreview$,
+            onCloseDocumentPreview$: closeDocumentPreview$
+          })
         ) : (
-          <TicketsPage
-            appContext={appContext.value}
-            resources={resources.value}
-            isSaving={isSaving.value}
-            token={session.token}
-            createIntentVersion={createIntent.path === '/tickets' ? createIntent.version : 0}
-            initialStatusGroup={route.kind === 'ticketStatus' ? route.group : ''}
-            initialPriority={route.kind === 'ticketPriority' ? route.priority : ''}
-            navigate$={navigate$}
-            onCreate$={createRecord$}
-            onUpdate$={updateRecord$}
-            onDelete$={deleteRecord$}
-          />
+          renderWorkspacePage({
+            appContext: appContext.value,
+            resources: resources.value,
+            isSaving: isSaving.value,
+            token: session.token,
+            createIntentVersion: createIntent.path === '/tickets' ? createIntent.version : 0,
+            initialStatusGroup: route.kind === 'ticketStatus' ? route.group : '',
+            initialPriority: route.kind === 'ticketPriority' ? route.priority : '',
+            navigate$,
+            onCreate$: createRecord$,
+            onUpdate$: updateRecord$,
+            onDelete$: deleteRecord$
+          })
         )
       ) : isWorkerContext ? (
         page.path === '/chat' ? (
-          <ChatPage
-            appContext={appContext.value}
-            currentUser={session.user}
-            token={session.token}
-            navigate$={navigate$}
-          />
+          renderWorkspacePage({
+            appContext: appContext.value,
+            currentUser: session.user,
+            token: session.token,
+            navigate$
+          })
         ) : page.path === '/tarefas' ? (
-          <TasksPage
-            appContext={appContext.value}
-            resources={resources.value}
-            currentUser={session.user}
-            navigate$={navigate$}
-          />
+          renderWorkspacePage({
+            appContext: appContext.value,
+            resources: resources.value,
+            currentUser: session.user,
+            navigate$
+          })
         ) : page.path === '/manutencao' ? (
-          <MaintenancePage
-            resources={resources.value}
-            isSaving={isSaving.value}
-            createIntentVersion={createIntent.path === page.path ? createIntent.version : 0}
-            initialStatus={route.kind === 'maintenanceStatus' ? route.status : ''}
-            navigate$={navigate$}
-            onCreate$={createRecord$}
-            onUpdate$={updateRecord$}
-            onDelete$={deleteRecord$}
-          />
+          renderWorkspacePage({
+            resources: resources.value,
+            isSaving: isSaving.value,
+            createIntentVersion: createIntent.path === page.path ? createIntent.version : 0,
+            initialStatus: route.kind === 'maintenanceStatus' ? route.status : '',
+            navigate$,
+            onCreate$: createRecord$,
+            onUpdate$: updateRecord$,
+            onDelete$: deleteRecord$
+          })
         ) : page.path === '/vistorias' ? (
-          <InspectionsPage
-            appContext={appContext.value}
-            currentUser={session.user}
-            resources={resources.value}
-            isSaving={isSaving.value}
-            navigate$={navigate$}
-            onCreate$={createRecord$}
-            onUpdate$={updateRecord$}
-            onDelete$={deleteRecord$}
-            onGenerateDocument$={generateDocument$}
-          />
+          renderWorkspacePage({
+            appContext: appContext.value,
+            currentUser: session.user,
+            resources: resources.value,
+            isSaving: isSaving.value,
+            navigate$,
+            onCreate$: createRecord$,
+            onUpdate$: updateRecord$,
+            onDelete$: deleteRecord$,
+            onGenerateDocument$: generateDocument$
+          })
         ) : page.path === '/calendario' ? (
-          <CalendarPage
-            resources={resources.value}
-            isSaving={isSaving.value}
-            initialType={route.kind === 'calendarType' ? route.eventType : ''}
-            navigate$={navigate$}
-            onCreate$={createRecord$}
-            onUpdate$={updateRecord$}
-            onDelete$={deleteRecord$}
-          />
+          renderWorkspacePage({
+            resources: resources.value,
+            isSaving: isSaving.value,
+            initialType: route.kind === 'calendarType' ? route.eventType : '',
+            navigate$,
+            onCreate$: createRecord$,
+            onUpdate$: updateRecord$,
+            onDelete$: deleteRecord$
+          })
         ) : (
-          <TicketsPage
-            appContext={appContext.value}
-            resources={resources.value}
-            isSaving={isSaving.value}
-            token={session.token}
-            createIntentVersion={createIntent.path === '/tickets' ? createIntent.version : 0}
-            initialStatusGroup={route.kind === 'ticketStatus' ? route.group : ''}
-            initialPriority={route.kind === 'ticketPriority' ? route.priority : ''}
-            navigate$={navigate$}
-            onCreate$={createRecord$}
-            onUpdate$={updateRecord$}
-            onDelete$={deleteRecord$}
-          />
+          renderWorkspacePage({
+            appContext: appContext.value,
+            resources: resources.value,
+            isSaving: isSaving.value,
+            token: session.token,
+            createIntentVersion: createIntent.path === '/tickets' ? createIntent.version : 0,
+            initialStatusGroup: route.kind === 'ticketStatus' ? route.group : '',
+            initialPriority: route.kind === 'ticketPriority' ? route.priority : '',
+            navigate$,
+            onCreate$: createRecord$,
+            onUpdate$: updateRecord$,
+            onDelete$: deleteRecord$
+          })
         )
       ) : route.kind === 'detail' ? (
-        <EntityDetailPage
-          route={route}
-          resources={resources.value}
-          navigate$={navigate$}
-        />
+        renderWorkspacePage({
+          route,
+          resources: resources.value,
+          navigate$
+        })
       ) : page.path === '/dashboard' ? (
-        <DashboardPage
-          dashboard={dashboard.value}
-          navigate$={navigate$}
-          onQuickAction$={runDashboardAction$}
-          onModuleCommand$={runModuleCommand$}
-        />
+        renderWorkspacePage({
+          dashboard: dashboard.value,
+          navigate$,
+          onQuickAction$: runDashboardAction$,
+          onModuleCommand$: runModuleCommand$
+        })
       ) : page.path === '/equipa' ? (
-        <TeamPage
-          resources={resources.value}
-          navigate$={navigate$}
-        />
+        renderWorkspacePage({
+          resources: resources.value,
+          navigate$
+        })
       ) : page.path === '/tarefas' ? (
-        <TasksPage
-          appContext={appContext.value}
-          resources={resources.value}
-          currentUser={session.user}
-          navigate$={navigate$}
-        />
+        renderWorkspacePage({
+          appContext: appContext.value,
+          resources: resources.value,
+          currentUser: session.user,
+          navigate$
+        })
       ) : page.path === '/condominios' ? (
-        <CondominiumsPage
-          token={session.token}
-          resources={resources.value}
-          focusArea={condominiumShortcutArea.value}
-          isSaving={isSaving.value}
-          onRefresh$={refreshWorkspace$}
-          navigate$={navigate$}
-        />
+        renderWorkspacePage({
+          token: session.token,
+          resources: resources.value,
+          focusArea: condominiumShortcutArea.value,
+          isSaving: isSaving.value,
+          onRefresh$: refreshWorkspace$,
+          navigate$
+        })
       ) : page.path === '/contabilidade' ? (
-        <AccountingPage
-          resources={resources.value}
-          isSaving={isSaving.value}
-          onCreate$={createRecord$}
-        />
+        renderWorkspacePage({
+          resources: resources.value,
+          isSaving: isSaving.value,
+          onCreate$: createRecord$
+        })
       ) : page.path === '/calendario' ? (
-        <CalendarPage
-          resources={resources.value}
-          isSaving={isSaving.value}
-          initialType={route.kind === 'calendarType' ? route.eventType : ''}
-          navigate$={navigate$}
-          onCreate$={createRecord$}
-          onUpdate$={updateRecord$}
-          onDelete$={deleteRecord$}
-        />
+        renderWorkspacePage({
+          resources: resources.value,
+          isSaving: isSaving.value,
+          initialType: route.kind === 'calendarType' ? route.eventType : '',
+          navigate$,
+          onCreate$: createRecord$,
+          onUpdate$: updateRecord$,
+          onDelete$: deleteRecord$
+        })
       ) : page.path === '/tickets' ? (
-        <TicketsPage
-          appContext={appContext.value}
-          resources={resources.value}
-          isSaving={isSaving.value}
-          token={session.token}
-          createIntentVersion={createIntent.path === page.path ? createIntent.version : 0}
-          initialStatusGroup={route.kind === 'ticketStatus' ? route.group : ''}
-          initialPriority={route.kind === 'ticketPriority' ? route.priority : ''}
-          navigate$={navigate$}
-          onCreate$={createRecord$}
-          onUpdate$={updateRecord$}
-          onDelete$={deleteRecord$}
-        />
+        renderWorkspacePage({
+          appContext: appContext.value,
+          resources: resources.value,
+          isSaving: isSaving.value,
+          token: session.token,
+          createIntentVersion: createIntent.path === page.path ? createIntent.version : 0,
+          initialStatusGroup: route.kind === 'ticketStatus' ? route.group : '',
+          initialPriority: route.kind === 'ticketPriority' ? route.priority : '',
+          navigate$,
+          onCreate$: createRecord$,
+          onUpdate$: updateRecord$,
+          onDelete$: deleteRecord$
+        })
       ) : page.path === '/manutencao' ? (
-        <MaintenancePage
-          resources={resources.value}
-          isSaving={isSaving.value}
-          createIntentVersion={createIntent.path === page.path ? createIntent.version : 0}
-          initialStatus={route.kind === 'maintenanceStatus' ? route.status : ''}
-          navigate$={navigate$}
-          onCreate$={createRecord$}
-          onUpdate$={updateRecord$}
-          onDelete$={deleteRecord$}
-        />
+        renderWorkspacePage({
+          resources: resources.value,
+          isSaving: isSaving.value,
+          createIntentVersion: createIntent.path === page.path ? createIntent.version : 0,
+          initialStatus: route.kind === 'maintenanceStatus' ? route.status : '',
+          navigate$,
+          onCreate$: createRecord$,
+          onUpdate$: updateRecord$,
+          onDelete$: deleteRecord$
+        })
       ) : page.path === '/vistorias' ? (
-        <InspectionsPage
-          appContext={appContext.value}
-          currentUser={session.user}
-          resources={resources.value}
-          isSaving={isSaving.value}
-          navigate$={navigate$}
-          onCreate$={createRecord$}
-          onUpdate$={updateRecord$}
-          onDelete$={deleteRecord$}
-          onGenerateDocument$={generateDocument$}
-        />
+        renderWorkspacePage({
+          appContext: appContext.value,
+          currentUser: session.user,
+          resources: resources.value,
+          isSaving: isSaving.value,
+          navigate$,
+          onCreate$: createRecord$,
+          onUpdate$: updateRecord$,
+          onDelete$: deleteRecord$,
+          onGenerateDocument$: generateDocument$
+        })
       ) : page.path === '/documentos' ? (
-        <DocumentsPage
-          page={page}
-          isSaving={isSaving.value}
-          isPreviewLoading={isPreviewLoading.value}
-          reportPreview={reportPreview.value}
-          documentPreview={documentPreview.value}
-          createIntentResource={createIntent.path === page.path ? createIntent.resource : ''}
-          createIntentVersion={createIntent.version}
-          navigate$={navigate$}
-          onCreate$={createRecord$}
-          onUpdate$={updateRecord$}
-          onDelete$={deleteRecord$}
-          onUploadDocument$={uploadDocument$}
-          onGenerateDocument$={generateDocument$}
-          onPreviewReport$={previewReport$}
-          onExportReport$={exportReport$}
-          onPreviewDocument$={previewDocument$}
-          onDownloadDocument$={downloadDocument$}
-          onCloseReportPreview$={closeReportPreview$}
-          onCloseDocumentPreview$={closeDocumentPreview$}
-        />
+        renderWorkspacePage({
+          page,
+          isSaving: isSaving.value,
+          isPreviewLoading: isPreviewLoading.value,
+          reportPreview: reportPreview.value,
+          documentPreview: documentPreview.value,
+          createIntentResource: createIntent.path === page.path ? createIntent.resource : '',
+          createIntentVersion: createIntent.version,
+          navigate$,
+          onCreate$: createRecord$,
+          onUpdate$: updateRecord$,
+          onDelete$: deleteRecord$,
+          onUploadDocument$: uploadDocument$,
+          onGenerateDocument$: generateDocument$,
+          onPreviewReport$: previewReport$,
+          onExportReport$: exportReport$,
+          onPreviewDocument$: previewDocument$,
+          onDownloadDocument$: downloadDocument$,
+          onCloseReportPreview$: closeReportPreview$,
+          onCloseDocumentPreview$: closeDocumentPreview$
+        })
       ) : page.path === '/chat' ? (
-        <ChatPage
-          appContext={appContext.value}
-          currentUser={session.user}
-          token={session.token}
-          navigate$={navigate$}
-        />
+        renderWorkspacePage({
+          appContext: appContext.value,
+          currentUser: session.user,
+          token: session.token,
+          navigate$
+        })
       ) : (
-        <PageOverview
-          page={page}
-          isSaving={isSaving.value}
-          isPreviewLoading={isPreviewLoading.value}
-          reportPreview={reportPreview.value}
-          documentPreview={documentPreview.value}
-          createIntentResource={createIntent.path === page.path ? createIntent.resource : ''}
-          createIntentVersion={createIntent.version}
-          navigate$={navigate$}
-          onCreate$={createRecord$}
-          onUpdate$={updateRecord$}
-          onDelete$={deleteRecord$}
-          onUploadDocument$={uploadDocument$}
-          onGenerateDocument$={generateDocument$}
-          onPreviewReport$={previewReport$}
-          onExportReport$={exportReport$}
-          onPreviewDocument$={previewDocument$}
-          onDownloadDocument$={downloadDocument$}
-          onCloseReportPreview$={closeReportPreview$}
-          onCloseDocumentPreview$={closeDocumentPreview$}
-        />
+        renderWorkspacePage({
+          page,
+          isSaving: isSaving.value,
+          isPreviewLoading: isPreviewLoading.value,
+          reportPreview: reportPreview.value,
+          documentPreview: documentPreview.value,
+          createIntentResource: createIntent.path === page.path ? createIntent.resource : '',
+          createIntentVersion: createIntent.version,
+          navigate$,
+          onCreate$: createRecord$,
+          onUpdate$: updateRecord$,
+          onDelete$: deleteRecord$,
+          onUploadDocument$: uploadDocument$,
+          onGenerateDocument$: generateDocument$,
+          onPreviewReport$: previewReport$,
+          onExportReport$: exportReport$,
+          onPreviewDocument$: previewDocument$,
+          onDownloadDocument$: downloadDocument$,
+          onCloseReportPreview$: closeReportPreview$,
+          onCloseDocumentPreview$: closeDocumentPreview$
+        })
       )}
     </AppShell>
   );

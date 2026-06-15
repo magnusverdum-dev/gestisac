@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#07111f" />
+    <meta
+      name="description"
+      content="Viewer 3D isolado para modelos GLB/GLTF dos condominios do GESTISAC."
+    />
+    <title>Viewer 3D | GESTISAC</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07111f;
+        --bg-2: #0b1728;
+        --panel: rgba(8, 16, 30, 0.96);
+        --panel-2: rgba(11, 23, 40, 0.96);
+        --line: rgba(148, 163, 184, 0.18);
+        --line-strong: rgba(148, 163, 184, 0.28);
+        --text: #edf4ff;
+        --muted: #9caec8;
+        --accent: #7dd3fc;
+        --accent-2: #8fb4ff;
+        --shadow: none;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at 12% 0%, rgba(125, 211, 252, 0.14), transparent 28rem),
+          radial-gradient(circle at 88% 8%, rgba(143, 180, 255, 0.1), transparent 24rem),
+          linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 55%, #050914 100%);
+        color: var(--text);
+      }
+
+      body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .topbar {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: minmax(0, 1fr) minmax(260px, 420px) auto;
+        align-items: center;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(11, 23, 40, 0.96), rgba(7, 17, 31, 0.92));
+        backdrop-filter: blur(14px);
+      }
+
+      .title-block {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+      }
+
+      .title-block strong {
+        font-size: 16px;
+        letter-spacing: 0;
+      }
+
+      .title-block span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .field {
+        display: grid;
+        gap: 5px;
+      }
+
+      .field label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .field input {
+        width: 100%;
+        min-width: 0;
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        background: rgba(3, 8, 18, 0.72);
+        color: var(--text);
+        padding: 11px 12px;
+        outline: none;
+      }
+
+      .field input:focus {
+        border-color: rgba(125, 211, 252, 0.56);
+        box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.12);
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        align-items: end;
+        justify-content: flex-end;
+      }
+
+      .actions button,
+      .actions a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 14px;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        text-decoration: none;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .actions .primary {
+        background: linear-gradient(180deg, rgba(125, 211, 252, 0.92), rgba(92, 169, 214, 0.96));
+        color: #04101f;
+        font-weight: 700;
+      }
+
+      .actions .secondary {
+        background: rgba(15, 23, 42, 0.72);
+        border-color: var(--line-strong);
+        color: var(--text);
+      }
+
+      .workspace {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        padding: 18px;
+      }
+
+      .stage {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: calc(100vh - 92px);
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(9, 16, 29, 0.84), rgba(4, 10, 20, 0.9));
+      }
+
+      .status {
+        position: absolute;
+        left: 16px;
+        bottom: 16px;
+        z-index: 2;
+        max-width: min(560px, calc(100% - 32px));
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(4, 10, 20, 0.72);
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+        backdrop-filter: blur(12px);
+      }
+
+      .hint {
+        position: absolute;
+        right: 16px;
+        top: 16px;
+        z-index: 2;
+        padding: 9px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(4, 10, 20, 0.7);
+        color: var(--muted);
+        font-size: 12px;
+        backdrop-filter: blur(12px);
+      }
+
+      canvas {
+        display: block;
+      }
+
+      @media (max-width: 960px) {
+        .topbar {
+          grid-template-columns: 1fr;
+        }
+
+        .actions {
+          justify-content: flex-start;
+        }
+
+        .stage {
+          min-height: calc(100vh - 220px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="title-block">
+        <strong id="viewer-title">Viewer 3D</strong>
+        <span id="viewer-subtitle">Modelo carregado fora do bundle principal.</span>
+      </div>
+      <div class="field">
+        <label for="model-url">URL do modelo</label>
+        <input id="model-url" type="url" placeholder="https://.../modelo.glb" autocomplete="off" />
+      </div>
+      <div class="actions">
+        <button class="primary" id="load-model" type="button">Carregar</button>
+        <a class="secondary" id="open-source" href="#" target="_blank" rel="noreferrer">Abrir origem</a>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="stage" id="stage" aria-label="Visualizador 3D">
+        <div class="hint">Drag para rodar, scroll para zoom</div>
+        <div class="status" id="status">A aguardar um modelo GLB ou GLTF.</div>
+      </section>
+    </main>
+
+    <script type="module" src="./viewer.js"></script>
+  </body>
+</html>
