@@ -888,7 +888,9 @@ export const App = component$(() => {
 
   useTask$(async ({ track, cleanup }) => {
     const canRenderWorkspace = track(() => session.ready && Boolean(session.token));
-    const loaderKey = track(() => currentPageKey);
+    const trackedPath = track(() => currentPath.value);
+    track(() => appContext.value);
+    const trackedPageCache = track(() => pageCache.value);
 
     if (!canRenderWorkspace) {
       pageState.key = 'page-overview';
@@ -897,6 +899,11 @@ export const App = component$(() => {
       pageState.error = '';
       return;
     }
+
+    const safeTrackedPath = trackedPath === '/login' ? '/dashboard' : trackedPath;
+    const trackedRoute = matchEntityRoute(safeTrackedPath);
+    const trackedPage = getPageByPath(trackedPageCache, trackedRoute.basePath);
+    const loaderKey = resolvePageLoaderKey(trackedPage.path, trackedRoute.kind);
 
     if (pageState.key === loaderKey && pageState.component) {
       pageState.loading = false;
