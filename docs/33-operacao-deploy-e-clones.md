@@ -158,6 +158,15 @@ Validar:
 curl https://gestisac-web.vercel.app/hq/login
 ```
 
+Se o objetivo for declarar o deploy como validado do ponto de vista do utilizador,
+o comando oficial e:
+
+```bash
+pnpm run deploy:prod:verify
+```
+
+Esse fluxo termina com uma navegacao real no browser publicado e screenshots de evidencia.
+
 ### 3. Deploy da API
 
 Diretorio:
@@ -177,6 +186,13 @@ Nao fazer deploy da API em producao se faltar:
 ```text
 GESTISAC_DATABASE_URL
 ```
+
+Antes de publicar, confirmar tambem no projeto Vercel que:
+
+- `gestisac-api` continua com `rootDirectory=apps/api`;
+- `gestisac-api` nao tem `buildCommand` manual definido;
+- se aparecer `No Output Directory named "public" found after the Build completed`, o primeiro passo e limpar
+  o override de `buildCommand` no projeto, nao trocar a arquitetura do runtime.
 
 Depois de configurado:
 
@@ -205,6 +221,19 @@ Estado correto esperado:
   }
 }
 ```
+
+### Nota de correcao
+
+Para a API Rust em Fluid Compute, o problema nao foi falta de suporte geral do CLI ao Rust. O que partiu o deploy
+foi o projeto Vercel ficar com um `buildCommand` manual como `cargo build --release`, o que faz a plataforma
+procurar output estatica (`public/`) depois do build. O deploy certo continua a ser o runtime Rust com
+`apps/api/api/server.rs` e o build sem esse override.
+
+Se isto voltar a acontecer:
+
+1. Correr `npx vercel project inspect gestisac-api`.
+2. Verificar se `buildCommand` esta vazio/null.
+3. Revalidar com `npx vercel build --prod --cwd apps/api`.
 
 ## Primeiro deploy com Supabase
 

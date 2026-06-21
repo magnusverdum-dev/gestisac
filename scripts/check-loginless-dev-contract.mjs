@@ -21,8 +21,14 @@ const checks = [
   },
   {
     file: 'apps/web/src/app.tsx',
-    pattern: /svc\.browserSessionLoginlessEnabled &&\s*store\.autoBrowserSessionPending\.value &&\s*!store\.isLoading\.value &&\s*store\.currentPath\.value === '\/login'[\s\S]*void svc\.openBrowserSession\$\(\);/s,
-    message: 'apps/web/src/app.tsx must automatically retry loginless entry while the login route is waiting.'
+    pattern: /useVisibleTask\$\(\s*async \(\) => \{\s*await svc\.initBrowserSession\$\(\);\s*\}\s*\);/s,
+    message: 'apps/web/src/app.tsx must bootstrap the loginless session once on mount.'
+  },
+  {
+    file: 'apps/web/src/app.tsx',
+    pattern: /setInterval\(/,
+    forbid: true,
+    message: 'apps/web/src/app.tsx must not re-open browser-session in a repeating timer loop.'
   },
 
   // ══════════════════════════════════════════════════════════
@@ -65,8 +71,8 @@ const checks = [
   },
   {
     file: 'apps/web/src/lib/session/session-service.ts',
-    pattern: /autoBrowserSessionPending\.value = browserSessionLoginlessEnabled;/,
-    message: 'session-service.ts must keep the loginless retry UI active after a recoverable browser-session failure.'
+    pattern: /autoBrowserSessionPending\.value = false;/,
+    message: 'session-service.ts must stop the loginless retry loop after a recoverable browser-session failure.'
   },
   {
     file: 'apps/web/src/lib/session/session-service.ts',
@@ -174,7 +180,8 @@ const failures = [];
 
 for (const check of checks) {
   const source = readFileSync(new URL(`../${check.file}`, import.meta.url), 'utf8');
-  if (!check.pattern.test(source)) {
+  const matched = check.pattern.test(source);
+  if (check.forbid ? matched : !matched) {
     failures.push(`${check.file}: ${check.message}`);
   }
 }

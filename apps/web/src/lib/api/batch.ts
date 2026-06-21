@@ -2,7 +2,7 @@ type LoaderMap = Record<string, () => Promise<unknown>>;
 
 export async function loadInBatches<T extends LoaderMap>(
   loaders: T,
-  batchSize = 1
+  batchSize = 6
 ): Promise<{ [K in keyof T]: Awaited<ReturnType<T[K]>> }> {
   const entries = Object.entries(loaders) as Array<[keyof T, T[keyof T]]>;
   const results = {} as { [K in keyof T]: Awaited<ReturnType<T[K]>> };

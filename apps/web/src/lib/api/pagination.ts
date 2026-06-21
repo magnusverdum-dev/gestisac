@@ -6,7 +6,8 @@ export async function getResourcePage<T>(
   path: string,
   page = 1,
   pageSize = 50,
-  search = ''
+  search = '',
+  timeoutMs?: number
 ): Promise<T[]> {
   const [basePath, existingQuery = ''] = path.split('?');
   const params = new URLSearchParams(existingQuery);
@@ -16,7 +17,7 @@ export async function getResourcePage<T>(
     params.set('search', search.trim());
   }
 
-  const response = await apiRequest<PaginatedResponse<T>>(`${basePath}?${params}`, { token });
+  const response = await apiRequest<PaginatedResponse<T>>(`${basePath}?${params}`, { token, timeoutMs });
 
   return response.items;
 }

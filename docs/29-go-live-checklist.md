@@ -58,8 +58,19 @@ Data de referencia: 2026-06-03
 - [ ] `GET https://<dominio-da-api>/api/health` => JSON da API
 - [ ] `POST https://<dominio-da-api>/api/auth/login` => `200/401` JSON
 - [ ] `GESTISAC_API_URL=https://<dominio-da-api> pnpm run smoke:api`
-- [ ] Login manual nas 3 apps (`/hq`, `/worker`, `/client`)
+- [ ] `pnpm run deploy:prod:verify`
+- [ ] Login ou browser-session validado como utilizador nas 3 apps (`/hq`, `/worker`, `/client`)
 - [ ] Navegacao principal sem erros JS no console
+- [ ] Screenshots de evidencia guardados e revistos antes de declarar sucesso
+
+### Regra de declaracao
+
+Nao e permitido dizer que um deploy "passou", "esta funcional" ou "esta pronto" apenas porque os comandos terminaram com sucesso.
+A declaracao so e valida depois de:
+
+1. O deploy ter concluido.
+2. A experiencia real de utilizador ter sido percorrida no browser publicado.
+3. As screenshots de evidencia terem sido geradas e verificadas.
 
 ## 6) Seguranca minima
 

@@ -44,6 +44,15 @@ flowchart LR
 8. **Never** enable `GESTISAC_RUN_MIGRATIONS=true` in normal production flow. Only enable during a controlled schema rollout, then disable immediately after.
 9. **Never** enable `GESTISAC_SYNC_ON_STARTUP=true` in normal production flow. Only enable for a controlled sync operation.
 
+10. **Never** diagnose a Rust Fluid deploy failure from the CLI without inspecting the Vercel project settings first.
+    If a Rust API project starts failing with `No Output Directory named "public" found after the Build completed`,
+    check whether the Vercel project has a manual `buildCommand` override. For `gestisac-api`, that field must be
+    empty/null so the Rust runtime can build `api/server.rs` directly.
+11. **Never** use a root-level `vercel deploy` for the API repository when the linked project lives in `apps/api`.
+    Always deploy with `--cwd apps/api` or through `scripts/deploy-api-production.mjs`.
+12. **Never** call a deploy "passed", "functional" or "ready" unless the published app was walked as a real user
+    and screenshot evidence exists. The official verified path is `pnpm run deploy:prod:verify`.
+
 ## Environment Variables — Complete Reference
 
 ### Frontend (Web) — Required
@@ -115,6 +124,14 @@ Verify:
 curl https://gestisac-web.vercel.app/hq/login
 ```
 
+If you need a deployment that can be claimed as validated, run:
+
+```bash
+pnpm run deploy:prod:verify
+```
+
+That command deploys API, deploys Web, then runs a visible browser smoke that captures screenshot evidence.
+
 ### Step 3: Deploy API
 
 Move to the API directory and confirm env:
@@ -129,6 +146,12 @@ Ensure `GESTISAC_DATABASE_URL` exists. Then:
 ```bash
 pnpm run deploy:api:prod
 ```
+
+Before deploying, inspect the Vercel project settings:
+
+- `gestisac-api` must have `rootDirectory=apps/api`.
+- `gestisac-api` must not have a manual `buildCommand` override in the dashboard.
+- If a deploy fails with `No Output Directory named "public" found...`, clear the project `buildCommand` override first.
 
 Verify:
 
@@ -243,7 +266,8 @@ When you perform a deployment or operational task, report:
 3. **Action taken**: Step-by-step of what was executed.
 4. **Post-validation**: Commands run and results after the action.
 5. **Current state**: Health endpoint output, env var status, any warnings.
-6. **Next steps**: Anything remaining or requiring manual attention.
+6. **Evidence**: Which user-facing screenshots were captured and where they were saved.
+7. **Next steps**: Anything remaining or requiring manual attention.
 
 ## Escalation
 

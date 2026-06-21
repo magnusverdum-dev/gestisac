@@ -42,6 +42,7 @@ if (preflightOnly) {
 console.log('[deploy-api-production] Deploying API to Vercel Production.');
 
 const result = run('npx', ['vercel', 'deploy', '--prod', '--yes'], {
+  cwd: 'apps/api',
   env: {
     ...process.env,
     VERCEL_ORG_ID: project.orgId,

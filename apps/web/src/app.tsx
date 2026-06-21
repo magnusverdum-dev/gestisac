@@ -119,30 +119,12 @@ export const App = component$(() => {
       window.removeEventListener('popstate', syncPath);
     });
   });
-
-  // ── 5. Auto-retry browser session ──
-  useVisibleTask$(({ cleanup }) => {
-    const retryId = window.setInterval(() => {
-      if (
-        svc.browserSessionLoginlessEnabled &&
-        store.autoBrowserSessionPending.value &&
-        !store.isLoading.value &&
-        store.currentPath.value === '/login' &&
-        readSessionValue(svc.DEV_AUTO_LOGIN_SUPPRESS_KEY) !== '1'
-      ) {
-        void svc.openBrowserSession$();
-      }
-    }, 4_000);
-
-    cleanup(() => window.clearInterval(retryId));
-  });
-
-  // ── 6. Initial session bootstrap — runs once on mount ──
+  // Initial session bootstrap runs once on mount.
   useVisibleTask$(async () => {
     await svc.initBrowserSession$();
   });
 
-  // ── 7. Compute derived values for rendering ──
+  // Compute derived values for rendering.
   const safePath = store.currentPath.value === '/login' ? '/dashboard' : store.currentPath.value;
   const route = matchEntityRoute(safePath);
   const page = getPageByPath(store.pageCache.value, route.basePath);
@@ -171,7 +153,7 @@ export const App = component$(() => {
   const isWorkerContext = store.appContext.value === 'worker';
   const isClientContext = store.appContext.value === 'client';
 
-  // ── 8. Render ──
+  // Render.
   if (store.showEntry.value) {
     return (
       <AppEntryPage

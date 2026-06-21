@@ -70,7 +70,7 @@ Contextos obrigatorios:
 Fluxo minimo por contexto:
 
 - Abrir login publicado do contexto.
-- Entrar com credencial smoke real.
+- Entrar por `browser-session`/loginless quando esse contrato estiver ativo. Nao escrever credenciais manuais por defeito.
 - Confirmar dashboard inicial sem erro visual ou estado demo/local.
 - Confirmar menu correto para o contexto.
 - Abrir as paginas impactadas pela melhoria.
@@ -135,5 +135,21 @@ Antes de entregar:
 
 - Dizer quais comandos passaram.
 - Dizer quais fluxos por utilizador foram replicados.
+- Dizer em que screenshots ficou a evidencia visual.
 - Dizer qualquer aviso residual que nao bloqueia.
 - Dizer claramente se algo nao foi validado e por que motivo.
+
+## Regra de Deploy Validado
+
+Quando a melhoria inclui deploy, a frase "passou", "funcional" ou "pronto" so pode ser usada depois de correr:
+
+```bash
+pnpm run deploy:prod:verify
+```
+
+Esse comando existe para fechar o ciclo com:
+
+- deploy da API;
+- deploy da Web;
+- smoke real no browser publicado;
+- screenshots guardados em `.scrutator-screenshots/`.

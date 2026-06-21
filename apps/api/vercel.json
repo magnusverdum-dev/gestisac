@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "fluid": true,
-  "buildCommand": "cargo build --release && mkdir -p public",
   "rewrites": [
     {
       "source": "/(.*)",

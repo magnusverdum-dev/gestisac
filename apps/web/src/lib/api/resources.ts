@@ -54,6 +54,7 @@ const emptyAccounting = {
   bankTransactions: [],
   bankReconciliations: []
 };
+const INITIAL_RESOURCE_TIMEOUT_MS = 6_000;
 
 async function loadOrFallback<T>(
   label: string,
@@ -75,15 +76,15 @@ export async function getResources(token: string): Promise<ResourceState> {
     condominiums: () =>
       loadOrFallback(
         'condominios',
-        () => getResourcePage<Condominium>(token, '/api/condominiums'),
+        () => getResourcePage<Condominium>(token, '/api/condominiums', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS),
         [],
         loadWarnings
       ),
-    buildings: () => loadOrFallback('edificios', () => getResourcePage<Building>(token, '/api/buildings'), [], loadWarnings),
-    fractions: () => loadOrFallback('fracoes', () => getResourcePage<Fraction>(token, '/api/fractions'), [], loadWarnings),
-    residents: () => loadOrFallback('residentes', () => getResourcePage<Resident>(token, '/api/residents'), [], loadWarnings),
-    team: () => loadOrFallback('equipa', () => getResourcePage<TeamMember>(token, '/api/team'), [], loadWarnings),
-    tickets: () => loadOrFallback('tickets', () => getResourcePage<Ticket>(token, '/api/tickets'), [], loadWarnings),
+    buildings: () => loadOrFallback('edificios', () => getResourcePage<Building>(token, '/api/buildings', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS), [], loadWarnings),
+    fractions: () => loadOrFallback('fracoes', () => getResourcePage<Fraction>(token, '/api/fractions', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS), [], loadWarnings),
+    residents: () => loadOrFallback('residentes', () => getResourcePage<Resident>(token, '/api/residents', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS), [], loadWarnings),
+    team: () => loadOrFallback('equipa', () => getResourcePage<TeamMember>(token, '/api/team', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS), [], loadWarnings),
+    tickets: () => loadOrFallback('tickets', () => getResourcePage<Ticket>(token, '/api/tickets', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS), [], loadWarnings),
     ocorrencias: () =>
       loadOrFallback<Ocorrencia[]>(
         'ocorrencias',
@@ -91,34 +92,34 @@ export async function getResources(token: string): Promise<ResourceState> {
         [],
         loadWarnings
       ),
-    suppliers: () => loadOrFallback('fornecedores', () => getResourcePage<Supplier>(token, '/api/suppliers'), [], loadWarnings),
-    documents: () => loadOrFallback('documentos', () => getResourcePage<DocumentItem>(token, '/api/documents'), [], loadWarnings),
-    reports: () => loadOrFallback('relatorios', () => getResourcePage<Report>(token, '/api/reports'), [], loadWarnings),
+    suppliers: () => loadOrFallback('fornecedores', () => getResourcePage<Supplier>(token, '/api/suppliers', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS), [], loadWarnings),
+    documents: () => loadOrFallback('documentos', () => getResourcePage<DocumentItem>(token, '/api/documents', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS), [], loadWarnings),
+    reports: () => loadOrFallback('relatorios', () => getResourcePage<Report>(token, '/api/reports', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS), [], loadWarnings),
     maintenance: () =>
       loadOrFallback(
         'manutencoes',
-        () => getResourcePage<MaintenanceItem>(token, '/api/maintenance'),
+        () => getResourcePage<MaintenanceItem>(token, '/api/maintenance', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS),
         [],
         loadWarnings
       ),
     inspections: () =>
       loadOrFallback(
         'vistorias',
-        () => getResourcePage<InspectionItem>(token, '/api/inspections'),
+        () => getResourcePage<InspectionItem>(token, '/api/inspections', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS),
         [],
         loadWarnings
       ),
     calendarEvents: () =>
       loadOrFallback(
         'calendario',
-        () => getResourcePage<CalendarEvent>(token, '/api/calendar-events'),
+        () => getResourcePage<CalendarEvent>(token, '/api/calendar-events', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS),
         [],
         loadWarnings
       ),
     assemblies: () =>
       loadOrFallback(
         'assembleias',
-        () => getResourcePage<Assembly>(token, '/api/assemblies'),
+        () => getResourcePage<Assembly>(token, '/api/assemblies', 1, 50, '', INITIAL_RESOURCE_TIMEOUT_MS),
         [],
         loadWarnings
       ),
@@ -126,7 +127,7 @@ export async function getResources(token: string): Promise<ResourceState> {
     auditLog: () =>
       loadOrFallback(
         'auditoria',
-        () => getResourcePage<AuditLogEntry>(token, '/api/audit-log', 1, 25),
+        () => getResourcePage<AuditLogEntry>(token, '/api/audit-log', 1, 25, '', INITIAL_RESOURCE_TIMEOUT_MS),
         [],
         loadWarnings
       ),

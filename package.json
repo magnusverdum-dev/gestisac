@@ -66,6 +66,7 @@
     "deploy:api:prod": "node scripts/deploy-api-production.mjs",
     "deploy:web:build": "node scripts/vercel-build-web-production.mjs",
     "deploy:web:prod": "node scripts/deploy-web-production.mjs",
+    "deploy:prod:verify": "node scripts/deploy-production-verified.mjs",
     "audit:migrations": "node scripts/audit-database-migrations.mjs",
     "audit:fk-indexes": "node scripts/audit-foreign-key-indexes.mjs",
     "audit:prod-db": "node scripts/audit-production-database.mjs",
@@ -73,7 +74,8 @@
     "review:ocr": "node scripts/open-code-review.mjs",
     "guard:loginless-dev": "node scripts/check-loginless-dev-contract.mjs",
     "guard:qa-browser": "node scripts/check-qa-browser-contract.mjs",
-    "guard:git-push": "pnpm run guard:loginless-dev && pnpm run guard:qa-browser && pnpm run check:prod-api && pnpm run check:prod-readiness"
+    "guard:deploy-contract": "node scripts/check-deploy-verification-contract.mjs",
+    "guard:git-push": "pnpm run guard:loginless-dev && pnpm run guard:qa-browser && pnpm run guard:deploy-contract && pnpm run check:prod-api && pnpm run check:prod-readiness"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm run guard:loginless-dev && pnpm run guard:qa-browser",

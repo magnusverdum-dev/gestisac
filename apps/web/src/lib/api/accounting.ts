@@ -37,6 +37,7 @@ const emptyOverview: AccountingOverview = {
   brokenPaymentAgreements: 0,
   reserveFundStatus: 'sem dados'
 };
+const INITIAL_ACCOUNTING_TIMEOUT_MS = 6_000;
 
 async function loadOrFallback<T>(load: () => Promise<T>, fallback: T): Promise<T> {
   try {
@@ -58,33 +59,33 @@ export async function getAccounting(token: string): Promise<AccountingState> {
         () => apiRequest<AccountingOverview>('/api/accounting/overview', { token }),
         emptyOverview
       ),
-    quotas: () => loadOrFallback(() => getResourcePage<Quota>(token, '/api/accounting/quotas'), []),
+    quotas: () => loadOrFallback(() => getResourcePage<Quota>(token, '/api/accounting/quotas', 1, 50, '', INITIAL_ACCOUNTING_TIMEOUT_MS), []),
     payments: () =>
       loadOrFallback(
-        () => getResourcePage<AccountingPayment>(token, '/api/accounting/payments'),
+        () => getResourcePage<AccountingPayment>(token, '/api/accounting/payments', 1, 50, '', INITIAL_ACCOUNTING_TIMEOUT_MS),
         []
       ),
-    debts: () => loadOrFallback(() => getResourcePage<Debt>(token, '/api/accounting/debts'), []),
-    receipts: () => loadOrFallback(() => getResourcePage<Receipt>(token, '/api/accounting/receipts'), []),
-    expenses: () => loadOrFallback(() => getResourcePage<Expense>(token, '/api/accounting/expenses'), []),
+    debts: () => loadOrFallback(() => getResourcePage<Debt>(token, '/api/accounting/debts', 1, 50, '', INITIAL_ACCOUNTING_TIMEOUT_MS), []),
+    receipts: () => loadOrFallback(() => getResourcePage<Receipt>(token, '/api/accounting/receipts', 1, 50, '', INITIAL_ACCOUNTING_TIMEOUT_MS), []),
+    expenses: () => loadOrFallback(() => getResourcePage<Expense>(token, '/api/accounting/expenses', 1, 50, '', INITIAL_ACCOUNTING_TIMEOUT_MS), []),
     reserveFunds: () =>
       loadOrFallback(
-        () => getResourcePage<ReserveFund>(token, '/api/accounting/reserve-funds'),
+        () => getResourcePage<ReserveFund>(token, '/api/accounting/reserve-funds', 1, 50, '', INITIAL_ACCOUNTING_TIMEOUT_MS),
         []
       ),
     paymentAgreements: () =>
       loadOrFallback(
-        () => getResourcePage<PaymentAgreement>(token, '/api/accounting/payment-agreements'),
+        () => getResourcePage<PaymentAgreement>(token, '/api/accounting/payment-agreements', 1, 50, '', INITIAL_ACCOUNTING_TIMEOUT_MS),
         []
       ),
     cashMovements: () =>
       loadOrFallback(
-        () => getResourcePage<CashMovement>(token, '/api/accounting/cash-movements'),
+        () => getResourcePage<CashMovement>(token, '/api/accounting/cash-movements', 1, 50, '', INITIAL_ACCOUNTING_TIMEOUT_MS),
         []
       ),
     bankTransactions: () =>
       loadOrFallback(
-        () => getResourcePage<BankTransaction>(token, '/api/accounting/bank-transactions'),
+        () => getResourcePage<BankTransaction>(token, '/api/accounting/bank-transactions', 1, 50, '', INITIAL_ACCOUNTING_TIMEOUT_MS),
         []
       ),
     bankReconciliations: () =>

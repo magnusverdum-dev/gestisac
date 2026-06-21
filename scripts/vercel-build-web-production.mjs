@@ -7,11 +7,28 @@ const envPath = path.join(webCwd, '.vercel', '.env.production.local');
 
 await run('npx', ['vercel', 'pull', '--yes', '--environment=production', '--cwd', webCwd]);
 const pulledEnv = parseEnvFile(await readFile(envPath, 'utf8'));
+validateProductionEnv(pulledEnv);
 
 await run('npx', ['vercel', 'build', '--prod', '--cwd', webCwd], {
   ...process.env,
   ...pulledEnv
 });
+
+function validateProductionEnv(env) {
+  const apiBaseUrl = String(env.VITE_API_BASE_URL || '').trim();
+
+  if (!apiBaseUrl) {
+    throw new Error('VITE_API_BASE_URL must not be empty for production web builds.');
+  }
+
+  if (!/^https:\/\//i.test(apiBaseUrl)) {
+    throw new Error('VITE_API_BASE_URL must be an HTTPS URL for production web builds.');
+  }
+
+  if (/localhost|127\.0\.0\.1/i.test(apiBaseUrl)) {
+    throw new Error('VITE_API_BASE_URL must not point to localhost in production web builds.');
+  }
+}
 
 function parseEnvFile(contents) {
   const env = {};

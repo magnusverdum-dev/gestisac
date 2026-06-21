@@ -143,10 +143,33 @@ export const readStoredValue = (key: string) => {
   }
 };
 
+const writeBrowserCookie = (key: string, value: string) => {
+  try {
+    if (typeof document === 'undefined') return;
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}; Path=/; Max-Age=43200; SameSite=Lax${secure}`;
+  } catch {
+    // Cookie sync is best-effort; localStorage keeps the in-memory flow usable.
+  }
+};
+
+const removeBrowserCookie = (key: string) => {
+  try {
+    if (typeof document === 'undefined') return;
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${encodeURIComponent(key)}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+  } catch {
+    // Cookie cleanup is best-effort when the browser blocks cookies.
+  }
+};
+
 export const writeStoredValue = (key: string, value: string) => {
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(key, value);
+    }
+    if (key === SESSION_TOKEN_KEY) {
+      writeBrowserCookie(key, value);
     }
   } catch {
     // Some embedded browsers disable localStorage; keep the in-memory session usable.
@@ -157,6 +180,9 @@ export const removeStoredValue = (key: string) => {
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(key);
+    }
+    if (key === SESSION_TOKEN_KEY) {
+      removeBrowserCookie(key);
     }
   } catch {
     // Storage cleanup is best-effort when the browser blocks localStorage.
@@ -608,17 +634,17 @@ export function createSessionService(state: SessionStore) {
       writeStoredValue(SESSION_REFRESH_KEY, auth.refreshToken);
       writeStoredValue(SESSION_EXPIRES_KEY, auth.expiresAt);
       writeStoredValue(SESSION_APP_CONTEXT_KEY, auth.appContext || appContext.value);
-      browserSessionProgress.value = Math.max(browserSessionProgress.value, 88);
-      await loadWorkspace$(auth.token, { source: 'browser-session', attempts: attemptsUsed });
       browserSessionProgress.value = 100;
       showEntry.value = false;
       autoBrowserSessionPending.value = false;
       session.ready = true;
+      isLoading.value = false;
       recordBrowserPerformanceSpan('browser-session', browserSessionStartedAt, {
         attempts: attemptsUsed,
         appContext: appContext.value
       });
       await navigate$('/dashboard');
+      await loadWorkspace$(auth.token, { source: 'browser-session', attempts: attemptsUsed });
     } catch (err) {
       error.value =
         err instanceof Error
@@ -627,7 +653,7 @@ export function createSessionService(state: SessionStore) {
       session.token = '';
       session.user = null;
       session.ready = true;
-      autoBrowserSessionPending.value = browserSessionLoginlessEnabled;
+      autoBrowserSessionPending.value = false;
     } finally {
       isLoading.value = false;
     }
@@ -993,12 +1019,9 @@ export function createSessionService(state: SessionStore) {
       removeSessionValue(DEV_AUTO_LOGIN_SUPPRESS_KEY);
       currentPath.value = '/dashboard';
       window.history.replaceState({}, '', browserSession.dashboardPath);
+      session.ready = true;
 
-      try {
-        await loadWorkspace$(browserSession.token, { source: 'browser-session-url' });
-      } finally {
-        session.ready = true;
-      }
+      await loadWorkspace$(browserSession.token, { source: 'browser-session-url' });
       return;
     }
 
@@ -1050,11 +1073,12 @@ export function createSessionService(state: SessionStore) {
           writeStoredValue(SESSION_REFRESH_KEY, refreshed.refreshToken);
           writeStoredValue(SESSION_EXPIRES_KEY, refreshed.expiresAt);
           writeStoredValue(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
-          await loadWorkspace$(refreshed.token, { source: 'stored-refresh' });
           if (route.path === '/login') {
             currentPath.value = '/dashboard';
             window.history.replaceState({}, '', buildAppPath(refreshed.appContext || storedAppContext, '/dashboard'));
           }
+          session.ready = true;
+          await loadWorkspace$(refreshed.token, { source: 'stored-refresh' });
         } catch {
           removeStoredValue(SESSION_REFRESH_KEY);
           removeStoredValue(SESSION_EXPIRES_KEY);
@@ -1088,11 +1112,12 @@ export function createSessionService(state: SessionStore) {
       const current = await me(storedToken);
       session.token = storedToken;
       session.user = current.user;
-      await loadWorkspace$(storedToken, { source: 'stored-session' });
       if (route.path === '/login') {
         currentPath.value = '/dashboard';
         window.history.replaceState({}, '', buildAppPath(storedAppContext, '/dashboard'));
       }
+      session.ready = true;
+      await loadWorkspace$(storedToken, { source: 'stored-session' });
     } catch {
       const storedRefreshToken = readStoredValue(SESSION_REFRESH_KEY);
       if (storedRefreshToken) {
@@ -1106,11 +1131,12 @@ export function createSessionService(state: SessionStore) {
           writeStoredValue(SESSION_REFRESH_KEY, refreshed.refreshToken);
           writeStoredValue(SESSION_EXPIRES_KEY, refreshed.expiresAt);
           writeStoredValue(SESSION_APP_CONTEXT_KEY, refreshed.appContext || storedAppContext);
-          await loadWorkspace$(refreshed.token, { source: 'stored-refresh-after-me' });
           if (route.path === '/login') {
             currentPath.value = '/dashboard';
             window.history.replaceState({}, '', buildAppPath(refreshed.appContext || storedAppContext, '/dashboard'));
           }
+          session.ready = true;
+          await loadWorkspace$(refreshed.token, { source: 'stored-refresh-after-me' });
         } catch {
           removeStoredValue(SESSION_TOKEN_KEY);
           removeStoredValue(SESSION_REFRESH_KEY);
