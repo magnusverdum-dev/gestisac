@@ -1110,7 +1110,7 @@ impl PostgresRepository {
         soft_delete_by_id(&self.pool, "residents", tenant_id, id, "resident").await
     }
 
-    pub async fn load_sessions(&self) -> anyhow::Result<Vec<Session>> {
+    pub async fn load_sessions(&self, tenant_id: &str) -> anyhow::Result<Vec<Session>> {
         #[derive(sqlx::FromRow)]
         struct SessionRow {
             tenant_id: String,
@@ -1129,9 +1129,11 @@ impl PostgresRepository {
             SELECT tenant_id, user_id, token_hash, refresh_token_hash,
                    active_condominium, app_context, created_at, expires_at, refresh_expires_at
             FROM app_sessions
+            WHERE tenant_id = $1
             ORDER BY created_at DESC
             "#,
         )
+        .bind(tenant_id)
         .fetch_all(&self.pool)
         .await
         .context("failed to load sessions from postgres")?;
@@ -3674,6 +3676,20 @@ fn timestamp_from_text(value: &str) -> Option<DateTime<Utc>> {
         .map(|timestamp| timestamp.with_timezone(&Utc))
 }
 
+fn trimmed_optional_text(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn condominium_locality(condominium: &Condominium) -> Option<String> {
+    trimmed_optional_text(&condominium.address.locality)
+        .or_else(|| trimmed_optional_text(&condominium.location))
+}
+
 fn numeric_text_from_text(value: &str) -> String {
     let normalized = value.trim().replace(',', ".");
     if normalized.parse::<f64>().is_ok() {
@@ -3970,7 +3986,7 @@ fn append_calendar_event_filters<'a>(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        query.push(" AND lower(metadata->>'status') = lower(");
+        query.push(" AND lower(COALESCE(status_text, '')) = lower(");
         query.push_bind(status);
         query.push(")");
     }
@@ -5199,15 +5215,16 @@ async fn upsert_calendar_event_rows(
     query_np!(
         r#"
         INSERT INTO calendar_events
-            (id, tenant_id, condominium_id, title, event_type, starts_at, ends_at,
+            (id, tenant_id, condominium_id, title, event_type, status_text, starts_at, ends_at,
              metadata, created_by, updated_by, created_at, updated_at, deleted_at)
         VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL, $9, $10, NULL)
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, NULL, $10, $11, NULL)
         ON CONFLICT (id) DO UPDATE SET
             tenant_id = EXCLUDED.tenant_id,
             condominium_id = EXCLUDED.condominium_id,
             title = EXCLUDED.title,
             event_type = EXCLUDED.event_type,
+            status_text = EXCLUDED.status_text,
             starts_at = EXCLUDED.starts_at,
             ends_at = EXCLUDED.ends_at,
             metadata = EXCLUDED.metadata,
@@ -5220,6 +5237,7 @@ async fn upsert_calendar_event_rows(
     .bind(condominium_id)
     .bind(&event.title)
     .bind(&event.event_type)
+    .bind(&event.status)
     .bind(timestamp_from_text(&event.start_at))
     .bind(timestamp_from_text(&event.end_at))
     .bind(payload)
@@ -5336,6 +5354,11 @@ async fn upsert_condominium_rows(
 ) -> anyhow::Result<()> {
     let payload = serde_json::to_value(condominium)
         .context("failed to encode condominium payload for postgres")?;
+    let manager_id_candidate = trimmed_optional_text(&condominium.manager);
+    let condominium_type = trimmed_optional_text(&condominium.condominium_type);
+    let locality = condominium_locality(condominium);
+    let operational_general_status =
+        trimmed_optional_text(&condominium.operational_status.general_status);
 
     query_np!(
         r#"
@@ -5373,9 +5396,14 @@ async fn upsert_condominium_rows(
         r#"
         INSERT INTO condominiums
             (id, tenant_id, name, internal_code, external_reference, status, location,
-             manager_user_id, metadata, created_at, updated_at, deleted_at)
+             manager_user_id, archived, condominium_type, locality, operational_general_status,
+             metadata, created_at, updated_at, deleted_at)
         VALUES
-            ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, $10, NULL)
+            (
+                $1, $2, $3, $4, $5, $6, $7,
+                (SELECT id FROM users WHERE tenant_id = $2 AND id = $8 AND deleted_at IS NULL),
+                $9, $10, $11, $12, $13, $14, $15, NULL
+            )
         ON CONFLICT (id) DO UPDATE SET
             tenant_id = EXCLUDED.tenant_id,
             name = EXCLUDED.name,
@@ -5383,6 +5411,11 @@ async fn upsert_condominium_rows(
             external_reference = EXCLUDED.external_reference,
             status = EXCLUDED.status,
             location = EXCLUDED.location,
+            manager_user_id = EXCLUDED.manager_user_id,
+            archived = EXCLUDED.archived,
+            condominium_type = EXCLUDED.condominium_type,
+            locality = EXCLUDED.locality,
+            operational_general_status = EXCLUDED.operational_general_status,
             metadata = EXCLUDED.metadata,
             updated_at = EXCLUDED.updated_at,
             deleted_at = NULL
@@ -5395,6 +5428,11 @@ async fn upsert_condominium_rows(
     .bind(&condominium.external_reference)
     .bind(&condominium.status)
     .bind(&condominium.location)
+    .bind(manager_id_candidate)
+    .bind(condominium.archived)
+    .bind(condominium_type)
+    .bind(locality)
+    .bind(operational_general_status)
     .bind(payload)
     .bind(now)
     .bind(now)
@@ -5918,7 +5956,17 @@ fn append_condominium_filters(
     query.push(" AND deleted_at IS NULL");
 
     if !filter.include_archived {
-        query.push(" AND COALESCE((metadata->>'archived')::boolean, false) = false");
+        query.push(
+            " AND COALESCE(
+                archived,
+                CASE
+                    WHEN lower(metadata->>'archived') IN ('true', 'false')
+                    THEN (metadata->>'archived')::boolean
+                    ELSE NULL
+                END,
+                false
+            ) = false",
+        );
     }
     if !filter.status.trim().is_empty() {
         query.push(" AND lower(status) = lower(");
@@ -5926,25 +5974,33 @@ fn append_condominium_filters(
         query.push(")");
     }
     if !filter.condominium_type.trim().is_empty() {
-        query.push(" AND lower(COALESCE(metadata->>'condominiumType', '')) = lower(");
+        query.push(
+            " AND lower(COALESCE(condominium_type, metadata->>'condominiumType', '')) = lower(",
+        );
         query.push_bind(filter.condominium_type.trim().to_string());
         query.push(")");
     }
     if !filter.locality.trim().is_empty() {
         query.push(
-            " AND lower(COALESCE(metadata #>> '{address,locality}', location, '')) LIKE lower(",
+            " AND lower(COALESCE(locality, metadata #>> '{address,locality}', location, '')) LIKE lower(",
         );
         query.push_bind(like_pattern(filter.locality));
         query.push(")");
     }
     if !filter.manager.trim().is_empty() {
-        query.push(" AND lower(COALESCE(metadata->>'manager', '')) LIKE lower(");
-        query.push_bind(like_pattern(filter.manager));
-        query.push(")");
+        let manager = filter.manager.trim();
+        query.push(
+            " AND (
+                manager_user_id = ",
+        );
+        query.push_bind(manager.to_string());
+        query.push(" OR lower(COALESCE(metadata->>'manager', '')) LIKE lower(");
+        query.push_bind(like_pattern(manager));
+        query.push("))");
     }
     if !filter.operational_status.trim().is_empty() {
         query.push(
-            " AND lower(COALESCE(metadata #>> '{operationalStatus,generalStatus}', '')) = lower(",
+            " AND lower(COALESCE(operational_general_status, metadata #>> '{operationalStatus,generalStatus}', '')) = lower(",
         );
         query.push_bind(filter.operational_status.trim().to_string());
         query.push(")");
@@ -6046,8 +6102,6 @@ fn append_ocorrencia_filters(
     if let Some(atribuido_a) = trimmed_filter(filter.atribuido_a) {
         let pattern = like_pattern(atribuido_a);
         query.push(" AND (assigned_worker_id = ");
-        query.push_bind(atribuido_a.to_string());
-        query.push(" OR metadata->>'assignedWorkerId' = ");
         query.push_bind(atribuido_a.to_string());
         query.push(" OR metadata->>'atribuidoA' ILIKE ");
         query.push_bind(pattern);

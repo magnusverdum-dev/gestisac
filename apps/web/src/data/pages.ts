@@ -1,9 +1,11 @@
 import type {
   CreateResource,
   DashboardResponse,
+  GlobalSearchResult,
   ResourceEndpoint,
   ResourceState
 } from '../lib/api';
+import { buildGlobalSearchResults } from './search';
 
 export type CreateField = {
   name: string;
@@ -186,8 +188,31 @@ export const navPages: Array<Pick<DemoPage, 'path' | 'navLabel' | 'icon'>> = [
   { path: '/definicoes', navLabel: 'Definicoes', icon: 'G' }
 ];
 
+const pageSnapshotCache = new WeakMap<ResourceState, WeakMap<DashboardResponse, DemoPage[]>>();
+const workspaceSnapshotCache = new WeakMap<
+  ResourceState,
+  WeakMap<DashboardResponse, { pages: DemoPage[]; searchResults: GlobalSearchResult[] }>
+>();
+
+function memoizePageSnapshot(resources: ResourceState, dashboard: DashboardResponse, factory: () => DemoPage[]) {
+  const resourceCache = pageSnapshotCache.get(resources);
+  const cached = resourceCache?.get(dashboard);
+  if (cached) {
+    return cached;
+  }
+
+  const value = factory();
+  if (resourceCache) {
+    resourceCache.set(dashboard, value);
+  } else {
+    pageSnapshotCache.set(resources, new WeakMap([[dashboard, value]]));
+  }
+  return value;
+}
+
 export function buildPages(resources: ResourceState, dashboard: DashboardResponse): DemoPage[] {
-  const urgentTickets = resources.tickets.filter((item) =>
+  return memoizePageSnapshot(resources, dashboard, () => {
+    const urgentTickets = resources.tickets.filter((item) =>
     isCriticalPriority(item.priority)
   ).length;
   const activeSuppliers = resources.suppliers.filter((item) =>
@@ -790,6 +815,30 @@ export function buildPages(resources: ResourceState, dashboard: DashboardRespons
           }))
     }
   ];
+  });
+}
+
+export function buildWorkspaceSnapshots(
+  resources: ResourceState,
+  dashboard: DashboardResponse
+): { pages: DemoPage[]; searchResults: GlobalSearchResult[] } {
+  const resourceCache = workspaceSnapshotCache.get(resources);
+  const cached = resourceCache?.get(dashboard);
+  if (cached) {
+    return cached;
+  }
+
+  const value = {
+    pages: buildPages(resources, dashboard),
+    searchResults: buildGlobalSearchResults(resources)
+  };
+
+  if (resourceCache) {
+    resourceCache.set(dashboard, value);
+  } else {
+    workspaceSnapshotCache.set(resources, new WeakMap([[dashboard, value]]));
+  }
+  return value;
 }
 
 export const getPageByPath = (pages: DemoPage[], path: string) =>

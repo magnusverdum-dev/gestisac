@@ -316,7 +316,7 @@ function valueFor(values: Record<string, unknown> | undefined, name: string): st
 function filteredHistory(events: Array<Record<string, unknown>>, query = '', source = '') {
   const needle = query.trim().toLowerCase();
   return events.filter((event) => {
-    const matchesQuery = !needle || JSON.stringify(event).toLowerCase().includes(needle);
+    const matchesQuery = !needle || Object.values(event).some(v => String(v).toLowerCase().includes(needle));
     const matchesSource = !source || String(event.source || event.entity || '').toLowerCase().includes(source.toLowerCase());
     return matchesQuery && matchesSource;
   });

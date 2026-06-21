@@ -51,8 +51,16 @@ export function resolvePageLoaderKey(pagePath: string, routeKind: EntityRouteMat
   }
 }
 
+const pageComponentCache = new Map<PageLoaderKey, Promise<LazyPageComponent>>();
+
 export async function loadPageComponent(key: PageLoaderKey): Promise<LazyPageComponent> {
-  switch (key) {
+  const cached = pageComponentCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const loader = (async () => {
+    switch (key) {
     case 'dashboard':
       return (await import('../components/dashboard/DashboardPage')).DashboardPage;
     case 'team':
@@ -77,7 +85,15 @@ export async function loadPageComponent(key: PageLoaderKey): Promise<LazyPageCom
       return (await import('../components/pages/ChatPage')).ChatPage;
     case 'entity-detail':
       return (await import('../components/pages/EntityDetailPage')).EntityDetailPage;
-    default:
-      return (await import('../components/pages/PageOverview')).PageOverview;
-  }
+      default:
+        return (await import('../components/pages/PageOverview')).PageOverview;
+    }
+  })();
+
+  pageComponentCache.set(key, loader);
+
+  return loader.catch((error) => {
+    pageComponentCache.delete(key);
+    throw error;
+  });
 }

@@ -307,7 +307,7 @@ async fn hydrate_store_from_postgres(
     }
 
     let loaded_sessions = repository
-        .load_sessions()
+        .load_sessions(&tenant_id)
         .await
         .context("failed to load sessions from postgres")?;
     if loaded_sessions.is_empty() {
@@ -523,7 +523,7 @@ async fn hydrate_store_read_only_from_postgres(
     };
     let loaded_sessions_future = async {
         repository
-            .load_sessions()
+            .load_sessions(tenant_id)
             .await
             .context("failed to load sessions from postgres")
     };

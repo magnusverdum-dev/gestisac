@@ -108,6 +108,14 @@ export async function demoApiRequest<T>(
     return { service: 'gestisac-web-demo', status: 'online' } as T;
   }
 
+  if (pathname === 'warmup') {
+    return {
+      service: 'gestisac-web-demo',
+      status: 'warm',
+      checkedAt: new Date().toISOString()
+    } as T;
+  }
+
   if (pathname === 'auth/login' && method === 'POST') {
     const email = String(body.email ?? '').trim().toLowerCase();
     const password = String(body.password ?? '');

@@ -22,6 +22,7 @@ type TicketsPageProps = {
   onCreate$: PropFunction<(resource: ResourceEndpoint, payload: Record<string, unknown>) => void>;
   onUpdate$: PropFunction<(resource: ResourceEndpoint, id: string, payload: Record<string, unknown>) => void>;
   onDelete$: PropFunction<(resource: ResourceEndpoint, id: string) => void>;
+  onRefresh$: PropFunction<() => void>;
 };
 
 const TIPO_TABS = ['todas', 'avaria', 'pedido'] as const;
@@ -256,7 +257,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                       pageError.value = '';
                       try {
                         await transitarStatus(props.token, oc.id, dest);
-                        window.location.reload();
+                        await props.onRefresh$();
                       } catch (e) {
                         pageError.value = e instanceof Error ? e.message : 'Erro ao transitar estado';
                       } finally {
@@ -403,8 +404,8 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                     </div>
                     {isHqContext && selected.requiresHqValidation && selected.hqValidationStatus === 'pendente' ? (
                       <div class="simple-header-actions">
-                        <button type="button" class="primary-action" onClick$={async () => { await validarResolucao(props.token, selected.id, { decision: 'accept', notes: 'Validado por HQ' }); window.location.reload(); }}>Validar resolução</button>
-                        <button type="button" class="secondary-action" onClick$={async () => { await validarResolucao(props.token, selected.id, { decision: 'reject', notes: 'Rever intervenção e submeter novamente.' }); window.location.reload(); }}>Rejeitar</button>
+                        <button type="button" class="primary-action" onClick$={async () => { await validarResolucao(props.token, selected.id, { decision: 'accept', notes: 'Validado por HQ' }); await props.onRefresh$(); }}>Validar resolução</button>
+                        <button type="button" class="secondary-action" onClick$={async () => { await validarResolucao(props.token, selected.id, { decision: 'reject', notes: 'Rever intervenção e submeter novamente.' }); await props.onRefresh$(); }}>Rejeitar</button>
                       </div>
                     ) : null}
                   </div>
@@ -415,7 +416,7 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                     const form = event.target as HTMLFormElement;
                     const checklist = checklistFromForm(form, selected.workerChecklist || []);
                     await executarAcaoFuncionario(props.token, selected.id, { action: selected.status === 'emCurso' ? 'start' : 'start', workerChecklist: checklist, note: 'Checklist atualizada' });
-                    window.location.reload();
+                    await props.onRefresh$();
                   }}>
                     {(selected.workerChecklist?.length ? selected.workerChecklist : defaultChecklistForTicket(selected)).map((step) => (
                       <label class="worker-check-row" key={step.id}>
@@ -486,12 +487,12 @@ export const TicketsPage = component$((props: TicketsPageProps) => {
                       workerTimeMinutes: Number(data.get('workerTimeMinutes') || selected.workerTimeMinutes || 0),
                       workerChecklist: checklistFromForm(form, selected.workerChecklist || [])
                     });
-                    window.location.reload();
+                    await props.onRefresh$();
                   }}>
                     <div class="simple-header-actions">
-                      <button type="button" class="secondary-action" onClick$={async () => { await executarAcaoFuncionario(props.token, selected.id, { action: 'arrive', note: 'Chegada ao local' }); window.location.reload(); }}>Cheguei</button>
-                      <button type="button" class="primary-action" onClick$={async () => { await executarAcaoFuncionario(props.token, selected.id, { action: 'start', note: 'Intervenção iniciada' }); window.location.reload(); }}>Iniciar</button>
-                      <button type="button" class="secondary-action" onClick$={async () => { await executarAcaoFuncionario(props.token, selected.id, { action: 'await_parts', note: 'A aguardar peças/material' }); window.location.reload(); }}>Aguardar peças</button>
+                      <button type="button" class="secondary-action" onClick$={async () => { await executarAcaoFuncionario(props.token, selected.id, { action: 'arrive', note: 'Chegada ao local' }); await props.onRefresh$(); }}>Cheguei</button>
+                      <button type="button" class="primary-action" onClick$={async () => { await executarAcaoFuncionario(props.token, selected.id, { action: 'start', note: 'Intervenção iniciada' }); await props.onRefresh$(); }}>Iniciar</button>
+                      <button type="button" class="secondary-action" onClick$={async () => { await executarAcaoFuncionario(props.token, selected.id, { action: 'await_parts', note: 'A aguardar peças/material' }); await props.onRefresh$(); }}>Aguardar peças</button>
                     </div>
                     <label>Resumo da resolução<textarea name="resolutionSummary" placeholder="O que foi feito, resultado e prova recolhida" required /></label>
                     <label>Tempo no terreno (min)<input name="workerTimeMinutes" value={selected.workerTimeMinutes || ''} placeholder="45" /></label>

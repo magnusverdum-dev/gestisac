@@ -34,6 +34,7 @@ pub struct ApiConfig {
     pub host: IpAddr,
     pub port: u16,
     pub environment: String,
+    pub jwt_secret: String,
     pub data_path: PathBuf,
     pub document_storage_path: PathBuf,
     pub document_storage_backend: DocumentStorageBackend,
@@ -89,6 +90,39 @@ impl ApiConfig {
             .unwrap_or_else(|_| "development".to_string())
             .trim()
             .to_lowercase();
+        let jwt_secret = match std::env::var("JWT_SECRET") {
+            Ok(value) => {
+                let trimmed = value.trim().to_string();
+                if trimmed.is_empty() {
+                    if environment == "production" {
+                        bail!(
+                            "JWT_SECRET environment variable must not be empty in production. \
+                             Set it to a strong random secret before starting the API."
+                        );
+                    }
+                    tracing::warn!(
+                        "JWT_SECRET is empty; using development fallback. \
+                         This is INSECURE for production."
+                    );
+                    "gestisac-local-dev-session-secret".to_string()
+                } else {
+                    trimmed
+                }
+            }
+            Err(_) => {
+                if environment == "production" {
+                    bail!(
+                        "JWT_SECRET environment variable is required in production. \
+                         Set it to a strong random secret before starting the API."
+                    );
+                }
+                tracing::warn!(
+                    "JWT_SECRET not set; using development fallback. \
+                     This is INSECURE for production."
+                );
+                "gestisac-local-dev-session-secret".to_string()
+            }
+        };
         let cors_allowed_origins = parse_cors_origins();
         let database = std::env::var("GESTISAC_DATABASE_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
@@ -115,6 +149,7 @@ impl ApiConfig {
             host,
             port,
             environment,
+            jwt_secret,
             data_path,
             document_storage_path,
             document_storage_backend,

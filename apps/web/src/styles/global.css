@@ -3952,11 +3952,6 @@ kbd {
   margin-top: 14px;
 }
 
-.condo-detail-panel.empty {
-  min-height: 320px;
-  place-content: center;
-}
-
 @media (max-width: 1180px) {
   .condo-summary-grid,
   .condo-overview-grid,

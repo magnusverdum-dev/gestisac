@@ -388,7 +388,7 @@ function rowsForTab(tab: DetailTab, data: FinancialContext, query: string): Acco
     : tab === 'agreements' ? data.paymentAgreements.map((item) => ({ id: item.id, title: item.resident, meta: `${item.installmentCount} prestacoes - ${formatCurrency(item.totalAmount)}`, status: item.status }))
     : [];
   const needle = query.trim().toLowerCase();
-  return needle ? rows.filter((row) => JSON.stringify(row).toLowerCase().includes(needle)) : rows;
+  return needle ? rows.filter((row) => Object.values(row).some(v => String(v).toLowerCase().includes(needle))) : rows;
 }
 
 function statementEntries(quotas: Quota[], payments: AccountingPayment[]) {

@@ -36,11 +36,16 @@
     "build:client": "pnpm --dir apps/client-web build",
     "build:worker": "pnpm --dir apps/worker-web build",
     "build:apps": "pnpm run build:web && pnpm run build:hq && pnpm run build:client && pnpm run build:worker",
+    "test:web:unit": "pnpm --dir apps/web test:unit",
     "typecheck:web": "pnpm --dir apps/web typecheck",
     "typecheck:hq": "pnpm --dir apps/hq-web typecheck",
     "typecheck:client": "pnpm --dir apps/client-web typecheck",
     "typecheck:worker": "pnpm --dir apps/worker-web typecheck",
     "typecheck:apps": "pnpm run typecheck:web && pnpm run typecheck:hq && pnpm run typecheck:client && pnpm run typecheck:worker",
+    "test:e2e": "cross-env TEST_HEADLESS=true playwright test",
+    "test:e2e:headed": "cross-env TEST_HEADLESS=false playwright test",
+    "test:e2e:prod": "cross-env TEST_HEADLESS=true TEST_URL=https://gestisac-web.vercel.app PLAYWRIGHT_SKIP_WEBSERVER=true playwright test",
+    "test:e2e:prod:headed": "cross-env TEST_HEADLESS=false TEST_URL=https://gestisac-web.vercel.app PLAYWRIGHT_SKIP_WEBSERVER=true playwright test",
     "preview:web": "pnpm --dir apps/web preview",
     "preview:hq": "pnpm --dir apps/hq-web preview",
     "preview:client": "pnpm --dir apps/client-web preview",
@@ -65,15 +70,21 @@
     "audit:fk-indexes": "node scripts/audit-foreign-key-indexes.mjs",
     "audit:prod-db": "node scripts/audit-production-database.mjs",
     "migrate:json-to-postgres": "node scripts/migrate-json-to-postgres.mjs",
+    "review:ocr": "node scripts/open-code-review.mjs",
     "guard:loginless-dev": "node scripts/check-loginless-dev-contract.mjs",
-    "guard:git-push": "pnpm run guard:loginless-dev && pnpm run check:prod-api && pnpm run check:prod-readiness"
+    "guard:qa-browser": "node scripts/check-qa-browser-contract.mjs",
+    "guard:git-push": "pnpm run guard:loginless-dev && pnpm run guard:qa-browser && pnpm run check:prod-api && pnpm run check:prod-readiness"
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm run guard:loginless-dev",
+    "pre-commit": "pnpm run guard:loginless-dev && pnpm run guard:qa-browser",
     "pre-push": "pnpm run guard:git-push"
   },
   "devDependencies": {
+    "@alibaba-group/open-code-review": "^1.3.13",
+    "@playwright/test": "^1.61.0",
     "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "minimist": "^1.2.8",
     "simple-git-hooks": "^2.13.1"
   }
 }

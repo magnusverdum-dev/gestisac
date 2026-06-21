@@ -1,8 +1,21 @@
 import type { GlobalSearchResult, ResourceState } from '../lib/api';
 import { entityPath } from '../lib/entity-navigation';
 
+const searchSnapshotCache = new WeakMap<ResourceState, GlobalSearchResult[]>();
+
+function memoizeSearchSnapshot(resources: ResourceState, factory: () => GlobalSearchResult[]) {
+  const cached = searchSnapshotCache.get(resources);
+  if (cached) {
+    return cached;
+  }
+
+  const value = factory();
+  searchSnapshotCache.set(resources, value);
+  return value;
+}
+
 export function buildGlobalSearchResults(resources: ResourceState): GlobalSearchResult[] {
-  return [
+  return memoizeSearchSnapshot(resources, () => [
     ...resources.condominiums.map((item) => ({
       id: `condominium-${item.id}`,
       title: item.name,
@@ -94,7 +107,7 @@ export function buildGlobalSearchResults(resources: ResourceState): GlobalSearch
       path: entityPath('accounting', item.id, 'despesas'),
       tone: 'gold'
     }))
-  ];
+  ]);
 }
 
 function formatCurrency(value: number) {

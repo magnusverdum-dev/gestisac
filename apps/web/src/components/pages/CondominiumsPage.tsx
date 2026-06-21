@@ -1874,7 +1874,7 @@ function rowsForSubresource(
   }
 
   if (tab === 'contacts' && filters.contactFilter) {
-    rows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(filters.contactFilter!.toLowerCase()));
+    rows = rows.filter((row) => Object.values(row).some(v => String(v).toLowerCase().includes(filters.contactFilter!.toLowerCase())));
   }
   if (tab === 'contacts' && filters.contactTypeFilter) {
     rows = rows.filter((row) => String(row.contactType ?? '').toLowerCase().includes(filters.contactTypeFilter!.toLowerCase()));
@@ -1883,7 +1883,7 @@ function rowsForSubresource(
     rows = rows.filter((row) => Boolean(row.isEmergency));
   }
   if (tab === 'documents' && filters.documentFilter) {
-    rows = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(filters.documentFilter!.toLowerCase()));
+    rows = rows.filter((row) => Object.values(row).some(v => String(v).toLowerCase().includes(filters.documentFilter!.toLowerCase())));
   }
   if (tab === 'documents' && filters.documentTypeFilter) {
     rows = rows.filter((row) => String(row.documentType ?? '').toLowerCase().includes(filters.documentTypeFilter!.toLowerCase()));

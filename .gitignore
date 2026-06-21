@@ -18,6 +18,13 @@ apps/web/server/
 apps/api/data/
 **/.env.local
 **/.env.*.local
+**/.env.vercel*
 **/.vercel/
+test-results/
+playwright-report/
+.scrutator-screenshots/
+.opencode/node_modules/
+.opencode/package-lock.json
+.opencode/bun.lock
 __pycache__/
 **/__pycache__/

@@ -73,6 +73,25 @@ pnpm run test:api
 pnpm run smoke:api
 ```
 
+## Open Code Review
+
+O projeto pode usar o [OpenCodeReview da Alibaba](https://github.com/alibaba/open-code-review) para rever diffs e commits com um LLM configurado.
+
+Exemplos com um modelo local compatível com OpenAI:
+
+```bash
+export OCR_LLM_URL=http://127.0.0.1:11434/v1/chat/completions
+export OCR_LLM_TOKEN=ollama
+export OCR_LLM_MODEL=qwen3.6:latest
+export OCR_USE_ANTHROPIC=false
+
+pnpm run review:ocr
+pnpm run review:ocr -- --commit HEAD~1
+pnpm run review:ocr -- --from main --to HEAD
+```
+
+Se preferires Anthropic, segue a configuração documentada no README do OpenCodeReview e aponta `OCR_LLM_URL` para `https://api.anthropic.com/v1/messages`.
+
 Nota: o backend Rust/Axum esta estruturado em `apps/api`. O `mock-server.mjs` continua disponivel como fallback rapido em `pnpm run dev:api:mock`.
 
 Login local inicial:

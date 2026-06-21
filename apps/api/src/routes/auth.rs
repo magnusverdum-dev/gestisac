@@ -126,50 +126,63 @@ pub async fn refresh(
         .iter()
         .position(|session| session_secret_matches(&session.refresh_token, &input.refresh_token));
     let mut previous_session = None;
-    let (user, active_condominium, response_app_context) = if let Some(session_index) =
-        session_index
-    {
-        let current_session = store.sessions[session_index].clone();
-        previous_session = Some(current_session.clone());
-        let user = store
-            .users
-            .iter()
-            .find(|user| user.id == current_session.user_id)
-            .cloned()
-            .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
-        let response_app_context = if input.app_context.trim().is_empty() {
-            current_session.app_context.clone()
-        } else {
-            normalize_app_context(&input.app_context)
-        };
+    let (user, active_condominium, response_app_context) =
+        if let Some(session_index) = session_index {
+            let current_session = store.sessions[session_index].clone();
+            previous_session = Some(current_session.clone());
+            let user = store
+                .users
+                .iter()
+                .find(|user| user.id == current_session.user_id)
+                .cloned()
+                .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
+            let response_app_context = if input.app_context.trim().is_empty() {
+                current_session.app_context.clone()
+            } else {
+                normalize_app_context(&input.app_context)
+            };
 
-        (
-            user,
-            current_session.active_condominium,
-            response_app_context,
-        )
-    } else {
-        let signed_token = parse_signed_session_token(&input.refresh_token, REFRESH_TOKEN_KIND)?;
-        let user = store
-            .users
-            .iter()
-            .find(|user| user.id == signed_token.user_id)
-            .cloned()
-            .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
-        let active_condominium = if user.active_condominium.is_empty() {
-            store.active_condominium.clone()
+            (
+                user,
+                current_session.active_condominium,
+                response_app_context,
+            )
         } else {
-            user.active_condominium.clone()
-        };
-        let response_app_context = normalize_app_context(&input.app_context);
+            let signed_token = parse_signed_session_token(
+                &input.refresh_token,
+                REFRESH_TOKEN_KIND,
+                &state.config.jwt_secret,
+            )?;
+            let user = store
+                .users
+                .iter()
+                .find(|user| user.id == signed_token.user_id)
+                .cloned()
+                .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
+            let active_condominium = if user.active_condominium.is_empty() {
+                store.active_condominium.clone()
+            } else {
+                user.active_condominium.clone()
+            };
+            let response_app_context = normalize_app_context(&input.app_context);
 
-        (user, active_condominium, response_app_context)
-    };
+            (user, active_condominium, response_app_context)
+        };
 
     let expires_at = now + Duration::hours(2);
     let refresh_expires_at = now + Duration::days(30);
-    let token = new_signed_session_token(ACCESS_TOKEN_KIND, &user.id, expires_at);
-    let refresh_token = new_signed_session_token(REFRESH_TOKEN_KIND, &user.id, refresh_expires_at);
+    let token = new_signed_session_token(
+        ACCESS_TOKEN_KIND,
+        &user.id,
+        expires_at,
+        &state.config.jwt_secret,
+    );
+    let refresh_token = new_signed_session_token(
+        REFRESH_TOKEN_KIND,
+        &user.id,
+        refresh_expires_at,
+        &state.config.jwt_secret,
+    );
     let replacement_session = Session {
         token: protect_session_secret(&token),
         refresh_token: protect_session_secret(&refresh_token),
@@ -390,7 +403,8 @@ pub async fn current_context(
     }
 
     let store = state.store.read().await;
-    let signed_token = parse_signed_session_token(&token, ACCESS_TOKEN_KIND)?;
+    let signed_token =
+        parse_signed_session_token(&token, ACCESS_TOKEN_KIND, &state.config.jwt_secret)?;
     let mut user = store
         .public_user(&signed_token.user_id)
         .ok_or_else(|| ApiError::unauthorized("Utilizador da sessao nao encontrado"))?;
@@ -450,8 +464,18 @@ async fn issue_auth_response(
     let now = Utc::now();
     let expires_at = now + Duration::hours(2);
     let refresh_expires_at = now + Duration::days(30);
-    let token = new_signed_session_token(ACCESS_TOKEN_KIND, &user.id, expires_at);
-    let refresh_token = new_signed_session_token(REFRESH_TOKEN_KIND, &user.id, refresh_expires_at);
+    let token = new_signed_session_token(
+        ACCESS_TOKEN_KIND,
+        &user.id,
+        expires_at,
+        &state.config.jwt_secret,
+    );
+    let refresh_token = new_signed_session_token(
+        REFRESH_TOKEN_KIND,
+        &user.id,
+        refresh_expires_at,
+        &state.config.jwt_secret,
+    );
     let app_context = normalize_app_context(&app_context);
     let active_condominium = if user.active_condominium.is_empty() {
         store.active_condominium.clone()
@@ -723,16 +747,22 @@ struct SignedSessionToken {
     user_id: String,
 }
 
-fn new_signed_session_token(kind: &str, user_id: &str, expires_at: DateTime<Utc>) -> String {
+fn new_signed_session_token(
+    kind: &str,
+    user_id: &str,
+    expires_at: DateTime<Utc>,
+    jwt_secret: &str,
+) -> String {
     let nonce = new_session_secret();
     let unsigned = signed_session_payload(kind, user_id, expires_at.timestamp(), Some(&nonce));
-    let signature = sign_session_payload(&unsigned);
+    let signature = sign_session_payload(&unsigned, jwt_secret);
     format!("{unsigned}:{signature}")
 }
 
 fn parse_signed_session_token(
     token: &str,
     expected_kind: &str,
+    jwt_secret: &str,
 ) -> Result<SignedSessionToken, ApiError> {
     let parts = token.split(':').collect::<Vec<_>>();
     if !matches!(parts.len(), 6 | 7) || parts[0] != "gestisac" || parts[1] != "v1" {
@@ -759,7 +789,7 @@ fn parse_signed_session_token(
             parts[5],
         )
     };
-    let expected_signature = sign_session_payload(&unsigned);
+    let expected_signature = sign_session_payload(&unsigned, jwt_secret);
     if expected_signature != signature {
         return Err(ApiError::unauthorized("Sessao invalida ou expirada"));
     }
@@ -789,13 +819,9 @@ fn signed_session_payload(
     }
 }
 
-fn sign_session_payload(payload: &str) -> String {
-    let secret = std::env::var("JWT_SECRET")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "gestisac-local-dev-session-secret".to_string());
+fn sign_session_payload(payload: &str, jwt_secret: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(secret.as_bytes());
+    hasher.update(jwt_secret.as_bytes());
     hasher.update(b":");
     hasher.update(payload.as_bytes());
     format!("{:x}", hasher.finalize())
@@ -832,6 +858,8 @@ async fn persist_auth_session(
 mod tests {
     use super::*;
 
+    const TEST_JWT_SECRET: &str = "gestisac-local-dev-session-secret";
+
     #[test]
     fn session_secrets_are_high_entropy_hex_strings() {
         let first = new_session_secret();
@@ -847,18 +875,20 @@ mod tests {
     fn signed_session_tokens_are_unique_for_parallel_app_logins() {
         let expires_at = Utc::now() + Duration::hours(2);
 
-        let first = new_signed_session_token(ACCESS_TOKEN_KIND, "user-1", expires_at);
-        let second = new_signed_session_token(ACCESS_TOKEN_KIND, "user-1", expires_at);
+        let first =
+            new_signed_session_token(ACCESS_TOKEN_KIND, "user-1", expires_at, TEST_JWT_SECRET);
+        let second =
+            new_signed_session_token(ACCESS_TOKEN_KIND, "user-1", expires_at, TEST_JWT_SECRET);
 
         assert_ne!(first, second);
         assert_eq!(
-            parse_signed_session_token(&first, ACCESS_TOKEN_KIND)
+            parse_signed_session_token(&first, ACCESS_TOKEN_KIND, TEST_JWT_SECRET)
                 .expect("generated access token should parse")
                 .user_id,
             "user-1"
         );
         assert_eq!(
-            parse_signed_session_token(&second, ACCESS_TOKEN_KIND)
+            parse_signed_session_token(&second, ACCESS_TOKEN_KIND, TEST_JWT_SECRET)
                 .expect("generated access token should parse")
                 .user_id,
             "user-1"
@@ -874,9 +904,13 @@ mod tests {
             expires_at.timestamp(),
             None,
         );
-        let legacy_token = format!("{}:{}", unsigned, sign_session_payload(&unsigned));
+        let legacy_token = format!(
+            "{}:{}",
+            unsigned,
+            sign_session_payload(&unsigned, TEST_JWT_SECRET)
+        );
 
-        let parsed = parse_signed_session_token(&legacy_token, ACCESS_TOKEN_KIND)
+        let parsed = parse_signed_session_token(&legacy_token, ACCESS_TOKEN_KIND, TEST_JWT_SECRET)
             .expect("legacy signed token should remain valid");
 
         assert_eq!(parsed.user_id, "legacy-user");
