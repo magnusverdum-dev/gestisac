@@ -8,6 +8,7 @@
     "fmt": "node ../../scripts/run-cargo.mjs fmt",
     "check:rust": "node ../../scripts/run-cargo.mjs check",
     "clippy": "node ../../scripts/run-cargo.mjs clippy -- -D warnings",
-    "test": "node ../../scripts/run-cargo.mjs test"
+    "test": "node ../../scripts/run-cargo.mjs test",
+    "vercel-build": "cargo build --release --bin gestisac_api && cp target/release/gestisac_api target/release/server"
   }
 }
