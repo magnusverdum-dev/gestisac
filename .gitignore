@@ -28,3 +28,5 @@ playwright-report/
 .opencode/bun.lock
 __pycache__/
 **/__pycache__/
+
+.vercel
