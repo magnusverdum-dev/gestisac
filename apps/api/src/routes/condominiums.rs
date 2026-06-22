@@ -22,12 +22,15 @@ use axum::{
     response::Response,
     Json,
 };
+#[cfg(feature = "excel")]
 use calamine::{Reader, Xlsx};
 use chrono::{Duration, NaiveDate, Utc};
 use qrcode::render::svg;
 use qrcode::QrCode;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, io::Cursor};
+use std::collections::HashMap;
+#[cfg(feature = "excel")]
+use std::io::Cursor;
 use uuid::Uuid;
 
 const MAX_CONDOMINIUM_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
@@ -2674,7 +2677,12 @@ async fn read_multipart_upload(
 fn import_table_from_file(file: &UploadedCondominiumFile) -> Result<ImportTable, ApiError> {
     let lower_name = file.original_name.to_lowercase();
     if lower_name.ends_with(".xlsx") {
+        #[cfg(feature = "excel")]
         return import_table_from_xlsx(&file.bytes);
+        #[cfg(not(feature = "excel"))]
+        return Err(ApiError::validation(
+            "Excel (.xlsx) importacao nao suportada neste build. Use CSV.",
+        ));
     }
 
     let text = String::from_utf8(file.bytes.clone())
@@ -2725,6 +2733,7 @@ fn import_table_from_csv(csv: &str, delimiter: char) -> Result<ImportTable, ApiE
     })
 }
 
+#[cfg(feature = "excel")]
 fn import_table_from_xlsx(bytes: &[u8]) -> Result<ImportTable, ApiError> {
     let cursor = Cursor::new(bytes.to_vec());
     let mut workbook =

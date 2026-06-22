@@ -14,11 +14,10 @@ export async function getApiHealth(): Promise<{ service: string; status: 'online
 }
 
 export async function warmupApi(): Promise<{
-  service: string;
-  status: 'warm';
-  checkedAt: string;
+  status: 'ok';
+  type: 'lightweight';
 }> {
-  return apiRequest('/api/warmup', {
+  return apiRequest('/api/lightweight-warmup', {
     timeoutMs: WARMUP_TIMEOUT_MS
   });
 }
