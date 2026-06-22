@@ -53,8 +53,8 @@ export async function logout(token: string): Promise<void> {
   await apiRequest('/api/auth/logout', { method: 'POST', token });
 }
 
-export async function getDashboard(token: string): Promise<DashboardResponse> {
-  return apiRequest('/api/dashboard', { token });
+export async function getDashboard(token: string, timeoutMs?: number): Promise<DashboardResponse> {
+  return apiRequest('/api/dashboard', { token, timeoutMs });
 }
 
 export async function updateActiveCondominium(token: string, name: string): Promise<string> {

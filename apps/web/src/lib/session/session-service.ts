@@ -55,6 +55,16 @@ const DEV_AUTO_LOGIN_SUPPRESS_KEY = 'gestisac:dev-auto-login-suppress';
 const BROWSER_SESSION_MAX_ATTEMPTS = 6;
 const BROWSER_SESSION_RETRY_DELAY_MS = 1_500;
 
+/**
+ * Workspace load retry constants.
+ * After a successful browser session, the dashboard/resources load may still
+ * time out due to Vercel cold starts. These retries give the API time to warm
+ * without requiring a manual page refresh.
+ */
+const WORKSPACE_LOAD_MAX_RETRIES = 3;
+const WORKSPACE_LOAD_RETRY_DELAY_MS = 3_000;
+const WORKSPACE_LOAD_INITIAL_TIMEOUT_MS = 30_000;
+
 const collectionRefreshMap: Partial<Record<ResourceEndpoint, { key: keyof ResourceState; path: string }>> = {
   condominiums: { key: 'condominiums', path: '/api/condominiums' },
   buildings: { key: 'buildings', path: '/api/buildings' },
@@ -307,11 +317,12 @@ export function createSessionService(state: SessionStore) {
 
   const loadWorkspace$ = $(async (
     token: string,
-    loadDetail: Record<string, unknown> = { source: 'workspace' }
+    loadDetail: Record<string, unknown> = { source: 'workspace' },
+    dashboardTimeoutMs?: number
   ) => {
     const workspaceStartedAt = typeof performance !== 'undefined' ? performance.now() : 0;
     const [dashboardResult, resourceResult] = await Promise.allSettled([
-      getDashboard(token),
+      getDashboard(token, dashboardTimeoutMs),
       getResources(token)
     ]);
 
@@ -343,6 +354,39 @@ export function createSessionService(state: SessionStore) {
       appContext: appContext.value,
       resources: 'degraded'
     });
+  });
+
+  /**
+   * Workspace load with automatic retry for Vercel cold-start resilience.
+   * If the dashboard request times out (common on first API wake-up), we retry
+   * automatically instead of requiring a manual page refresh.
+   */
+  const loadWorkspaceWithRetry$ = $(async (
+    token: string,
+    loadDetail: Record<string, unknown> = { source: 'workspace' }
+  ) => {
+    let workspaceLoadAttempts = 0;
+    const maxAttempts = WORKSPACE_LOAD_MAX_RETRIES + 1;
+
+    while (workspaceLoadAttempts < maxAttempts) {
+      await loadWorkspace$(token, {
+        ...loadDetail,
+        workspaceAttempt: workspaceLoadAttempts
+      }, WORKSPACE_LOAD_INITIAL_TIMEOUT_MS);
+
+      // If no timeout error, workspace loaded successfully (or degraded — which is acceptable)
+      if (!error.value.includes('excedeu o tempo limite')) {
+        break;
+      }
+
+      workspaceLoadAttempts += 1;
+
+      if (workspaceLoadAttempts < maxAttempts) {
+        error.value = `A API ainda esta a aquecer. A recarregar dados automaticamente... (${workspaceLoadAttempts}/${WORKSPACE_LOAD_MAX_RETRIES})`;
+        browserSessionProgress.value = Math.min(99, 80 + workspaceLoadAttempts * 5);
+        await delay(WORKSPACE_LOAD_RETRY_DELAY_MS * workspaceLoadAttempts);
+      }
+    }
   });
 
   const refreshWorkspaceSlice$ = $(async (token: string, resource: ResourceEndpoint) => {
@@ -404,7 +448,7 @@ export function createSessionService(state: SessionStore) {
 
   const refreshWorkspace$ = $(async () => {
     if (session.token) {
-      await loadWorkspace$(session.token, { source: 'manual-refresh' });
+      await loadWorkspaceWithRetry$(session.token, { source: 'manual-refresh' });
     }
   });
 
@@ -446,7 +490,7 @@ export function createSessionService(state: SessionStore) {
       writeStoredValue(SESSION_REFRESH_KEY, auth.refreshToken);
       writeStoredValue(SESSION_EXPIRES_KEY, auth.expiresAt);
       writeStoredValue(SESSION_APP_CONTEXT_KEY, auth.appContext || context);
-      await loadWorkspace$(auth.token, { source: 'login' });
+      await loadWorkspaceWithRetry$(auth.token, { source: 'login' });
       await navigate$('/dashboard');
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Nao foi possivel iniciar sessao';
@@ -548,7 +592,7 @@ export function createSessionService(state: SessionStore) {
         writeStoredValue(SESSION_APP_CONTEXT_KEY, context);
       }
 
-      await loadWorkspace$(session.token, { source: 'app-switch' });
+      await loadWorkspaceWithRetry$(session.token, { source: 'app-switch' });
       showEntry.value = false;
       currentPath.value = '/dashboard';
       window.history.pushState({}, '', buildAppPath(appContext.value, '/dashboard'));
@@ -634,7 +678,6 @@ export function createSessionService(state: SessionStore) {
       writeStoredValue(SESSION_REFRESH_KEY, auth.refreshToken);
       writeStoredValue(SESSION_EXPIRES_KEY, auth.expiresAt);
       writeStoredValue(SESSION_APP_CONTEXT_KEY, auth.appContext || appContext.value);
-      browserSessionProgress.value = 100;
       showEntry.value = false;
       autoBrowserSessionPending.value = false;
       session.ready = true;
@@ -644,7 +687,16 @@ export function createSessionService(state: SessionStore) {
         appContext: appContext.value
       });
       await navigate$('/dashboard');
-      await loadWorkspace$(auth.token, { source: 'browser-session', attempts: attemptsUsed });
+
+      // Workspace load with automatic retry for cold-start resilience.
+      // If the dashboard request times out (common on first API wake-up), we
+      // retry automatically instead of requiring a manual page refresh.
+      await loadWorkspaceWithRetry$(auth.token, {
+        source: 'browser-session',
+        attempts: attemptsUsed
+      });
+
+      browserSessionProgress.value = 100;
     } catch (err) {
       error.value =
         err instanceof Error
@@ -1021,7 +1073,7 @@ export function createSessionService(state: SessionStore) {
       window.history.replaceState({}, '', browserSession.dashboardPath);
       session.ready = true;
 
-      await loadWorkspace$(browserSession.token, { source: 'browser-session-url' });
+      await loadWorkspaceWithRetry$(browserSession.token, { source: 'browser-session-url' });
       return;
     }
 
@@ -1078,7 +1130,7 @@ export function createSessionService(state: SessionStore) {
             window.history.replaceState({}, '', buildAppPath(refreshed.appContext || storedAppContext, '/dashboard'));
           }
           session.ready = true;
-          await loadWorkspace$(refreshed.token, { source: 'stored-refresh' });
+          await loadWorkspaceWithRetry$(refreshed.token, { source: 'stored-refresh' });
         } catch {
           removeStoredValue(SESSION_REFRESH_KEY);
           removeStoredValue(SESSION_EXPIRES_KEY);
@@ -1117,7 +1169,7 @@ export function createSessionService(state: SessionStore) {
         window.history.replaceState({}, '', buildAppPath(storedAppContext, '/dashboard'));
       }
       session.ready = true;
-      await loadWorkspace$(storedToken, { source: 'stored-session' });
+      await loadWorkspaceWithRetry$(storedToken, { source: 'stored-session' });
     } catch {
       const storedRefreshToken = readStoredValue(SESSION_REFRESH_KEY);
       if (storedRefreshToken) {
@@ -1136,7 +1188,7 @@ export function createSessionService(state: SessionStore) {
             window.history.replaceState({}, '', buildAppPath(refreshed.appContext || storedAppContext, '/dashboard'));
           }
           session.ready = true;
-          await loadWorkspace$(refreshed.token, { source: 'stored-refresh-after-me' });
+          await loadWorkspaceWithRetry$(refreshed.token, { source: 'stored-refresh-after-me' });
         } catch {
           removeStoredValue(SESSION_TOKEN_KEY);
           removeStoredValue(SESSION_REFRESH_KEY);

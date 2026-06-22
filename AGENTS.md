@@ -80,3 +80,35 @@ Critical entry contract:
 - The automatic entry flow must keep retrying recoverable API startup failures and must never leave the user on a dead login screen.
 - The visible test for any change touching those paths is: enter HQ, navigate the main windows, switch app context, then close and repeat; no manual credentials may be typed.
 - The production API must remain validated before the browser user-flow test: `/api/health`, `/api/warmup` and `browser-session` for `hq`, `worker` and `client`.
+
+## Cold Start Resilience (Critical — 2026-06-22)
+
+When editing `apps/web/src/lib/session/session-service.ts`, `apps/web/src/lib/api/auth.ts`, or `apps/web/src/lib/api/http.ts`, follow the cold start resilience rules in `docs/38-cold-start-lifecycle-e-resiliencia.md`.
+
+Core rules:
+
+- The workspace load MUST have automatic retry on timeout (see `loadWorkspaceWithRetry$`).
+- The initial dashboard timeout MUST be 30s (`WORKSPACE_LOAD_INITIAL_TIMEOUT_MS`), not the default 15s.
+- Never remove the retry loop from `openBrowserSession$` or `initBrowserSession$`.
+- The progress bar MUST advance during retry (80% → 85% → 90% → 95%).
+- If all retries fail, the user MUST see a clear error with a way to retry manually.
+- Never block the entire app on a single slow endpoint — use degraded mode for non-critical data.
+
+Timeout chain (do not break):
+
+```
+warmupApi()          → 60s  (WARMUP_TIMEOUT_MS)
+startBrowserSession() → 40s  (AUTH_STARTUP_TIMEOUT_MS)
+getDashboard()       → 30s  (WORKSPACE_LOAD_INITIAL_TIMEOUT_MS) at startup, 15s normally
+getResources()       → 6s   (INITIAL_RESOURCE_TIMEOUT_MS) per resource
+Workspace retry      → up to 3 attempts, delay 3s/6s/9s
+```
+
+Validation before delivering changes to startup/session code:
+
+```bash
+pnpm run typecheck:web
+pnpm run build:web
+npx playwright test tests/e2e/cold-start-regression.spec.ts
+npx playwright test tests/e2e/manual-test.spec.ts --headed
+```
